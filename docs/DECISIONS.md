@@ -80,3 +80,7 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - Special price **above** standard: no approval. **Below** standard: superadmin approval.
 - Platform messaging fees use **volume tiers** (CommsTiers tab): 100,000/month = USD 250 (floor 100); 1,000,000/month = USD 1,500 (floor 500). Currency-converted only, no market or store-count discount. Below list → approval; below floor → flagged in the approval request.
 - Egypt default quote currency: **USD** (rep can change).
+
+## Branding (2026-11-14)
+- OptCulture logo (red speech bubble "OC" + wordmark) at the top of every document via {{IMAGE:OptCultureLogo}}.
+- Headings: OptCulture red #B6262B. Table headers: purple background with white bold text: `brand_table_header_bg` in CommercialTerms (currently #7B3FE4, an approximation of the swatch; replace with the exact brand hex).

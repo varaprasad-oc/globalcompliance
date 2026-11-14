@@ -94,3 +94,11 @@ test('All 4 Google Doc templates use only known placeholders and balanced IF blo
     eq(opens.length, closes.length, type + ' IF open/close count');
   });
 });
+
+test('Proposal shows selected add-ons table and brand style', () => {
+  const d = build('PROPOSAL');
+  eq(d.flags.HasAddOns, true);
+  eq(d.tables.AddOns.rows, [['Gift Cards', 'USD 29', 'USD 29']]);
+  eq(d.style.tableHeaderBg, '#7B3FE4');
+  eq(d.images.OptCultureLogo, '1dURALQP4yA58Fp5eSZY509NrB3gqagb9');
+});

@@ -8,7 +8,7 @@
 
 var DOC_FOLDER_KEY = { PROPOSAL: 'PROPOSALS', ORDER_FORM: 'ORDER_FORMS', TOS: 'LEGAL', DPA: 'LEGAL' };
 var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'Terms of Service', DPA: 'DPA' };
-var TABLE_STYLE = { headerBg: '#1f3b57', headerFg: '#ffffff', border: '#c9d2dc', font: 'Arial', size: 10 };
+var TABLE_STYLE = { headerBg: '#7B3FE4', headerFg: '#ffffff', border: '#c9d2dc', font: 'Arial', size: 10 };
 
 /**
  * @param {string} docType PROPOSAL | ORDER_FORM | TOS | DPA
@@ -44,6 +44,7 @@ function generateDocument(docType, data, opts) {
   sections.forEach(function (sec) {
     Object.keys(data.fields).forEach(function (k) { replaceLiteral_(sec, '{{' + k + '}}', data.fields[k]); });
   });
+  styleAllTableHeaders_(body, (data.style && data.style.tableHeaderBg) || TABLE_STYLE.headerBg);
   sections.forEach(function (sec) { warnings = warnings.concat(highlightLeftovers_(sec)); });
   if (opts.draft) addDraftBanner_(doc);
   doc.saveAndClose();
@@ -165,13 +166,10 @@ function _childText(el) {
 }
 
 function _removeChild(sec, idx) {
-  if (sec.getNumChildren() <= 1) { sec.appendParagraph(''); }
-  var el = sec.getChild(idx);
-  if (idx === sec.getNumChildren() - 1 && el.getType() === DocumentApp.ElementType.PARAGRAPH) {
-    el.asParagraph().setText(''); // last paragraph of a body cannot be removed
-    return;
-  }
-  el.removeFromParent();
+  // Google Docs requires every section to keep a final paragraph and refuses empty text inserts,
+  // so when removing the last child we first append a placeholder paragraph containing a space.
+  if (idx >= sec.getNumChildren() - 1) sec.appendParagraph(' ');
+  sec.getChild(idx).removeFromParent();
 }
 
 // ---------------- repeating content ----------------
@@ -252,9 +250,20 @@ function applyTables_(body, tables, warnings) {
     if (!t) { warnings.push('No table data for TABLE:' + key); _removeChild(body, idx); continue; }
     var cells = [t.headers].concat(t.rows).map(function (r) { return r.map(function (c) { return String(c == null ? '' : c); }); });
     var table = body.insertTable(idx + 1, cells);
-    styleTable_(table);
+    styleTable_(table, null);
     _removeChild(body, idx);
   }
+}
+
+/** Every table's first row: brand background, white bold text (colour from Master Sheet brand_table_header_bg). */
+function styleAllTableHeaders_(body, bg) {
+  body.getTables().forEach(function (t) {
+    if (t.getNumRows() < 2) return;
+    var row = t.getRow(0);
+    for (var c = 0; c < row.getNumCells(); c++) {
+      row.getCell(c).setBackgroundColor(bg).editAsText().setForegroundColor('#ffffff').setBold(true);
+    }
+  });
 }
 
 function styleTable_(table) {
@@ -283,7 +292,7 @@ function applyImages_(sec, images) {
     var par = el.getParent();
     while (par.getType() !== DocumentApp.ElementType.PARAGRAPH) par = par.getParent();
     var img = par.asParagraph().insertInlineImage(0, DriveApp.getFileById(images[key]).getBlob());
-    var w = img.getWidth(), h = img.getHeight(), maxW = 160;
+    var w = img.getWidth(), h = img.getHeight(), maxW = key === 'OptCultureLogo' ? 200 : 120;
     if (w > maxW) img.setWidth(maxW).setHeight(Math.round(h * maxW / w));
   }
 }

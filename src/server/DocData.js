@@ -83,6 +83,8 @@ function buildDocData(docType, master, deal, quote, ctx) {
     HasProposalNo: !!rel.PROPOSAL, HasOrderFormNo: !!rel.ORDER_FORM, HasTosNo: !!rel.TOS, HasDpaNo: !!rel.DPA };
   var lists = {}, tables = {}, texts = {}, images = {};
   if (entity.logo_file_id) images.EntityLogo = entity.logo_file_id;
+  if (terms.optculture_logo_file_id) images.OptCultureLogo = terms.optculture_logo_file_id;
+  var style = { tableHeaderBg: _v(terms.brand_table_header_bg) || '#7B3FE4', headingColor: _v(terms.brand_heading_color) || '#B6262B' };
 
   var pkgNames = quote.packages.map(function (p) { return p.package; });
 
@@ -143,6 +145,22 @@ function buildDocData(docType, master, deal, quote, ctx) {
         });
         return [label].concat(cells);
       }).concat([['Total one-time fees'].concat(quote.packages.map(function (x) { return m(x.oneTimeTotal); }))])
+    };
+
+    var addOnIds = [];
+    quote.packages.forEach(function (x) { x.addOns.forEach(function (a) { if (addOnIds.indexOf(a.id) === -1) addOnIds.push(a.id); }); });
+    flags.HasAddOns = addOnIds.length > 0;
+    tables.AddOns = {
+      headers: ['Add-on (per month)'].concat(pkgNames),
+      rows: addOnIds.map(function (id) {
+        var label = '';
+        var cells = quote.packages.map(function (x) {
+          var a = x.addOns.filter(function (o) { return o.id === id; })[0];
+          if (a) label = a.label;
+          return a ? m(a.total) : 'Not available';
+        });
+        return [label].concat(cells);
+      })
     };
 
     lists.OptionalOneTime = quote.optionalOneTime.map(function (l) { return { label: l.label, amount: l.text || (m(l.unitPrice) + (l.unit === 'per hour' ? ' per hour' : '')) }; });
@@ -215,7 +233,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
         .map(function (s) { return { name: s.name, service: s.service + (s.condition ? ' (' + s.condition + ')' : ''), location: s.location }; }));
   }
 
-  return { docType: docType, fields: fields, flags: flags, lists: lists, tables: tables, texts: texts, images: images };
+  return { docType: docType, fields: fields, flags: flags, lists: lists, tables: tables, texts: texts, images: images, style: style };
 }
 
 /** Required inputs per document; returns missing-field messages. */
@@ -242,7 +260,7 @@ function checkTemplateTokens(text, data) {
     var mIf = t.match(/^[#\/]IF\s+!?(\w+)$/);
     var mTag = t.match(/^(EACH|LIST|TABLE|TEXT|IMAGE):(\w+)$/);
     if (mIf) ok = mIf[1] in data.flags;
-    else if (mTag) ok = { EACH: data.lists, LIST: data.lists, TABLE: data.tables, TEXT: data.texts, IMAGE: data.images }[mTag[1]].hasOwnProperty(mTag[2]) || mTag[1] === 'IMAGE';
+    else if (mTag) ok = mTag[1] === 'IMAGE' ? ['OptCultureLogo', 'EntityLogo'].indexOf(mTag[2]) !== -1 : { EACH: data.lists, LIST: data.lists, TABLE: data.tables, TEXT: data.texts }[mTag[1]].hasOwnProperty(mTag[2]);
     else ok = t in data.fields || t in listKeys;
     if (!ok && unknown.indexOf(t) === -1) unknown.push(t);
   });

@@ -27,3 +27,4 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-14: G2 pricing answers recorded. Platform comms switched to volume tiers (100k = 250, floor 100; 1M = 1,500, floor 500). Live Sheet: CommsTiers tab added, old PLATFORM_COMMS row deactivated. dist/ rebuilt — redeploy pending.
 - 2026-11-14: Web app v2 deployed (comms tiers). healthCheck OK (15 master tabs, EGP 4,020). Sprint 5 started.
 - 2026-11-14: Sprint 5: Proposal, Order Form, ToS (+SLA) and DPA templates created as Google Docs and registered. generateSampleDocs() added; v3 deploy pending.
+- 2026-11-14: v3 sample run: Proposal/Order Form/ToS OK for both deals and reviewed; DPA failed (engine bug: emptying the last paragraph of a document). Fixed. Templates v1.1 uploaded (logo, red headings, purple table headers from a Sheet setting, add-ons table in the proposal). v4 deploy + re-run pending.

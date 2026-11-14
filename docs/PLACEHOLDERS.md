@@ -102,6 +102,11 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 - `ShowConsulting` (sample: true)
 - `HasSpecialPrice` (sample: true)
 - `HasEcom` (sample: true)
+- `HasPOS` (sample: true)
+- `HasEcomPlatform` (sample: true)
+- `HasJourneys` (sample: true)
+- `HasMultiBrandIntro` (sample: false)
+- `HasAddOns` (sample: true)
 - `HasOptionalOneTime` (sample: true)
 
 ### Lists
@@ -115,6 +120,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 - `{{TABLE:PlanMatrix}}`: columns Capability · Loyalty · Advanced
 - `{{TABLE:PriceSummary}}`: columns Recurring charges · Loyalty · Advanced
 - `{{TABLE:OneTimeFees}}`: columns One-time fees · Loyalty · Advanced
+- `{{TABLE:AddOns}}`: columns Add-on (per month) · Loyalty · Advanced
 
 ### Texts
 - `{{TEXT:ExecutiveSummary}}`

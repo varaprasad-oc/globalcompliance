@@ -17,11 +17,12 @@
 ## Templates (_Templates folder, registered in the Templates tab)
 | Doc type | Google Doc | Version | Source |
 |---|---|---|---|
-| PROPOSAL | `1s72XC8LpRC_NjXt8Ul0-dfmTmm5U__S1t0cr6hqBo_4` | 1.0 | templates/proposal.html |
-| ORDER_FORM | `1zWWmZEwdYt0AbIiJ_aLRnRcYvMdipUYV90oJB9IpTKA` | 1.0 | templates/order_form.html |
-| TOS (+SLA Schedule 2) | `11DZ90MAPfZjaEovyD0nM_rvsLapia53ZC-Js7FE4nlk` | 0.9-draft | docs/templates/TOS.md + SLA.md → `node tools/md2html.js` |
-| DPA | `1WIZSDkWqRzNjObsfkUgZQYb7iKmNZcsTuZlPTgIQI2c` | 0.9-draft | docs/templates/DPA.md → `node tools/md2html.js` |
+| PROPOSAL | `1cy5np3Yk1VNwHrOOpg_EoEoLpm1mDngKA2q55u_Athc` | 1.1 | templates/proposal.html |
+| ORDER_FORM | `1murHdOTD1S4BEpUXKmjCuEu_ulI4If8H7rMRm4anU04` | 1.1 | templates/order_form.html |
+| TOS (+SLA Schedule 2) | `12v20FURReFJjFGAWigej9-9EFNkcEbvyOwnWFqMMQpI` | 1.1-draft | docs/templates/TOS.md + SLA.md → `node tools/md2html.js` |
+| DPA | `1A2a757iHzkjRs_DTaDlu4SIT_VZV4dptqRhWQwrDVQU` | 1.1-draft | docs/templates/DPA.md → `node tools/md2html.js` |
 
+v1 templates moved to _Archive. OptCulture logo: `1dURALQP4yA58Fp5eSZY509NrB3gqagb9` (_Templates/OptCulture logo.png), referenced by CommercialTerms.optculture_logo_file_id.
 Logos/branding can be added directly in the Google Docs (static images); keep the {{…}} tags intact.
 
 ## Apps Script → Project Settings → Script Properties (paste these)

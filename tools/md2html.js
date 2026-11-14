@@ -32,8 +32,8 @@ function md2html(md) {
   return out.join('\n');
 }
 
-const css = '<style>body{font-family:Arial;font-size:10.5pt;color:#1d2733} h1{font-size:18pt;color:#1f3b57} h2{font-size:12.5pt;color:#1f3b57} h3{font-size:11pt;color:#e8743b} table{border-collapse:collapse;width:100%} td,th{border:1px solid #c9d2dc;padding:4px 6px;font-size:10pt} th{background:#1f3b57;color:#ffffff}</style>';
-const wrap = (body) => `<html><head><meta charset="utf-8">${css}</head><body>\n${body}\n</body></html>\n`;
+const css = '<style>body{font-family:Arial;font-size:10.5pt;color:#1d2733} h1{font-size:18pt;color:#B6262B} h2{font-size:12.5pt;color:#B6262B} h3{font-size:11pt;color:#1a1a1a} table{border-collapse:collapse;width:100%} td,th{border:1px solid #c9d2dc;padding:4px 6px;font-size:10pt} th{background:#7B3FE4;color:#ffffff}</style>';
+const wrap = (body) => `<html><head><meta charset="utf-8">${css}</head><body>\n<p>{{IMAGE:OptCultureLogo}}</p>\n${body}\n</body></html>\n`;
 const read = (f) => fs.readFileSync(path.join(root, 'docs/templates', f), 'utf8');
 
 let tos = read('TOS.md').replace(/## Schedule 2 — Service Level Terms\n\nSee `docs\/templates\/SLA\.md`, inserted here in the final template\.\n/, '{{SLA}}');

@@ -183,7 +183,10 @@ var SEED = {
       ['executive_contact_name', 'Amith Lulla', 'SLA escalation – Executive Director'],
       ['executive_contact_email', 'amith.lulla@optculture.com', 'SLA escalation – Executive Director'],
       ['legal_email', 'legal@optculture.com', 'ToS contact'],
-      ['default_hosting_region', '', 'DPA hosting region (to be confirmed by OC Tech)']
+      ['default_hosting_region', '', 'DPA hosting region (to be confirmed by OC Tech)'],
+      ['brand_table_header_bg', '#7B3FE4', 'Table header background (white bold text) – all documents'],
+      ['brand_heading_color', '#B6262B', 'Heading colour (OptCulture red)'],
+      ['optculture_logo_file_id', '1dURALQP4yA58Fp5eSZY509NrB3gqagb9', 'OptCulture logo (PNG in _Templates) – {{IMAGE:OptCultureLogo}}']
     ]
   },
 

@@ -1,14 +1,15 @@
 <html><head><meta charset="utf-8"><style>
 body{font-family:Arial;font-size:11pt;color:#1d2733}
-h1{font-size:18pt;color:#1f3b57} h2{font-size:14pt;color:#1f3b57} h3{font-size:12pt;color:#e8743b}
+h1{font-size:18pt;color:#B6262B} h2{font-size:14pt;color:#B6262B} h3{font-size:12pt;color:#1a1a1a}
 table{border-collapse:collapse;width:100%} td,th{border:1px solid #c9d2dc;padding:4px 6px;font-size:10pt}
-th{background:#1f3b57;color:#ffffff}
+th{background:#7B3FE4;color:#ffffff}
 .cover{text-align:center} .small{font-size:9pt;color:#6b7785}
 </style></head><body>
+<p style="text-align:center">{{IMAGE:OptCultureLogo}}</p>
 <p class="cover" style="text-align:center;font-size:12pt;color:#6b7785">PROPOSAL FOR</p>
-<p class="cover" style="text-align:center;font-size:26pt;font-weight:bold;color:#1f3b57">{{ClientShortName}}</p>
+<p class="cover" style="text-align:center;font-size:26pt;font-weight:bold;color:#1a1a1a">{{ClientShortName}}</p>
 <p class="cover" style="text-align:center;font-size:14pt">{{ClientCountry}}</p>
-<p class="cover" style="text-align:center;font-size:16pt;font-weight:bold;color:#e8743b">{{ProposalTitle}}</p>
+<p class="cover" style="text-align:center;font-size:16pt;font-weight:bold;color:#B6262B">{{ProposalTitle}}</p>
 <p class="cover" style="text-align:center;font-style:italic">{{ProposalTagline}}</p>
 <p class="cover" style="text-align:center;font-weight:bold">CONFIDENTIAL</p>
 <p class="cover" style="text-align:center">{{DocDate}} · Proposal No. {{DocNo}}</p>
@@ -64,6 +65,10 @@ th{background:#1f3b57;color:#ffffff}
 
 <h2>Recurring Charges — Per-Site Licence</h2>
 <p>{{TABLE:PriceSummary}}</p>
+<p>{{#IF HasAddOns}}</p>
+<h3>Selected Add-ons</h3>
+<p>{{TABLE:AddOns}}</p>
+<p>{{/IF HasAddOns}}</p>
 <h3>Plans — Inclusions</h3>
 <p>{{TABLE:PlanMatrix}}</p>
 <p class="small">Pricing is quoted for a single unified instance covering {{Sites}} sites. Should {{ClientShortName}} add stores, brands or storefronts, the same per-site model applies at preferred terms reflective of that scale.</p>
