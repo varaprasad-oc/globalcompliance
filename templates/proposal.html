@@ -1,0 +1,94 @@
+<html><head><meta charset="utf-8"><style>
+body{font-family:Arial;font-size:11pt;color:#1d2733}
+h1{font-size:18pt;color:#1f3b57} h2{font-size:14pt;color:#1f3b57} h3{font-size:12pt;color:#e8743b}
+table{border-collapse:collapse;width:100%} td,th{border:1px solid #c9d2dc;padding:4px 6px;font-size:10pt}
+th{background:#1f3b57;color:#ffffff}
+.cover{text-align:center} .small{font-size:9pt;color:#6b7785}
+</style></head><body>
+<p class="cover" style="text-align:center;font-size:12pt;color:#6b7785">PROPOSAL FOR</p>
+<p class="cover" style="text-align:center;font-size:26pt;font-weight:bold;color:#1f3b57">{{ClientShortName}}</p>
+<p class="cover" style="text-align:center;font-size:14pt">{{ClientCountry}}</p>
+<p class="cover" style="text-align:center;font-size:16pt;font-weight:bold;color:#e8743b">{{ProposalTitle}}</p>
+<p class="cover" style="text-align:center;font-style:italic">{{ProposalTagline}}</p>
+<p class="cover" style="text-align:center;font-weight:bold">CONFIDENTIAL</p>
+<p class="cover" style="text-align:center">{{DocDate}} · Proposal No. {{DocNo}}</p>
+<p class="cover" style="text-align:center">Tel: {{RepPhone}} · Email: {{RepEmail}}</p>
+<p>{{#IF IsPartner}}</p>
+<p class="cover" style="text-align:center;font-weight:bold">LOCAL PARTNER IN {{EntityCountry}}</p>
+<p class="cover" style="text-align:center">{{IMAGE:EntityLogo}}{{EntityName}}</p>
+<p>{{/IF IsPartner}}</p>
+
+<h2>Confidentiality Notice</h2>
+<p>This document is the property of OptCulture (OC) and is being shared in confidence with {{ClientLegalName}} ({{ClientShortName}}), {{ClientCountry}}. It is not to be disclosed in whole or in part, nor duplicated or used for any purpose other than evaluation of this proposal, without the express written authorization of OptCulture. The document shall be returned to OptCulture upon request.</p>
+
+<h1>Executive Summary</h1>
+<p>{{TEXT:ExecutiveSummary}}</p>
+<p>This proposal sets out the platform components, the loyalty architecture, and the commercial terms for implementing OptCulture as {{ClientShortName}}’s customer-engagement backbone.</p>
+
+<h1>Description of Components and Services from OptCulture</h1>
+<p>OptCulture (OC) is a retail-focused customer-engagement, loyalty and data platform that brings data and marketing together. The platform is built for omnichannel, multi-store retailers, with store-, brand- and channel-level controls layered on top of a unified foundation. OptCulture is POS-agnostic and API-first.{{#IF HasPOS}} It integrates with {{ClientPOS}} at the point of sale.{{/IF HasPOS}}{{#IF HasEcomPlatform}} It integrates with {{ClientEcomPlatform}} for e-commerce.{{/IF HasEcomPlatform}}</p>
+<h3>Base Modules — provided based on the opted package ({{PackagesList}})</h3>
+<ul><li><b>{{LIST:Modules}}{{title}}:</b> {{text}}</li></ul>
+
+<p>{{#IF MultiBrand}}</p>
+<h1>{{ClientShortName}} Unified Loyalty Program</h1>
+<p>{{TEXT:MultiBrandIntro}}</p>
+<h2>One Member. One Wallet. Every Brand, Every Store &amp; Online.</h2>
+<p>Every customer who enrols anywhere in the {{ClientShortName}} ecosystem — at any store or online — becomes a member of a single program. Their profile, points balance, tier status and preferences are shared across every brand and touchpoint from the moment of enrolment.</p>
+<h2>How Earn &amp; Burn Works Across Brands &amp; Channels</h2>
+<ul>
+<li><b>Earn anywhere:</b> Members earn points on every qualifying purchase at any store, across every brand, and on every online order.</li>
+<li><b>Redeem everywhere:</b> Points are a single group-wide currency, redeemable in-store or online at any brand, with redemption rates configurable per brand, channel or category.</li>
+<li><b>Differential earn rates:</b> {{ClientShortName}} retains full control to set different earn rates by brand, channel or category to drive repeat purchase and protect margin.</li>
+<li><b>Brand- &amp; campaign-funded mechanics:</b> Individual brands or campaigns can fund their own bonus-point drives or category accelerators, with full visibility of the cost and uplift attributable to each.</li>
+<li><b>Tier benefits on every brand &amp; channel:</b> Tier status is recognised across every brand and channel, driving cross-brand shopping and share-of-wallet.</li>
+</ul>
+<h2>Cross-Brand Settlement &amp; Liability Management</h2>
+<p>The platform tracks point liability at issuing-store and brand level and redemption at redeeming-store, brand or channel level. OptCulture provides month-end settlement reports so Finance can reconcile point movements across every brand, store and online store transparently.</p>
+<p>{{/IF MultiBrand}}</p>
+
+<p>{{#IF HasJourneys}}</p>
+<h2>Example Customer Journeys</h2>
+<ul><li><b>{{LIST:Journeys}}{{title}}:</b> {{text}}</li></ul>
+<p>{{/IF HasJourneys}}</p>
+
+<h1>Detailed Break-up of Fees</h1>
+<p>The following sets out the one-time and recurring commercials for implementing OptCulture for {{ClientShortName}} ({{Stores}} stores{{#IF HasEcom}} and {{EcomSites}} e-commerce site(s){{/IF HasEcom}}, {{Sites}} sites in total). All figures are shown in {{Currency}}.</p>
+<h2>One-Time Implementation Fee</h2>
+<p>{{TABLE:OneTimeFees}}</p>
+<p>{{#IF HasOptionalOneTime}}</p>
+<h3>Optional One-Time Services</h3>
+<table><tr><th>Service</th><th>Fee</th></tr><tr><td>{{EACH:OptionalOneTime}}{{label}}</td><td>{{amount}}</td></tr></table>
+<p>{{/IF HasOptionalOneTime}}</p>
+<p class="small">Note: OptCulture will host, manage and maintain the entire solution end-to-end as a fully managed cloud service. One-time fees are 100% payable in advance against Purchase Order.</p>
+
+<h2>Recurring Charges — Per-Site Licence</h2>
+<p>{{TABLE:PriceSummary}}</p>
+<h3>Plans — Inclusions</h3>
+<p>{{TABLE:PlanMatrix}}</p>
+<p class="small">Pricing is quoted for a single unified instance covering {{Sites}} sites. Should {{ClientShortName}} add stores, brands or storefronts, the same per-site model applies at preferred terms reflective of that scale.</p>
+
+<h2>Communication Pricing</h2>
+<table><tr><th>Description</th><th>Price</th></tr><tr><td>{{EACH:Usage}}{{label}}</td><td>{{price}}</td></tr></table>
+<p class="small">SMS and WhatsApp charges are optional and apply only when messages are sent through OptCulture’s SMS or WhatsApp channels. If {{ClientShortName}} already has its own WhatsApp Business channel or SMS gateway, these charges do not apply.</p>
+
+<p>{{#IF ShowConsulting}}</p>
+<h2>Loyalty Consulting</h2>
+<p>Loyalty Consulting and Marketing Campaign Management are bundled free of charge for the first {{ConsultingFreeMonths}} months from go-live, including a dedicated Loyalty Program Consultant. From then on, {{ClientShortName}} can continue to engage OptCulture at the following rates:</p>
+<table><tr><th>Consulting Engagement</th><th>Monthly Fee</th></tr><tr><td>{{EACH:Consulting}}{{label}}</td><td>{{price}}</td></tr></table>
+<p class="small">Consulting fees are payable quarterly in advance.</p>
+<p>{{/IF ShowConsulting}}</p>
+
+<h2>Terms and Conditions</h2>
+<ul>
+<li>All prices are in {{Currency}} and exclude applicable taxes (including VAT).</li>
+<li>This offer is valid until {{ValidUntil}}. Once accepted, the commercials are fixed for {{PriceLockMonths}} months from go-live, after which they increase by {{AnnualUpliftPct}} per annum.</li>
+<li>Implementation and other one-time fees are 100% payable in advance against Purchase Order. Licence fees are payable annually in advance.</li>
+<li>All amounts are payable within {{PaymentDays}} days of the invoice date. Late payments attract interest at {{LateFeePct}} per month until cleared funds are received.</li>
+<li>Implementation and services are delivered remotely. Travel or on-site expenses incurred at {{ClientShortName}}’s request are billed at cost.</li>
+<li>OptCulture is delivered as Software-as-a-Service; the amounts above do not include hardware or system software.</li>
+<li>The Services are subject to the OptCulture Terms of Service, Data Processing Agreement and Service Level Terms.</li>
+</ul>
+<p style="text-align:center">— End of Proposal —</p>
+<p style="text-align:center;color:#6b7785">OptCulture — where Marketing meets Data</p>
+</body></html>

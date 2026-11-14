@@ -7,9 +7,9 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 | 0 | Inputs checklist | 🟡 | Shared Drive access received ✅. Still open: docs-admin@ account, DPA tech inputs, feature descriptions, legal reviewer |
 | 1 | Foundations & access | ✅ | Folders, Apps Script project, web app v1 deployed (domain-only), healthCheck passed. Follow-up: move ownership to docs-admin@ when created |
 | 2 | Master Sheet | ✅ build · ⏳ G1 | Live and read by the app (14 master tabs, correct). Awaiting Amith sign-off (G1) |
-| 3 | Pricing engine | ✅ · G2 answered | All 5 pricing assumptions confirmed by Varaprasad (docs/DECISIONS.md). Comms volume tiers added (CommsTiers tab, 23/23 tests). Needs redeploy (v2) to go live. Amith to countersign G2 |
+| 3 | Pricing engine | ✅ · G2 answered | 5 assumptions confirmed (docs/DECISIONS.md). Comms volume tiers live in web app v2. Amith to countersign G2 |
 | 4 | Template engine | ✅ | engineSelfTest in Google: 0 warnings; Doc + PDF created in 01 Proposals/2026/SELFTEST; IF blocks, lists, TEXT, TABLE, EACH rows and fields verified in the output. Gate G3 (placeholders) ready to freeze |
-| 5 | Templates + legal | 🟡 | Legal drafts ready for counsel: DPA.md, TOS.md (revised), SLA.md. ToS/SLA placeholders verified by test. DPA.md placeholders to be aligned to the dictionary when the Google Doc templates are built. |
+| 5 | Templates + legal | 🟡 | 5.1–5.3 ✅ 4 templates built, uploaded to _Templates and registered (24/24 tests incl. placeholder check of every template). 5.4 pending: live sample generation (needs v3 deploy), then legal review → Gate G4 |
 | 6 | Deal entry UI | ☐ | |
 | 7 | AI + generation | ☐ | |
 | 8 | Roles, dashboards, approvals | ☐ | |
@@ -25,3 +25,5 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-14: Amith's email corrected to amith.lulla@optculture.com everywhere, including the live Sheet.
 - 2026-11-14: Web app v1 deployed by Varaprasad via Claude in Chrome. healthCheck OK; engineSelfTest OK (0 warnings), output document reviewed and correct. Sprints 1 and 4 complete.
 - 2026-11-14: G2 pricing answers recorded. Platform comms switched to volume tiers (100k = 250, floor 100; 1M = 1,500, floor 500). Live Sheet: CommsTiers tab added, old PLATFORM_COMMS row deactivated. dist/ rebuilt — redeploy pending.
+- 2026-11-14: Web app v2 deployed (comms tiers). healthCheck OK (15 master tabs, EGP 4,020). Sprint 5 started.
+- 2026-11-14: Sprint 5: Proposal, Order Form, ToS (+SLA) and DPA templates created as Google Docs and registered. generateSampleDocs() added; v3 deploy pending.

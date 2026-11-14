@@ -1,0 +1,92 @@
+<html><head><meta charset="utf-8"><style>
+body{font-family:Arial;font-size:10.5pt;color:#1d2733}
+h1{font-size:18pt;color:#1f3b57} h2{font-size:12.5pt;color:#1f3b57}
+table{border-collapse:collapse;width:100%} td,th{border:1px solid #c9d2dc;padding:4px 6px;font-size:10pt}
+th{background:#1f3b57;color:#ffffff} td.k{background:#eef2f6;font-weight:bold;width:35%}
+.small{font-size:9pt;color:#6b7785}
+</style></head><body>
+<h1>OPTCULTURE – COMMERCIAL QUOTATION &amp; ORDER FORM</h1>
+<p>Software Subscription &amp; Services</p>
+<p><b>Order Form No.:</b> {{DocNo}} &nbsp; · &nbsp; <b>Order Date:</b> {{DocDate}} &nbsp; · &nbsp; <b>Quote Valid Until:</b> {{ValidUntil}}{{#IF HasProposalNo}} &nbsp; · &nbsp; <b>Ref. Proposal:</b> {{ProposalNo}}{{/IF HasProposalNo}}</p>
+
+<h2>1. Customer &amp; Contracting Details</h2>
+<table>
+<tr><th>Particulars</th><th>Details</th></tr>
+<tr><td class="k">OptCulture Entity</td><td>{{EntityName}}{{#IF IsPartner}} (authorised local partner of OptCulture){{/IF IsPartner}}</td></tr>
+<tr><td class="k">Customer Legal Entity</td><td>{{ClientLegalName}}</td></tr>
+<tr><td class="k">Customer Registered Address</td><td>{{ClientAddress}}</td></tr>
+<tr><td class="k">Billing Entity / Address</td><td>{{ClientBillingAddress}}</td></tr>
+<tr><td class="k">Customer Business Contact</td><td>{{ClientBusinessContact}}</td></tr>
+<tr><td class="k">Customer Billing Contact</td><td>{{ClientBillingContact}}</td></tr>
+<tr><td class="k">MSA Reference</td><td>{{#IF HasMsa}}{{MsaRef}}{{/IF HasMsa}}{{#IF !HasMsa}}None – governed by the OptCulture Terms of Service{{/IF HasMsa}}</td></tr>
+<tr><td class="k">Purchase Order No.</td><td>{{PONumber}}</td></tr>
+</table>
+
+<h2>2. Subscription Details</h2>
+<table>
+<tr><th>Particulars</th><th>Details</th></tr>
+<tr><td class="k">Plan</td><td>OptCulture {{OrderPackage}}</td></tr>
+<tr><td class="k">Subscription Start Date</td><td>{{SubscriptionStartDate}}</td></tr>
+<tr><td class="k">Initial Subscription Term</td><td>{{SubscriptionTerm}}</td></tr>
+<tr><td class="k">Subscription End Date</td><td>{{SubscriptionEndDate}}</td></tr>
+<tr><td class="k">Renewal Term</td><td>{{RenewalTerm}}</td></tr>
+<tr><td class="k">Auto-Renewal</td><td>{{AutoRenewal}}</td></tr>
+<tr><td class="k">Non-Renewal Notice Period</td><td>{{RenewalNoticeDays}} days before the end of the then-current term</td></tr>
+<tr><td class="k">Billing Commencement Date</td><td>{{SubscriptionStartDate}}</td></tr>
+</table>
+
+<h2>3. Products &amp; Subscription Fees</h2>
+<table>
+<tr><th>Products / Modules</th><th>Quantity / Scope</th><th>Billing Frequency</th><th>Amount</th></tr>
+<tr><td>{{EACH:SubscriptionLines}}{{product}}</td><td>{{scope}}</td><td>{{billing}}</td><td>{{amount}}</td></tr>
+<tr><td><b>Total Recurring Subscription</b></td><td></td><td></td><td><b>{{TotalRecurringAnnual}} / year</b></td></tr>
+</table>
+<p class="small">Only subscribed products and modules apply. Features included in the {{OrderPackage}} plan are as described in the OptCulture proposal and product documentation.</p>
+
+<h2>4. Usage-Based Charges</h2>
+<table>
+<tr><th>Service / Usage Metric</th><th>Included Allowance</th><th>Additional Usage Rate</th></tr>
+<tr><td>{{EACH:UsageLines}}{{metric}}</td><td>{{included}}</td><td>{{rate}}</td></tr>
+</table>
+<p class="small">Usage above included allowances is billed monthly in arrears, measured using OptCulture’s platform records.</p>
+
+<h2>5. One-Time Fees &amp; Services</h2>
+<table>
+<tr><th>Description</th><th>Scope / Deliverable</th><th>Amount</th></tr>
+<tr><td>{{EACH:OneTimeLines}}{{description}}</td><td>{{scope}}</td><td>{{amount}}</td></tr>
+<tr><td><b>Total One-Time Fees</b></td><td></td><td><b>{{TotalOneTime}}</b></td></tr>
+</table>
+<p><b>Total first-year value (one-time + 12 months recurring): {{FirstYearTotal}}</b> (exclusive of taxes and usage charges)</p>
+<p class="small">Where detailed implementation deliverables, responsibilities or timelines are required, these shall be defined in an agreed Statement of Work (SOW).</p>
+
+<h2>6. Commercial &amp; Payment Terms</h2>
+<table>
+<tr><th>Particulars</th><th>Agreed Terms</th></tr>
+<tr><td class="k">Currency</td><td>{{Currency}}</td></tr>
+<tr><td class="k">Subscription Billing Cycle</td><td>{{BillingCycle}}</td></tr>
+<tr><td class="k">Subscription Billing Timing</td><td>In advance</td></tr>
+<tr><td class="k">One-Time Fees</td><td>100% in advance against Purchase Order</td></tr>
+<tr><td class="k">Usage Billing</td><td>Monthly in arrears</td></tr>
+<tr><td class="k">Payment Terms</td><td>Net {{PaymentDays}} days; late payments attract interest at {{LateFeePct}} per month</td></tr>
+<tr><td class="k">Payment Method</td><td>{{PaymentMethod}}</td></tr>
+<tr><td class="k">Taxes</td><td>Exclusive of applicable taxes (including VAT) unless stated otherwise</td></tr>
+<tr><td class="k">Price Revision</td><td>Fixed for {{PriceLockMonths}} months; thereafter {{AnnualUpliftPct}} per annum</td></tr>
+</table>
+
+<h2>7. Special Commercial Terms</h2>
+<p>{{SpecialTerms}}</p>
+<p class="small">Any modification to the MSA or other standard contractual terms must be expressly identified and agreed in writing by authorised representatives of both Parties.</p>
+
+<h2>8. Agreement &amp; Acceptance</h2>
+<p>This Order Form is issued under the Master Services Agreement between the Parties or, where none exists, the OptCulture Terms of Service{{#IF HasTosNo}} ({{TosNo}}){{/IF HasTosNo}}, including the Data Processing Agreement{{#IF HasDpaNo}} ({{DpaNo}}){{/IF HasDpaNo}} and Service Level Terms incorporated therein, subject to their agreed order of precedence.</p>
+<p>By signing below, the Parties agree to the subscriptions, fees, duration and commercial arrangements specified in this Order Form.</p>
+<table>
+<tr><th></th><th>For {{EntityShortName}}</th><th>For Customer</th></tr>
+<tr><td class="k">Legal Entity</td><td>{{EntityName}}</td><td>{{ClientLegalName}}</td></tr>
+<tr><td class="k">Authorised Signatory</td><td>{{EntitySignatoryName}}</td><td>{{ClientSignatoryName}}</td></tr>
+<tr><td class="k">Designation</td><td>{{EntitySignatoryTitle}}</td><td>{{ClientSignatoryTitle}}</td></tr>
+<tr><td class="k">Signature</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+<tr><td class="k">Date</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+</table>
+<p style="text-align:center;color:#6b7785">OptCulture | www.optculture.com</p>
+</body></html>

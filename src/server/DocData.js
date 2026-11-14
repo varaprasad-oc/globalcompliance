@@ -96,6 +96,10 @@ function buildDocData(docType, master, deal, quote, ctx) {
     flags.ShowConsulting = p.showConsulting !== false;
     flags.HasSpecialPrice = quote.packages.some(function (x) { return x.specialPricePerSite !== null; });
     flags.HasEcom = quote.ecomSites > 0;
+    flags.HasPOS = !!c.pos;
+    flags.HasEcomPlatform = !!c.ecomPlatform;
+    flags.HasJourneys = (n.journeys || []).length > 0;
+    flags.HasMultiBrandIntro = !!n.multiBrandIntro;
     texts.ExecutiveSummary = _v(n.executiveSummary);
     texts.MultiBrandIntro = _v(n.multiBrandIntro);
     lists.Journeys = (n.journeys || []).map(function (j) {

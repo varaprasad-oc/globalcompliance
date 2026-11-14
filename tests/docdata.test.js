@@ -80,3 +80,17 @@ test('ToS and SLA drafts use only known placeholders', () => {
   eq(C().checkTemplateTokens(tos, d), []);
   eq(C().checkTemplateTokens(sla, d), []);
 });
+
+test('All 4 Google Doc templates use only known placeholders and balanced IF blocks', () => {
+  const fs = require('fs'), path = require('path');
+  const map = { PROPOSAL: 'proposal.html', ORDER_FORM: 'order_form.html', TOS: 'tos.html', DPA: 'dpa.html' };
+  Object.keys(map).forEach((type) => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'templates', map[type]), 'utf8');
+    const deal = JSON.parse(JSON.stringify(sampleDeal));
+    const d = C().buildDocData(type, global.M, deal, C().buildQuote(global.M, deal.commercial), Object.assign({}, ctx, { related: { TOS: 'x', DPA: 'x', PROPOSAL: 'x' } }));
+    eq(C().checkTemplateTokens(html, d), [], type + ' unknown tokens:');
+    const opens = (html.match(/\{\{#IF !?(\w+)\}\}/g) || []).map((t) => t.replace(/\{\{#IF !?|\}\}/g, ''));
+    const closes = (html.match(/\{\{\/IF (\w+)\}\}/g) || []).map((t) => t.replace(/\{\{\/IF |\}\}/g, ''));
+    eq(opens.length, closes.length, type + ' IF open/close count');
+  });
+});

@@ -2,16 +2,16 @@
 
 > **DRAFT FOR LEGAL REVIEW** — prepared as a template. Not legal advice. Must be reviewed by qualified counsel in each jurisdiction before use.
 >
-> Placeholders in `{{double braces}}` are filled by the app. Blocks marked `[[IF …]]` are included only when the condition applies. Exactly one Country Addendum in Annex 4 is attached, based on `{{ClientCountry}}`.
+> Placeholders follow `docs/PLACEHOLDERS.md`. Exactly one Country Addendum in Annex 4 is kept, based on the client country (flags Addendum4A–4F).
 
 **DPA No.:** {{DocNo}}  **Date:** {{DocDate}}  **Related Order Form:** {{OrderFormNo}}
 
 This Data Processing Agreement ("**DPA**") is entered into between:
 
 1. **{{ClientLegalName}}**, {{ClientRegType}} No. {{ClientRegNo}}, {{ClientAddress}} (the "**Customer**"); and
-2. **{{ContractingEntityName}}**, {{ContractingEntityRegType}} No. {{ContractingEntityRegNo}}, {{ContractingEntityAddress}} (the "**Provider**").
+2. **{{EntityName}}**, {{EntityRegType}} No. {{EntityRegNo}}, {{EntityAddress}} (the "**Provider**").
 
-[[IF Partner]]The Provider is an authorised local partner of OptCulture. The OptCulture platform is operated by **{{PlatformEntityName}}** ("**OptCulture**"), which acts as a Sub-processor of the Provider under this DPA.[[END]]
+{{#IF IsPartner}}The Provider is an authorised local partner of OptCulture. The OptCulture platform is operated by **{{PlatformEntityName}}** ("**OptCulture**"), which acts as a Sub-processor of the Provider under this DPA.{{/IF IsPartner}}
 
 This DPA forms part of the OptCulture Terms of Service, the Order Form and, where applicable, the Master Services Agreement (together, the "**Agreement**").
 
@@ -111,7 +111,7 @@ This DPA forms part of the OptCulture Terms of Service, the Order Form and, wher
 
 | | Customer | Provider |
 |---|---|---|
-| Legal Entity | {{ClientLegalName}} | {{ContractingEntityName}} |
+| Legal Entity | {{ClientLegalName}} | {{EntityName}} |
 | Authorised Signatory | {{ClientSignatoryName}} | {{EntitySignatoryName}} |
 | Designation | {{ClientSignatoryTitle}} | {{EntitySignatoryTitle}} |
 | Signature | | |
@@ -153,19 +153,15 @@ This DPA forms part of the OptCulture Terms of Service, the Order Form and, wher
 
 | Sub-processor | Service | Location |
 |---|---|---|
-| [[IF Partner]]{{PlatformEntityName}} | Operation of the OptCulture platform | {{PlatformEntityCountry}}[[END]] |
-| {{CloudHostingProvider}} | Cloud hosting | {{HostingRegion}} |
-| {{EmailProvider}} | Email delivery | {{EmailProviderLocation}} |
-| {{SMSProvider}} | SMS delivery | {{SMSProviderLocation}} |
-| Meta Platforms (WhatsApp Business) | WhatsApp messaging, if used | {{WhatsAppLocation}} |
-| Apple / Google | Wallet passes and push notifications, if used | Global |
-| {{AIProvider}} | AI features, if used | {{AIProviderLocation}} |
+| {{EACH:SubProcessors}}{{name}} | {{service}} | {{location}} |
 
 ---
 
 ## Annex 4 — Country Addenda
 
-> The app attaches **one** addendum based on the Customer's country. The legal references below must be verified by local counsel, as laws and implementing regulations change.
+> Only the addendum for the Customer's country is included. The legal references below must be verified by local counsel, as laws and implementing regulations change.
+
+{{#IF Addendum4A}}
 
 ### 4A. Kingdom of Saudi Arabia — Personal Data Protection Law
 
@@ -175,12 +171,20 @@ This DPA forms part of the OptCulture Terms of Service, the Order Form and, wher
 4. **Transfers outside the Kingdom:** Personal Data shall only be transferred outside the Kingdom in accordance with the KSA PDPL transfer regulations, including adequacy decisions, approved safeguards (such as standard contractual clauses issued by SDAIA) or permitted exceptions. Hosting region: {{HostingRegion}}.
 5. **Records:** the Provider shall assist the Customer in maintaining the record of processing activities required by the KSA PDPL.
 
+{{/IF Addendum4A}}
+
+{{#IF Addendum4B}}
+
 ### 4B. United Arab Emirates — Federal Personal Data Protection Law
 
 1. **Applicable law:** Federal Decree-Law No. 45 of 2021 on the Protection of Personal Data and its executive regulations ("**UAE PDPL**"). Where the Customer is established in the DIFC or ADGM, the respective free-zone data protection law applies instead and this addendum shall be read accordingly.
 2. **Processor obligations:** the Provider shall process Personal Data only in accordance with the Customer's instructions and the UAE PDPL, and shall assist the Customer in meeting Data Subject rights and security obligations.
 3. **Breach notification:** the Provider shall notify the Customer under Section 8 so that the Customer can notify the UAE Data Office and affected Data Subjects as required.
 4. **Cross-border transfers:** transfers outside the UAE shall be made only to jurisdictions or under conditions permitted by the UAE PDPL.
+
+{{/IF Addendum4B}}
+
+{{#IF Addendum4C}}
 
 ### 4C. India — Digital Personal Data Protection Act
 
@@ -190,6 +194,10 @@ This DPA forms part of the OptCulture Terms of Service, the Order Form and, wher
 4. **Erasure:** the Provider shall erase Personal Data on the Customer's instruction, or when the purpose is no longer served, as required by the DPDP Act.
 5. **Transfers:** Personal Data shall not be transferred to any country restricted by the Central Government under the DPDP Act.
 
+{{/IF Addendum4C}}
+
+{{#IF Addendum4D}}
+
 ### 4D. Egypt — Personal Data Protection Law
 
 1. **Applicable law:** Law No. 151 of 2020 on the Protection of Personal Data and its executive regulations ("**Egypt PDPL**"). The competent authority is the Personal Data Protection Center.
@@ -197,13 +205,23 @@ This DPA forms part of the OptCulture Terms of Service, the Order Form and, wher
 3. **Breach notification:** the Provider shall notify the Customer under Section 8 so that the Customer can notify the Personal Data Protection Center within the period required.
 4. **Cross-border transfers:** transfers outside Egypt shall be made only in compliance with the Egypt PDPL, including any licence or adequacy requirements.
 
+{{/IF Addendum4D}}
+
+{{#IF Addendum4E}}
+
 ### 4E. European Union / United Kingdom — GDPR
 
 1. **Applicable law:** Regulation (EU) 2016/679 ("**GDPR**") and, where relevant, the UK GDPR and Data Protection Act 2018. This DPA is intended to meet the requirements of Article 28 GDPR.
 2. **Breach notification:** the Provider shall notify the Customer under Section 8 so that the Customer can notify the supervisory authority within 72 hours where required.
 3. **International transfers:** transfers outside the EEA/UK shall be made under an adequacy decision or the European Commission's Standard Contractual Clauses (and the UK International Data Transfer Addendum, where relevant), which are incorporated by reference when required.
 
+{{/IF Addendum4E}}
+
+{{#IF Addendum4F}}
+
 ### 4F. Other Jurisdictions
 
 1. The Provider shall comply with the data protection law applicable in {{ClientCountry}} to the extent it applies to the Provider as a processor.
 2. Any additional mandatory requirements of that law shall be agreed in writing and attached to this DPA.
+
+{{/IF Addendum4F}}

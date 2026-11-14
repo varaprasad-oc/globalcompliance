@@ -14,6 +14,16 @@
 | **Web app v1** (domain-only, runs as varaprasad@) | https://script.google.com/a/macros/optculture.com/s/AKfycbwKYpTw0Dd05z3gte-f9eSfAr8ycXRMw6lqpLMzurI-rUq4rvaH4xsTzekLg0vypcLy/exec |
 | Self-test output (can be deleted) | Doc `1Ix75HK0mlEuAeJLf0M7-FqHWv0NZgj-Z7Wgdyt8k8UU`, PDF `1eVJmNNr1WTISSVIG9zajuAPiaSIm38-F` (01 Proposals/2026/SELFTEST) |
 
+## Templates (_Templates folder, registered in the Templates tab)
+| Doc type | Google Doc | Version | Source |
+|---|---|---|---|
+| PROPOSAL | `1s72XC8LpRC_NjXt8Ul0-dfmTmm5U__S1t0cr6hqBo_4` | 1.0 | templates/proposal.html |
+| ORDER_FORM | `1zWWmZEwdYt0AbIiJ_aLRnRcYvMdipUYV90oJB9IpTKA` | 1.0 | templates/order_form.html |
+| TOS (+SLA Schedule 2) | `11DZ90MAPfZjaEovyD0nM_rvsLapia53ZC-Js7FE4nlk` | 0.9-draft | docs/templates/TOS.md + SLA.md → `node tools/md2html.js` |
+| DPA | `1WIZSDkWqRzNjObsfkUgZQYb7iKmNZcsTuZlPTgIQI2c` | 0.9-draft | docs/templates/DPA.md → `node tools/md2html.js` |
+
+Logos/branding can be added directly in the Google Docs (static images); keep the {{…}} tags intact.
+
 ## Apps Script → Project Settings → Script Properties (paste these)
 ```
 ROOT_FOLDER_ID      0ANyaAwry0iF7Uk9PVA

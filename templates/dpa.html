@@ -1,0 +1,112 @@
+<html><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:10.5pt;color:#1d2733} h1{font-size:18pt;color:#1f3b57} h2{font-size:12.5pt;color:#1f3b57} h3{font-size:11pt;color:#e8743b} table{border-collapse:collapse;width:100%} td,th{border:1px solid #c9d2dc;padding:4px 6px;font-size:10pt} th{background:#1f3b57;color:#ffffff}</style></head><body>
+<h1>DATA PROCESSING AGREEMENT</h1>
+<p><b>DPA No.:</b> {{DocNo}}  <b>Date:</b> {{DocDate}}  <b>Related Order Form:</b> {{OrderFormNo}}</p>
+<p>This Data Processing Agreement ("<b>DPA</b>") is entered into between:</p>
+<p>1. <b>{{ClientLegalName}}</b>, {{ClientRegType}} No. {{ClientRegNo}}, {{ClientAddress}} (the "<b>Customer</b>"); and</p>
+<p>2. <b>{{EntityName}}</b>, {{EntityRegType}} No. {{EntityRegNo}}, {{EntityAddress}} (the "<b>Provider</b>").</p>
+<p>{{#IF IsPartner}}The Provider is an authorised local partner of OptCulture. The OptCulture platform is operated by <b>{{PlatformEntityName}}</b> ("<b>OptCulture</b>"), which acts as a Sub-processor of the Provider under this DPA.{{/IF IsPartner}}</p>
+<p>This DPA forms part of the OptCulture Terms of Service, the Order Form and, where applicable, the Master Services Agreement (together, the "<b>Agreement</b>").</p>
+<h2>1. Definitions</h2>
+<p>1.1. "<b>Applicable Data Protection Law</b>" means all laws on the protection of personal data that apply to the processing under the Agreement, including the law named in the Country Addendum attached as Annex 4.</p>
+<p>1.2. "<b>Personal Data</b>" means any information relating to an identified or identifiable natural person that the Provider processes on behalf of the Customer under the Agreement.</p>
+<p>1.3. "<b>Controller</b>", "<b>Processor</b>", "<b>Data Subject</b>", "<b>Processing</b>" and "<b>Personal Data Breach</b>" have the meanings given in Applicable Data Protection Law. Where that law uses different terms (for example "Data Fiduciary" or "Data Holder"), they shall be read as their nearest equivalent.</p>
+<p>1.4. "<b>Sub-processor</b>" means any third party engaged by the Provider to process Personal Data.</p>
+<p>1.5. Capitalised terms not defined here have the meaning given in the Agreement.</p>
+<h2>2. Roles and Scope</h2>
+<p>2.1. The Customer is the Controller and the Provider is the Processor of Personal Data.</p>
+<p>2.2. The subject matter, nature, purpose, duration, types of Personal Data and categories of Data Subjects are set out in <b>Annex 1</b>.</p>
+<p>2.3. The Customer is responsible for the lawfulness of the Personal Data it provides, including having a valid legal basis and any consent required for marketing communications, loyalty enrolment and profiling.</p>
+<h2>3. Processing Instructions</h2>
+<p>3.1. The Provider shall process Personal Data only on the Customer's documented instructions, including those given through configuration of the Services, unless required otherwise by law. In that case, the Provider shall inform the Customer before processing unless the law prohibits it.</p>
+<p>3.2. The Provider shall promptly inform the Customer if, in its opinion, an instruction infringes Applicable Data Protection Law.</p>
+<p>3.3. The Provider shall not sell Personal Data, nor use it for its own marketing or to train general-purpose AI models for unrelated third parties.</p>
+<p>3.4. The Provider may use aggregated and anonymised data, from which no individual can be identified, to operate, improve and benchmark the Services.</p>
+<h2>4. Confidentiality</h2>
+<p>4.1. The Provider shall ensure that persons authorised to process Personal Data are bound by appropriate confidentiality obligations and access it only as needed to perform the Services.</p>
+<h2>5. Security</h2>
+<p>5.1. The Provider shall implement and maintain appropriate technical and organisational measures to protect Personal Data, as described in <b>Annex 2</b>.</p>
+<p>5.2. The Provider may update these measures, provided the overall level of protection is not reduced.</p>
+<h2>6. Sub-processors</h2>
+<p>6.1. The Customer gives general authorisation for the Provider to engage the Sub-processors listed in <b>Annex 3</b>.</p>
+<p>6.2. The Provider shall give the Customer at least <b>thirty (30) days'</b> notice of any new or replacement Sub-processor. The Customer may object on reasonable data-protection grounds within that period. The parties shall discuss the objection in good faith; if it cannot be resolved, the Customer may terminate the affected Services and receive a refund of prepaid fees for the unused period.</p>
+<p>6.3. The Provider shall impose data protection obligations on each Sub-processor that are no less protective than this DPA, and remains responsible for its Sub-processors' performance.</p>
+<h2>7. Data Subject Rights</h2>
+<p>7.1. Taking into account the nature of the processing, the Provider shall assist the Customer, through the functionality of the Services or otherwise, in responding to requests from Data Subjects to exercise their rights (such as access, correction, deletion, objection and withdrawal of consent).</p>
+<p>7.2. If the Provider receives such a request directly, it shall forward it to the Customer without undue delay and shall not respond except on the Customer's instruction.</p>
+<h2>8. Personal Data Breach</h2>
+<p>8.1. The Provider shall notify the Customer <b>without undue delay, and in any event within forty-eight (48) hours</b>, after becoming aware of a Personal Data Breach affecting Customer Personal Data.</p>
+<p>8.2. The notice shall describe, as far as known: the nature of the breach, categories and approximate number of Data Subjects and records affected, likely consequences, and the measures taken or proposed.</p>
+<p>8.3. The Provider shall take reasonable steps to contain and remedy the breach and shall assist the Customer in meeting any obligation to notify a regulator or Data Subjects within the time limits of Applicable Data Protection Law (see Annex 4).</p>
+<h2>9. Data Location and Cross-Border Transfers</h2>
+<p>9.1. Personal Data shall be hosted in <b>{{HostingRegion}}</b>.</p>
+<p>9.2. The Provider shall not transfer Personal Data outside that region, or to a Sub-processor in another country, except in compliance with Applicable Data Protection Law, including any transfer conditions, safeguards or regulator approvals set out in Annex 4.</p>
+<h2>10. Assistance, Records and Audits</h2>
+<p>10.1. The Provider shall provide reasonable assistance to the Customer with data protection impact assessments and consultations with regulators relating to the Services.</p>
+<p>10.2. The Provider shall make available information reasonably necessary to demonstrate compliance with this DPA. The Customer may audit compliance no more than once in any twelve (12) month period, on at least thirty (30) days' written notice, during business hours, at its own cost, and subject to confidentiality. The Provider may satisfy this right by providing recent independent audit reports or certifications, where available.</p>
+<h2>11. Return and Deletion</h2>
+<p>11.1. On termination of the Services, the Provider shall make Customer Personal Data available for export for <b>thirty (30) days</b>. After that, the Provider shall delete it within a further <b>sixty (60) days</b>, unless retention is required by law. Backups shall be deleted in the normal backup cycle.</p>
+<h2>12. Liability</h2>
+<p>12.1. Each party's liability under this DPA is subject to the limitations and exclusions of liability in the Agreement.</p>
+<h2>13. Order of Precedence and Term</h2>
+<p>13.1. If there is a conflict between this DPA and the rest of the Agreement regarding the processing of Personal Data, this DPA prevails. If there is a conflict between this DPA and the Country Addendum, the Country Addendum prevails.</p>
+<p>13.2. This DPA remains in force for as long as the Provider processes Customer Personal Data.</p>
+<p><b>Signed for and on behalf of:</b></p>
+<table><tr><th></th><th>Customer</th><th>Provider</th></tr><tr><td>Legal Entity</td><td>{{ClientLegalName}}</td><td>{{EntityName}}</td></tr><tr><td>Authorised Signatory</td><td>{{ClientSignatoryName}}</td><td>{{EntitySignatoryName}}</td></tr><tr><td>Designation</td><td>{{ClientSignatoryTitle}}</td><td>{{EntitySignatoryTitle}}</td></tr><tr><td>Signature</td><td></td><td></td></tr><tr><td>Date</td><td></td><td></td></tr></table>
+<h2>Annex 1 — Details of Processing</h2>
+<table><tr><th>Item</th><th>Details</th></tr><tr><td>Subject matter</td><td>Provision of the OptCulture customer engagement, loyalty and data platform under the Agreement</td></tr><tr><td>Nature of processing</td><td>Collection, storage, organisation, segmentation, analysis, transmission of communications, retrieval and deletion</td></tr><tr><td>Purpose</td><td>Loyalty programme management, digital receipts, customer profiles and analytics, campaigns and marketing automation, offers and coupons, feedback and NPS, and support</td></tr><tr><td>Categories of Data Subjects</td><td>Customer's shoppers, loyalty members and prospects; Customer's employees and authorised users {{ExtraDataSubjects}}</td></tr><tr><td>Types of Personal Data</td><td>Name, mobile number, email, gender, date of birth, location/store, purchase and transaction history, loyalty points and tier, communication preferences and consents, feedback responses, device and engagement data {{ExtraDataTypes}}</td></tr><tr><td>Special / sensitive data</td><td>None, unless stated here: {{SensitiveData}}</td></tr><tr><td>Duration</td><td>Term of the Agreement plus the return and deletion period in Section 11</td></tr><tr><td>Hosting region</td><td>{{HostingRegion}}</td></tr></table>
+<h2>Annex 2 — Technical and Organisational Measures</h2>
+<p>1. Encryption of Personal Data in transit (TLS) and at rest.</p>
+<p>2. Role-based access control, least-privilege access, and unique user accounts for platform administrators.</p>
+<p>3. Multi-factor authentication for Provider staff accessing production systems.</p>
+<p>4. Logging and monitoring of access to production systems.</p>
+<p>5. Regular backups, with tested restore procedures.</p>
+<p>6. Vulnerability management and periodic security testing.</p>
+<p>7. Staff confidentiality undertakings and data protection training.</p>
+<p>8. Documented incident response procedure.</p>
+<p>9. Segregation of each customer's data within the platform.</p>
+<p>10. Secure deletion on termination, as set out in Section 11.</p>
+<h2>Annex 3 — Authorised Sub-processors</h2>
+<table><tr><th>Sub-processor</th><th>Service</th><th>Location</th></tr><tr><td>{{EACH:SubProcessors}}{{name}}</td><td>{{service}}</td><td>{{location}}</td></tr></table>
+<h2>Annex 4 — Country Addenda</h2>
+<p>{{#IF Addendum4A}}</p>
+<h3>4A. Kingdom of Saudi Arabia — Personal Data Protection Law</h3>
+<p>1. <b>Applicable law:</b> the Personal Data Protection Law issued by Royal Decree No. (M/19) dated 9/2/1443H, as amended, and its Implementing Regulations and Regulations on Personal Data Transfer outside the Kingdom ("<b>KSA PDPL</b>"). The competent authority is the Saudi Data &amp; AI Authority ("<b>SDAIA</b>").</p>
+<p>2. <b>Terminology:</b> "Controller" includes "Controlling Entity" and "Processor" includes "Processing Entity" as used in the KSA PDPL.</p>
+<p>3. <b>Breach notification:</b> the Provider shall notify the Customer under Section 8 in time for the Customer to notify SDAIA within the period required by the KSA PDPL (currently 72 hours from becoming aware), and Data Subjects where required.</p>
+<p>4. <b>Transfers outside the Kingdom:</b> Personal Data shall only be transferred outside the Kingdom in accordance with the KSA PDPL transfer regulations, including adequacy decisions, approved safeguards (such as standard contractual clauses issued by SDAIA) or permitted exceptions. Hosting region: {{HostingRegion}}.</p>
+<p>5. <b>Records:</b> the Provider shall assist the Customer in maintaining the record of processing activities required by the KSA PDPL.</p>
+<p>{{/IF Addendum4A}}</p>
+<p>{{#IF Addendum4B}}</p>
+<h3>4B. United Arab Emirates — Federal Personal Data Protection Law</h3>
+<p>1. <b>Applicable law:</b> Federal Decree-Law No. 45 of 2021 on the Protection of Personal Data and its executive regulations ("<b>UAE PDPL</b>"). Where the Customer is established in the DIFC or ADGM, the respective free-zone data protection law applies instead and this addendum shall be read accordingly.</p>
+<p>2. <b>Processor obligations:</b> the Provider shall process Personal Data only in accordance with the Customer's instructions and the UAE PDPL, and shall assist the Customer in meeting Data Subject rights and security obligations.</p>
+<p>3. <b>Breach notification:</b> the Provider shall notify the Customer under Section 8 so that the Customer can notify the UAE Data Office and affected Data Subjects as required.</p>
+<p>4. <b>Cross-border transfers:</b> transfers outside the UAE shall be made only to jurisdictions or under conditions permitted by the UAE PDPL.</p>
+<p>{{/IF Addendum4B}}</p>
+<p>{{#IF Addendum4C}}</p>
+<h3>4C. India — Digital Personal Data Protection Act</h3>
+<p>1. <b>Applicable law:</b> the Digital Personal Data Protection Act, 2023 and the rules made under it ("<b>DPDP Act</b>"). The Customer is the "Data Fiduciary" and the Provider is the "Data Processor".</p>
+<p>2. <b>Consent and notice:</b> the Customer is responsible for issuing notices and obtaining consent from Data Principals as required by the DPDP Act, including through Consent Managers where applicable.</p>
+<p>3. <b>Breach notification:</b> the Provider shall notify the Customer under Section 8 so that the Customer can inform the Data Protection Board of India and affected Data Principals in the form and time prescribed.</p>
+<p>4. <b>Erasure:</b> the Provider shall erase Personal Data on the Customer's instruction, or when the purpose is no longer served, as required by the DPDP Act.</p>
+<p>5. <b>Transfers:</b> Personal Data shall not be transferred to any country restricted by the Central Government under the DPDP Act.</p>
+<p>{{/IF Addendum4C}}</p>
+<p>{{#IF Addendum4D}}</p>
+<h3>4D. Egypt — Personal Data Protection Law</h3>
+<p>1. <b>Applicable law:</b> Law No. 151 of 2020 on the Protection of Personal Data and its executive regulations ("<b>Egypt PDPL</b>"). The competent authority is the Personal Data Protection Center.</p>
+<p>2. <b>Licensing:</b> each party shall obtain any licence, permit or registration required of it by the Egypt PDPL.</p>
+<p>3. <b>Breach notification:</b> the Provider shall notify the Customer under Section 8 so that the Customer can notify the Personal Data Protection Center within the period required.</p>
+<p>4. <b>Cross-border transfers:</b> transfers outside Egypt shall be made only in compliance with the Egypt PDPL, including any licence or adequacy requirements.</p>
+<p>{{/IF Addendum4D}}</p>
+<p>{{#IF Addendum4E}}</p>
+<h3>4E. European Union / United Kingdom — GDPR</h3>
+<p>1. <b>Applicable law:</b> Regulation (EU) 2016/679 ("<b>GDPR</b>") and, where relevant, the UK GDPR and Data Protection Act 2018. This DPA is intended to meet the requirements of Article 28 GDPR.</p>
+<p>2. <b>Breach notification:</b> the Provider shall notify the Customer under Section 8 so that the Customer can notify the supervisory authority within 72 hours where required.</p>
+<p>3. <b>International transfers:</b> transfers outside the EEA/UK shall be made under an adequacy decision or the European Commission's Standard Contractual Clauses (and the UK International Data Transfer Addendum, where relevant), which are incorporated by reference when required.</p>
+<p>{{/IF Addendum4E}}</p>
+<p>{{#IF Addendum4F}}</p>
+<h3>4F. Other Jurisdictions</h3>
+<p>1. The Provider shall comply with the data protection law applicable in {{ClientCountry}} to the extent it applies to the Provider as a processor.</p>
+<p>2. Any additional mandatory requirements of that law shall be agreed in writing and attached to this DPA.</p>
+<p>{{/IF Addendum4F}}</p>
+</body></html>
