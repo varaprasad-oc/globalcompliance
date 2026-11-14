@@ -11,6 +11,9 @@
 | _Archive | `1YN_FITreDWFDhQP_NdT6_HMbWke0TqXZ` |
 | **OptCulture Master DB** (Sheet) | `1JhduuRvkkn1m--MqBz6WwKD4Gj2uLCFcF14onzr6fKk` · https://docs.google.com/spreadsheets/d/1JhduuRvkkn1m--MqBz6WwKD4Gj2uLCFcF14onzr6fKk/edit |
 
+| **Web app v1** (domain-only, runs as varaprasad@) | https://script.google.com/a/macros/optculture.com/s/AKfycbwKYpTw0Dd05z3gte-f9eSfAr8ycXRMw6lqpLMzurI-rUq4rvaH4xsTzekLg0vypcLy/exec |
+| Self-test output (can be deleted) | Doc `1Ix75HK0mlEuAeJLf0M7-FqHWv0NZgj-Z7Wgdyt8k8UU`, PDF `1eVJmNNr1WTISSVIG9zajuAPiaSIm38-F` (01 Proposals/2026/SELFTEST) |
+
 ## Apps Script → Project Settings → Script Properties (paste these)
 ```
 ROOT_FOLDER_ID      0ANyaAwry0iF7Uk9PVA
