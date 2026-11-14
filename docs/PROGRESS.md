@@ -9,7 +9,7 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 | 2 | Master Sheet | ✅ build · ⏳ G1 | Live and read by the app (14 master tabs, correct). Awaiting Amith sign-off (G1) |
 | 3 | Pricing engine | ✅ · G2 answered | 5 assumptions confirmed (docs/DECISIONS.md). Comms volume tiers live in web app v2. Amith to countersign G2 |
 | 4 | Template engine | ✅ | engineSelfTest in Google: 0 warnings; Doc + PDF created in 01 Proposals/2026/SELFTEST; IF blocks, lists, TEXT, TABLE, EACH rows and fields verified in the output. Gate G3 (placeholders) ready to freeze |
-| 5 | Templates + legal | 🟡 | 5.1–5.3 ✅ 4 templates built, uploaded to _Templates and registered (24/24 tests incl. placeholder check of every template). 5.4 pending: live sample generation (needs v3 deploy), then legal review → Gate G4 |
+| 5 | Templates + legal | ✅ build · ⏳ G4 | All 4 templates generate correctly live (8/8 sample docs, 0 warnings, reviewed). Logo + brand colours. Remaining: legal review of ToS/DPA/SLA and OC inputs (entity signatories, DPA tech details) → Gate G4. Deploy v5 for clean party lines |
 | 6 | Deal entry UI | ☐ | |
 | 7 | AI + generation | ☐ | |
 | 8 | Roles, dashboards, approvals | ☐ | |
@@ -28,3 +28,4 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-14: Web app v2 deployed (comms tiers). healthCheck OK (15 master tabs, EGP 4,020). Sprint 5 started.
 - 2026-11-14: Sprint 5: Proposal, Order Form, ToS (+SLA) and DPA templates created as Google Docs and registered. generateSampleDocs() added; v3 deploy pending.
 - 2026-11-14: v3 sample run: Proposal/Order Form/ToS OK for both deals and reviewed; DPA failed (engine bug: emptying the last paragraph of a document). Fixed. Templates v1.1 uploaded (logo, red headings, purple table headers from a Sheet setting, add-ons table in the proposal). v4 deploy + re-run pending.
+- 2026-11-14: v4 sample run: 8/8 documents OK incl. both DPAs (4D Egypt w/ partner sub-processor; 4B UAE). Logo inline, purple/white headers verified in document JSON. Fixed blank partner reg/address text → ToS/DPA v1.2 (needs v5 deploy).

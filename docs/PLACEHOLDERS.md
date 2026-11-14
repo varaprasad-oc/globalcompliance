@@ -45,6 +45,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{ClientEcomPlatform}}` | Shopify |
 | `{{ClientBusinessContact}}` | A. Client, a@frg.example, +20 100 000 0000 |
 | `{{ClientBillingContact}}` | Finance, finance@frg.example |
+| `{{ClientPartyDetails}}` | , Commercial Registration No. 123456, Cairo, Egypt |
 | `{{ClientSignatoryName}}` | A. Client |
 | `{{ClientSignatoryTitle}}` | CEO |
 | `{{EntityName}}` | Congineer Business Solutions |
@@ -56,6 +57,9 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{EntitySignatoryName}}` |  |
 | `{{EntitySignatoryTitle}}` |  |
 | `{{GoverningLaw}}` | Egypt |
+| `{{EntityPartyDetails}}` |  |
+| `{{EntityRegistration}}` | To be provided |
+| `{{EntityAddressOrTbc}}` | To be provided |
 | `{{RepName}}` | Varaprasad SN |
 | `{{RepEmail}}` | varaprasad@optculture.com |
 | `{{RepPhone}}` | +971 52 904 5457 |
@@ -152,6 +156,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{ClientEcomPlatform}}` | Shopify |
 | `{{ClientBusinessContact}}` | A. Client, a@frg.example, +20 100 000 0000 |
 | `{{ClientBillingContact}}` | Finance, finance@frg.example |
+| `{{ClientPartyDetails}}` | , Commercial Registration No. 123456, Cairo, Egypt |
 | `{{ClientSignatoryName}}` | A. Client |
 | `{{ClientSignatoryTitle}}` | CEO |
 | `{{EntityName}}` | Congineer Business Solutions |
@@ -163,6 +168,9 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{EntitySignatoryName}}` |  |
 | `{{EntitySignatoryTitle}}` |  |
 | `{{GoverningLaw}}` | Egypt |
+| `{{EntityPartyDetails}}` |  |
+| `{{EntityRegistration}}` | To be provided |
+| `{{EntityAddressOrTbc}}` | To be provided |
 | `{{RepName}}` | Varaprasad SN |
 | `{{RepEmail}}` | varaprasad@optculture.com |
 | `{{RepPhone}}` | +971 52 904 5457 |
@@ -250,6 +258,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{ClientEcomPlatform}}` | Shopify |
 | `{{ClientBusinessContact}}` | A. Client, a@frg.example, +20 100 000 0000 |
 | `{{ClientBillingContact}}` | Finance, finance@frg.example |
+| `{{ClientPartyDetails}}` | , Commercial Registration No. 123456, Cairo, Egypt |
 | `{{ClientSignatoryName}}` | A. Client |
 | `{{ClientSignatoryTitle}}` | CEO |
 | `{{EntityName}}` | Congineer Business Solutions |
@@ -261,6 +270,9 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{EntitySignatoryName}}` |  |
 | `{{EntitySignatoryTitle}}` |  |
 | `{{GoverningLaw}}` | Egypt |
+| `{{EntityPartyDetails}}` |  |
+| `{{EntityRegistration}}` | To be provided |
+| `{{EntityAddressOrTbc}}` | To be provided |
 | `{{RepName}}` | Varaprasad SN |
 | `{{RepEmail}}` | varaprasad@optculture.com |
 | `{{RepPhone}}` | +971 52 904 5457 |
@@ -330,6 +342,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{ClientEcomPlatform}}` | Shopify |
 | `{{ClientBusinessContact}}` | A. Client, a@frg.example, +20 100 000 0000 |
 | `{{ClientBillingContact}}` | Finance, finance@frg.example |
+| `{{ClientPartyDetails}}` | , Commercial Registration No. 123456, Cairo, Egypt |
 | `{{ClientSignatoryName}}` | A. Client |
 | `{{ClientSignatoryTitle}}` | CEO |
 | `{{EntityName}}` | Congineer Business Solutions |
@@ -341,6 +354,9 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{EntitySignatoryName}}` |  |
 | `{{EntitySignatoryTitle}}` |  |
 | `{{GoverningLaw}}` | Egypt |
+| `{{EntityPartyDetails}}` |  |
+| `{{EntityRegistration}}` | To be provided |
+| `{{EntityAddressOrTbc}}` | To be provided |
 | `{{RepName}}` | Varaprasad SN |
 | `{{RepEmail}}` | varaprasad@optculture.com |
 | `{{RepPhone}}` | +971 52 904 5457 |

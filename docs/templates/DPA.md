@@ -8,8 +8,8 @@
 
 This Data Processing Agreement ("**DPA**") is entered into between:
 
-1. **{{ClientLegalName}}**, {{ClientRegType}} No. {{ClientRegNo}}, {{ClientAddress}} (the "**Customer**"); and
-2. **{{EntityName}}**, {{EntityRegType}} No. {{EntityRegNo}}, {{EntityAddress}} (the "**Provider**").
+1. **{{ClientLegalName}}**{{ClientPartyDetails}} (the "**Customer**"); and
+2. **{{EntityName}}**{{EntityPartyDetails}} (the "**Provider**").
 
 {{#IF IsPartner}}The Provider is an authorised local partner of OptCulture. The OptCulture platform is operated by **{{PlatformEntityName}}** ("**OptCulture**"), which acts as a Sub-processor of the Provider under this DPA.{{/IF IsPartner}}
 

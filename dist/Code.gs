@@ -656,12 +656,16 @@ function buildDocData(docType, master, deal, quote, ctx) {
     ClientRegType: _v(c.regType || 'Registration'), ClientRegNo: _v(c.regNo), ClientWebsite: _v(c.website), ClientBrands: _v(c.brands),
     ClientPOS: _v(c.pos), ClientEcomPlatform: _v(c.ecomPlatform),
     ClientBusinessContact: _contact(c.businessContact), ClientBillingContact: _contact(c.billingContact),
+    ClientPartyDetails: [c.regNo ? (_v(c.regType || 'Registration') + ' No. ' + c.regNo) : '', _v(c.address)].filter(String).map(function (x) { return ', ' + x; }).join(''),
     ClientSignatoryName: _v(c.signatoryName), ClientSignatoryTitle: _v(c.signatoryTitle),
 
     EntityName: _v(entity.legal_name), EntityShortName: _v(entity.short_name), EntityRegType: _v(entity.reg_type),
     EntityRegNo: _v(entity.reg_no), EntityAddress: _v(entity.address), EntityCountry: _v(entity.country),
     EntitySignatoryName: _v(entity.signatory_name), EntitySignatoryTitle: _v(entity.signatory_title),
     GoverningLaw: _v(entity.governing_law),
+    EntityPartyDetails: [entity.reg_no ? (_v(entity.reg_type) + ' No. ' + entity.reg_no).trim() : '', _v(entity.address)].filter(String).map(function (x) { return ', ' + x; }).join(''),
+    EntityRegistration: entity.reg_no ? (_v(entity.reg_type) + ' ' + entity.reg_no).trim() : 'To be provided',
+    EntityAddressOrTbc: _v(entity.address) || 'To be provided',
 
     RepName: _v(user.name), RepEmail: _v(user.email), RepPhone: _v(user.phone),
 

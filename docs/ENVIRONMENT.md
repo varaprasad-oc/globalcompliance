@@ -11,7 +11,7 @@
 | _Archive | `1YN_FITreDWFDhQP_NdT6_HMbWke0TqXZ` |
 | **OptCulture Master DB** (Sheet) | `1JhduuRvkkn1m--MqBz6WwKD4Gj2uLCFcF14onzr6fKk` · https://docs.google.com/spreadsheets/d/1JhduuRvkkn1m--MqBz6WwKD4Gj2uLCFcF14onzr6fKk/edit |
 
-| **Web app v1** (domain-only, runs as varaprasad@) | https://script.google.com/a/macros/optculture.com/s/AKfycbwKYpTw0Dd05z3gte-f9eSfAr8ycXRMw6lqpLMzurI-rUq4rvaH4xsTzekLg0vypcLy/exec |
+| **Web app v1** (domain-only, runs as varaprasad@; v4 live, v5 pending) | https://script.google.com/a/macros/optculture.com/s/AKfycbwKYpTw0Dd05z3gte-f9eSfAr8ycXRMw6lqpLMzurI-rUq4rvaH4xsTzekLg0vypcLy/exec |
 | Self-test output (can be deleted) | Doc `1Ix75HK0mlEuAeJLf0M7-FqHWv0NZgj-Z7Wgdyt8k8UU`, PDF `1eVJmNNr1WTISSVIG9zajuAPiaSIm38-F` (01 Proposals/2026/SELFTEST) |
 
 ## Templates (_Templates folder, registered in the Templates tab)
@@ -19,8 +19,8 @@
 |---|---|---|---|
 | PROPOSAL | `1cy5np3Yk1VNwHrOOpg_EoEoLpm1mDngKA2q55u_Athc` | 1.1 | templates/proposal.html |
 | ORDER_FORM | `1murHdOTD1S4BEpUXKmjCuEu_ulI4If8H7rMRm4anU04` | 1.1 | templates/order_form.html |
-| TOS (+SLA Schedule 2) | `12v20FURReFJjFGAWigej9-9EFNkcEbvyOwnWFqMMQpI` | 1.1-draft | docs/templates/TOS.md + SLA.md → `node tools/md2html.js` |
-| DPA | `1A2a757iHzkjRs_DTaDlu4SIT_VZV4dptqRhWQwrDVQU` | 1.1-draft | docs/templates/DPA.md → `node tools/md2html.js` |
+| TOS (+SLA Schedule 2) | `1QKr3CwlWgbpLTElTxTaOFG-gLuwyWKXM66gTHK2u--k` | 1.2-draft | docs/templates/TOS.md + SLA.md → `node tools/md2html.js` |
+| DPA | `1hFHe5yts99MqTMaf2QHHieMc4LST23HR_ZquSdpD1ZI` | 1.2-draft | docs/templates/DPA.md → `node tools/md2html.js` |
 
 v1 templates moved to _Archive. OptCulture logo: `1dURALQP4yA58Fp5eSZY509NrB3gqagb9` (_Templates/OptCulture logo.png), referenced by CommercialTerms.optculture_logo_file_id.
 Logos/branding can be added directly in the Google Docs (static images); keep the {{…}} tags intact.

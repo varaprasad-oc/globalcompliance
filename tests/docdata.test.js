@@ -102,3 +102,11 @@ test('Proposal shows selected add-ons table and brand style', () => {
   eq(d.style.tableHeaderBg, '#7B3FE4');
   eq(d.images.OptCultureLogo, '1dURALQP4yA58Fp5eSZY509NrB3gqagb9');
 });
+
+test('Party lines drop blank registration/address cleanly', () => {
+  const d = build('DPA');
+  eq(d.fields.EntityPartyDetails, '', 'Congineer has no reg/address in seed');
+  eq(d.fields.ClientPartyDetails, ', Commercial Registration No. 123456, Cairo, Egypt');
+  const t = build('TOS');
+  eq(t.fields.EntityRegistration, 'To be provided');
+});

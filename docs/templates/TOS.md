@@ -133,8 +133,8 @@ These Terms, together with the applicable incorporated documents and the Order F
 | | |
 |---|---|
 | Contracting entity | **{{EntityName}}**{{#IF IsPartner}} (authorised local partner of OptCulture){{/IF IsPartner}} |
-| Registration | {{EntityRegType}} {{EntityRegNo}} |
-| Address | {{EntityAddress}} |
+| Registration | {{EntityRegistration}} |
+| Address | {{EntityAddressOrTbc}} |
 | Governing law | The laws of **{{GoverningLaw}}**, without regard to conflict-of-law rules |
 | Disputes | The parties shall first attempt to resolve any dispute amicably within 30 days. Failing that, the competent courts of {{GoverningLaw}} shall have exclusive jurisdiction. *(Reviewer: confirm courts vs arbitration per entity, e.g. DIAC/DIFC for UAE.)* |
 
