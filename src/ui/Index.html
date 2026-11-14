@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root { --navy:#1f3b57; --accent:#e8743b; --bg:#f5f7fa; --card:#fff; --text:#1d2733; --muted:#6b7785; --line:#e1e6ec; --ok:#1e8e5a; --warn:#b5651d; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family: Arial, Helvetica, sans-serif; background:var(--bg); color:var(--text); font-size:14px; }
+    header { background:var(--navy); color:#fff; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; }
+    header .brand { font-weight:bold; font-size:16px; }
+    header .who { font-size:13px; opacity:.9; }
+    .layout { display:flex; min-height:calc(100vh - 48px); }
+    nav { width:200px; background:#fff; border-right:1px solid var(--line); padding:12px 0; }
+    nav a { display:block; padding:10px 20px; color:var(--text); text-decoration:none; cursor:pointer; }
+    nav a.active, nav a:hover { background:#eef2f6; border-left:3px solid var(--accent); padding-left:17px; }
+    nav a.soon { color:var(--muted); }
+    main { flex:1; padding:20px; max-width:1100px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:16px; margin-bottom:16px; }
+    h2 { margin:0 0 12px; font-size:18px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; }
+    label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+    input, select { width:100%; padding:7px; border:1px solid var(--line); border-radius:4px; font-size:14px; }
+    .checks label { display:inline-flex; align-items:center; gap:6px; margin-right:14px; color:var(--text); font-size:14px; }
+    .checks input { width:auto; }
+    button { background:var(--accent); color:#fff; border:0; padding:9px 16px; border-radius:4px; cursor:pointer; font-size:14px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; }
+    th { background:#eef2f6; }
+    td.num, th.num { text-align:right; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; }
+    .badge.warn { background:#fdf0e6; color:var(--warn); }
+    .badge.ok { background:#e6f5ee; color:var(--ok); }
+    .error { color:#b00020; }
+    .muted { color:var(--muted); }
+    .hidden { display:none; }
+    @media (max-width:700px) { nav { display:none; } main { padding:12px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">OptCulture Sales Docs</div>
+    <div class="who" id="who">Signing in…</div>
+  </header>
+  <div class="layout">
+    <nav id="nav" class="hidden">
+      <a class="active" data-view="calc">Price Calculator</a>
+      <a class="soon" title="Sprint 6">New Deal (soon)</a>
+      <a class="soon" title="Sprint 8">My Deals (soon)</a>
+      <a class="soon role-approver hidden" title="Sprint 8">Approvals (soon)</a>
+      <a class="soon role-admin hidden" title="Sprint 9">Admin (soon)</a>
+    </nav>
+    <main>
+      <div id="denied" class="card hidden"><h2>Access denied</h2><p id="deniedMsg"></p></div>
+
+      <div id="view-calc" class="hidden">
+        <div class="card">
+          <h2>Price Calculator</h2>
+          <div class="grid">
+            <div><label>Market</label><select id="market"></select></div>
+            <div><label>Currency</label><select id="currency"></select></div>
+            <div><label>Physical stores</label><input id="stores" type="number" min="0" value="5"></div>
+            <div><label>E-commerce sites</label><input id="ecom" type="number" min="0" value="1"></div>
+          </div>
+          <p><label>Packages</label><span class="checks" id="pkgs"></span></p>
+          <p><label>Add-ons</label><span class="checks" id="addons"></span></p>
+          <div class="grid" id="specials"></div>
+          <p><button id="calcBtn">Calculate</button> <span id="status" class="muted"></span></p>
+        </div>
+        <div id="result"></div>
+      </div>
+    </main>
+  </div>
+
+<script>
+  var BOOT = null;
+  function $(id) { return document.getElementById(id); }
+  function money(c, v) { return v === null || v === undefined ? '' : c + ' ' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+  function pct(v) { return (Math.round(v * 1000) / 10) + '%'; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  google.script.run.withSuccessHandler(init).withFailureHandler(function (e) { deny(e.message); }).apiBootstrap();
+
+  function deny(msg) { $('who').textContent = ''; $('denied').classList.remove('hidden'); $('deniedMsg').textContent = msg; }
+
+  function init(b) {
+    BOOT = b;
+    if (!b.user.ok) return deny(b.user.reason);
+    $('who').textContent = b.user.name + ' · ' + b.user.role;
+    $('nav').classList.remove('hidden');
+    if (b.user.role === 'Superadmin') document.querySelectorAll('.role-approver,.role-admin').forEach(function (e) { e.classList.remove('hidden'); });
+    $('view-calc').classList.remove('hidden');
+    $('market').innerHTML = b.lists.markets.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('');
+    $('currency').innerHTML = b.lists.currencies.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('');
+    $('pkgs').innerHTML = b.lists.packages.map(function (p) { return '<label><input type="checkbox" name="pkg" value="' + esc(p) + '" checked> ' + esc(p) + '</label>'; }).join('');
+    $('addons').innerHTML = b.lists.addOns.map(function (a) { return '<label><input type="checkbox" name="addon" value="' + esc(a.id) + '"> ' + esc(a.label) + '</label>'; }).join('');
+    $('specials').innerHTML = b.lists.packages.map(function (p) { return '<div><label>Special price / site / month – ' + esc(p) + ' (optional)</label><input type="number" min="0" data-special="' + esc(p) + '"></div>'; }).join('');
+    $('calcBtn').onclick = calc;
+  }
+
+  function checked(name) { return Array.prototype.map.call(document.querySelectorAll('input[name=' + name + ']:checked'), function (e) { return e.value; }); }
+
+  function calc() {
+    var specials = {};
+    document.querySelectorAll('[data-special]').forEach(function (e) { if (e.value) specials[e.dataset.special] = Number(e.value); });
+    var input = { market: $('market').value, currency: $('currency').value, stores: Number($('stores').value), ecomSites: Number($('ecom').value),
+      packages: checked('pkg'), addOns: checked('addon'), specialPrices: specials };
+    $('status').textContent = 'Calculating…';
+    google.script.run.withSuccessHandler(render).withFailureHandler(function (e) { $('status').innerHTML = '<span class="error">' + esc(e.message) + '</span>'; }).apiPreviewQuote(input);
+  }
+
+  function render(q) {
+    $('status').textContent = '';
+    if (!q.ok) { $('result').innerHTML = '<div class="card error">' + q.errors.map(esc).join('<br>') + '</div>'; return; }
+    var c = q.currency, h = '';
+    h += '<div class="card"><h2>Summary</h2><p>' + q.sites + ' sites · Market discount ' + pct(q.discounts.marketPct) + ' · Store slab "' + esc(q.discounts.slabLabel) + '" ' + pct(q.discounts.slabPct) +
+      ' · Combined ' + pct(q.discounts.combinedPct) + ' · ' + (q.needsApproval ? '<span class="badge warn">Needs superadmin approval</span>' : '<span class="badge ok">Standard pricing</span>') + '</p>';
+    if (q.needsApproval) h += '<ul>' + q.approvalReasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>';
+    h += '<table><tr><th></th>' + q.packages.map(function (p) { return '<th class="num">' + esc(p.package) + '</th>'; }).join('') + '</tr>';
+    function row(label, fn) { h += '<tr><td>' + label + '</td>' + q.packages.map(function (p) { return '<td class="num">' + fn(p) + '</td>'; }).join('') + '</tr>'; }
+    row('Standard price / site / month', function (p) { return money(c, p.standardPricePerSite); });
+    row('Final price / site / month', function (p) { return '<b>' + money(c, p.finalPricePerSite) + '</b>'; });
+    row('Effective discount vs list', function (p) { return pct(p.effectiveDiscountPct); });
+    row('Licence / month (all sites)', function (p) { return money(c, p.licenceMonthly); });
+    row('Add-ons / month', function (p) { return money(c, p.addOnsMonthly); });
+    row('Recurring / year', function (p) { return money(c, p.recurringAnnual); });
+    row('One-time fees', function (p) { return money(c, p.oneTimeTotal); });
+    row('<b>First-year total</b>', function (p) { return '<b>' + money(c, p.firstYearTotal) + '</b>'; });
+    row('Overage / 1,000 receipts', function (p) { return money(c, p.overagePer1000); });
+    h += '</table></div>';
+    h += '<div class="card"><h2>Usage & communication</h2><table>' + q.usage.map(function (l) { return '<tr><td>' + esc(l.label) + '</td><td class="num">' + (l.text ? esc(l.text) : money(c, l.unitPrice) + ' ' + esc(l.unit)) + '</td></tr>'; }).join('') + '</table></div>';
+    $('result').innerHTML = h;
+  }
+</script>
+</body>
+</html>
