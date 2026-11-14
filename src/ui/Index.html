@@ -60,7 +60,8 @@
       <a data-view="deal" id="navNew">New Deal</a>
       <a data-view="list">My Deals</a>
       <a data-view="calc">Price Calculator</a>
-      <a class="soon role-admin hidden" title="Sprint 8">Approvals (soon)</a>
+      <a data-view="dash" class="role-mgr hidden">Dashboard</a>
+      <a data-view="appr" class="role-admin hidden">Approvals <span id="apprCount" class="badge warn hidden"></span></a>
       <a class="soon role-admin hidden" title="Sprint 9">Admin (soon)</a>
     </nav>
     <main>
@@ -182,6 +183,7 @@
             <div class="card step hidden" data-step="4">
               <h3 style="margin-top:0">Review</h3>
               <div id="review"></div>
+              <div class="grid" style="margin-top:10px"><div class="wide"><label>Note to Amith (shown with the approval request, e.g. why the special price)</label><textarea data-f="approvalNote" style="min-height:50px"></textarea></div></div>
               <div id="genResult"></div>
               <div id="docList"></div>
               <div class="bar" style="margin-top:12px">
@@ -202,8 +204,19 @@
       <div id="view-list" class="hidden">
         <div class="card">
           <div class="bar"><h2 style="margin:0">My Deals</h2><button id="btnNew2">+ New deal</button></div>
-          <div id="dealList" style="margin-top:10px" class="muted">Loading…</div>
+          <div class="bar" style="margin-top:10px;justify-content:flex-start"><input id="fText" placeholder="Search client or deal id" style="width:260px"> <select id="fStatus" style="width:auto"><option value="">All statuses</option><option>Draft</option><option>Pending approval</option><option>Approved</option><option>Rejected</option><option>Generated</option><option>Sent</option><option>Won</option><option>Lost</option></select></div>
+          <div id="dealList" style="margin-top:10px">Loading…</div>
         </div>
+      </div>
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <div id="view-dash" class="hidden">
+        <div class="card"><h2>Dashboard <span class="muted" id="dashScope" style="font-size:13px;font-weight:normal"></span></h2><div id="dash">Loading…</div></div>
+      </div>
+
+      <!-- ===================== APPROVALS ===================== -->
+      <div id="view-appr" class="hidden">
+        <div class="card"><h2>Approvals</h2><div id="appr">Loading…</div></div>
       </div>
 
       <!-- ===================== PRICE CALCULATOR ===================== -->
@@ -249,7 +262,8 @@
     if (!b.user.ok) return deny(b.user.reason);
     $('who').textContent = b.user.name + ' · ' + b.user.role;
     $('nav').classList.remove('hidden');
-    if (b.user.role === 'Superadmin') qa('.role-admin').forEach(function (e) { e.classList.remove('hidden'); });
+    if (b.user.role === 'Superadmin') { qa('.role-admin').forEach(function (e) { e.classList.remove('hidden'); }); refreshApprCount(); }
+    if (b.user.role !== 'Rep') qa('.role-mgr').forEach(function (e) { e.classList.remove('hidden'); });
     return run('apiFormLists').then(function (l) { LISTS = l; buildForm(); show('deal'); newDeal(); });
   }).catch(function (e) { deny(e.message); });
 
@@ -257,9 +271,11 @@
 
   qa('nav a[data-view]').forEach(function (a) { a.onclick = function () { if (a.dataset.view === 'deal' && a.id === 'navNew') newDeal(); show(a.dataset.view); }; });
   function show(v) {
-    ['deal', 'list', 'calc'].forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
+    ['deal', 'list', 'calc', 'dash', 'appr'].forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
     qa('nav a[data-view]').forEach(function (a) { a.classList.toggle('active', a.dataset.view === v); });
     if (v === 'list') loadList();
+    if (v === 'dash') loadDash();
+    if (v === 'appr') loadApprovals();
   }
 
   // ---------- form building ----------
@@ -296,6 +312,7 @@
     $('btnSave').onclick = save; $('btnSave2').onclick = save;
     $('btnNew2').onclick = function () { newDeal(); show('deal'); };
     $('calcBtn').onclick = calc;
+    $('fText').oninput = renderList; $('fStatus').onchange = renderList;
     $('btnAi').onclick = draftAi;
     $('btnGenerate').onclick = generate;
   }
@@ -430,20 +447,81 @@
   }
 
   // ---------- my deals ----------
+  var ROWS = [];
   function loadList() {
     $('dealList').innerHTML = 'Loading…';
-    run('apiListDeals').then(function (rows) {
-      if (!rows.length) { $('dealList').innerHTML = '<p class="muted">No deals yet.</p>'; return; }
-      var mine = BOOT.user.email;
-      $('dealList').innerHTML = '<table><tr><th>Client</th><th>Country</th><th>Packages</th><th>Status</th><th>Approval</th><th>Updated</th>' +
-        (BOOT.user.role !== 'Rep' ? '<th>Owner</th>' : '') + '<th></th></tr>' + rows.map(function (r) {
-          return '<tr><td>' + esc(r.clientName) + '<br><span class="muted">' + esc(r.dealId) + ' · v' + r.version + '</span></td><td>' + esc(r.country) + '</td><td>' + esc(r.packages) + '</td><td>' + esc(r.status) + '</td><td>' +
-            (r.needsApproval ? '<span class="badge warn">' + esc(r.approvalStatus) + '</span>' : '<span class="badge ok">Not required</span>') + '</td><td>' + esc(String(r.updatedAt).slice(0, 10)) + '</td>' +
-            (BOOT.user.role !== 'Rep' ? '<td>' + esc(r.createdBy === mine ? 'Me' : r.createdBy) + '</td>' : '') +
-            '<td><button class="secondary" data-open="' + esc(r.dealId) + '">Open</button> <button class="secondary" data-clone="' + esc(r.dealId) + '">Clone</button></td></tr>';
-        }).join('') + '</table>';
-      qa('[data-open]').forEach(function (b) { b.onclick = function () { run('apiGetDeal', b.dataset.open).then(function (r) { fill(r.deal); show('deal'); go(4); loadDocs(r.deal.dealId); }); }; });
-      qa('[data-clone]').forEach(function (b) { b.onclick = function () { run('apiCloneDeal', b.dataset.clone).then(function (r) { fill(r.deal); show('deal'); go(1); toast('Cloned as ' + r.deal.dealId); }); }; });
+    run('apiListDeals').then(function (rows) { ROWS = rows; renderList(); });
+  }
+  function renderList() {
+    var t = $('fText').value.toLowerCase(), st = $('fStatus').value;
+    var rows = ROWS.filter(function (r) { return (!st || r.status === st) && (!t || (r.clientName + ' ' + r.dealId).toLowerCase().indexOf(t) !== -1); });
+    if (!rows.length) { $('dealList').innerHTML = '<p class="muted">No deals' + (ROWS.length ? ' match the filter' : ' yet') + '.</p>'; return; }
+    var mine = BOOT.user.email, showOwner = BOOT.user.role !== 'Rep';
+    $('dealList').innerHTML = '<table><tr><th>Client</th><th>Country</th><th>Package</th><th class="num">First-year value</th><th>Status</th><th>Approval</th><th>Updated</th>' +
+      (showOwner ? '<th>Owner</th>' : '') + '<th></th></tr>' + rows.map(function (r) {
+        var pipe = ['Generated', 'Sent', 'Won', 'Lost'].indexOf(r.status) !== -1 ? ['Sent', 'Won', 'Lost'].filter(function (x) { return x !== r.status; }).map(function (x) {
+          return '<button class="secondary" data-status="' + x + '" data-id="' + esc(r.dealId) + '">' + x + '</button>'; }).join(' ') : '';
+        return '<tr><td>' + esc(r.clientName) + '<br><span class="muted">' + esc(r.dealId) + ' · v' + r.version + '</span></td><td>' + esc(r.country) + '</td><td>' + esc(r.orderPackage || r.packages) + '</td>' +
+          '<td class="num">' + (r.value ? money(r.currency, r.value) : '') + '</td><td>' + esc(r.status) + '</td><td>' +
+          (r.needsApproval ? '<span class="badge ' + (r.approvalStatus === 'Approved' ? 'ok' : r.approvalStatus === 'Rejected' ? 'err' : 'warn') + '">' + esc(r.approvalStatus) + '</span>' : '<span class="badge ok">Not required</span>') +
+          '</td><td>' + esc(String(r.updatedAt).slice(0, 10)) + '</td>' + (showOwner ? '<td>' + esc(r.createdBy === mine ? 'Me' : r.createdBy) + '</td>' : '') +
+          '<td><button class="secondary" data-open="' + esc(r.dealId) + '">Open</button> <button class="secondary" data-clone="' + esc(r.dealId) + '">Clone</button>' + (pipe ? '<br><span class="muted">Mark:</span> ' + pipe : '') + '</td></tr>';
+      }).join('') + '</table>';
+    qa('[data-open]').forEach(function (b) { b.onclick = function () { run('apiGetDeal', b.dataset.open).then(function (r) { fill(r.deal); show('deal'); go(4); loadDocs(r.deal.dealId); }); }; });
+    qa('[data-clone]').forEach(function (b) { b.onclick = function () { run('apiCloneDeal', b.dataset.clone).then(function (r) { fill(r.deal); show('deal'); go(1); toast('Cloned as ' + r.deal.dealId); }); }; });
+    qa('[data-status]').forEach(function (b) { b.onclick = function () { run('apiSetDealStatus', b.dataset.id, b.dataset.status).then(function () { toast('Marked ' + b.dataset.status); loadList(); }); }; });
+  }
+
+  // ---------- dashboard ----------
+  function loadDash() {
+    $('dash').innerHTML = 'Loading…';
+    $('dashScope').textContent = BOOT.user.role === 'Superadmin' ? '(all deals)' : '(you and your team)';
+    run('apiDashboard').then(function (r) {
+      var s = r.stats, usd = function (v) { return money('USD', Math.round(v)); };
+      function tile(label, val) { return '<div class="card" style="margin:0"><div class="muted" style="font-size:12px">' + label + '</div><div style="font-size:22px;font-weight:bold">' + val + '</div></div>'; }
+      function breakdown(title, map) {
+        var keys = Object.keys(map).sort(function (a, b) { return map[b].valueUsd - map[a].valueUsd; });
+        return '<div><h3>' + title + '</h3><table><tr><th>' + title.replace('By ', '') + '</th><th class="num">Deals</th><th class="num">Value (USD)</th></tr>' +
+          keys.map(function (k) { return '<tr><td>' + esc(k) + '</td><td class="num">' + map[k].count + '</td><td class="num">' + usd(map[k].valueUsd) + '</td></tr>'; }).join('') + '</table></div>';
+      }
+      $('dash').innerHTML = '<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr))">' + tile('Deals', s.deals) + tile('Open pipeline (first-year)', usd(s.pipelineUsd)) +
+        tile('Won (first-year)', usd(s.wonUsd)) + tile('Pending approvals', s.pendingApprovals) + tile('Avg. discount vs list', pct(s.avgDiscountPct)) + '</div>' +
+        '<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">' + breakdown('By Status', s.byStatus) + breakdown('By Rep', s.byRep) + breakdown('By Country', s.byCountry) + breakdown('By Package', s.byPackage) + '</div>' +
+        '<p class="muted">Values are the first-year total of the Order Form package, converted to USD at the Master Sheet rates.</p>';
+    });
+  }
+
+  // ---------- approvals (Superadmin) ----------
+  function refreshApprCount() {
+    run('apiListApprovals').then(function (list) { var b = $('apprCount'); b.textContent = list.length; b.classList.toggle('hidden', !list.length); });
+  }
+  function loadApprovals() {
+    $('appr').innerHTML = 'Loading…';
+    run('apiListApprovals').then(function (list) {
+      $('apprCount').textContent = list.length; $('apprCount').classList.toggle('hidden', !list.length);
+      if (!list.length) { $('appr').innerHTML = '<p class="muted">Nothing waiting for approval.</p>'; return; }
+      $('appr').innerHTML = list.map(function (a) {
+        var c = a.currency;
+        return '<div class="card"><div class="bar"><b>' + esc(a.client) + '</b><span class="muted">' + esc(a.country) + ' · ' + esc(a.dealId) + ' v' + a.version + ' · by ' + esc(a.requestedBy) + ' · ' + esc(String(a.requestedAt).slice(0, 10)) + '</span></div>' +
+          '<ul class="tight">' + a.reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' +
+          (a.note ? '<p><b>Rep note:</b> ' + esc(a.note) + '</p>' : '') +
+          '<table><tr><th>Package</th><th class="num">List</th><th class="num">Standard</th><th class="num">Proposed</th><th class="num">Special disc.</th><th class="num">Total disc. vs list</th><th class="num">First year</th></tr>' +
+          a.packages.map(function (p) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + money(c, p.list) + '</td><td class="num">' + money(c, p.standard) + '</td><td class="num"><b>' + money(c, p.final) + '</b></td><td class="num">' + pct(p.specialDiscountPct) + '</td><td class="num">' + pct(p.effectiveDiscountPct) + '</td><td class="num">' + money(c, p.firstYear) + '</td></tr>'; }).join('') + '</table>' +
+          (a.comms.length ? '<p class="muted">Messaging: ' + a.comms.map(function (m) { return esc(Number(m.messages).toLocaleString('en-US')) + '/month ' + money(c, m.specialPrice) + ' (list ' + money(c, m.listPrice) + ', floor ' + money(c, m.floorPrice) + ')'; }).join('; ') + '</p>' : '') +
+          (a.documents.length ? '<p>Draft documents: ' + a.documents.map(function (d) { return '<a target="_blank" href="' + esc(d.docUrl) + '">' + esc(d.label) + '</a>'; }).join(' · ') + '</p>' : '') +
+          '<div class="grid"><div class="wide"><label>Comment (required to reject)</label><textarea data-comment="' + esc(a.approvalId) + '" style="min-height:50px"></textarea></div></div>' +
+          '<div class="bar" style="margin-top:8px;justify-content:flex-end"><button class="secondary" data-decide="Rejected" data-aid="' + esc(a.approvalId) + '">Reject</button> <button data-decide="Approved" data-aid="' + esc(a.approvalId) + '">Approve &amp; generate final documents</button></div></div>';
+      }).join('');
+      qa('[data-decide]').forEach(function (b) {
+        b.onclick = function () {
+          var comment = document.querySelector('[data-comment="' + b.dataset.aid + '"]').value;
+          b.disabled = true; b.textContent = b.dataset.decide === 'Approved' ? 'Approving and generating…' : 'Rejecting…';
+          run('apiDecideApproval', b.dataset.aid, b.dataset.decide, comment).then(function (r) {
+            toast(r.decision + (r.generation && r.generation.error ? ' – generation failed: ' + r.generation.error : r.decision === 'Approved' ? ' – final documents generated' : ''));
+            loadApprovals();
+          }).catch(function () { b.disabled = false; b.textContent = b.dataset.decide; });
+        };
+      });
     });
   }
 

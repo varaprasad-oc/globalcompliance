@@ -1,7 +1,7 @@
 /* Builds dist/ for copy-paste deployment (no clasp): Code.gs (all server files), Index.html, appsscript.json. Usage: npm run bundle */
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
-const order = ['Config.js', 'Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js', 'DealLogic.js', 'AiLogic.js', 'GenLogic.js', 'MasterData.js', 'Auth.js', 'Numbering.js', 'Deals.js', 'DocEngine.js', 'Ai.js', 'Generate.js', 'SetupMasterSheet.js', 'EngineSelfTest.js', 'EnvSetup.js', 'Code.js'];
+const order = ['Config.js', 'Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js', 'DealLogic.js', 'AiLogic.js', 'GenLogic.js', 'MasterData.js', 'Auth.js', 'Numbering.js', 'Deals.js', 'DocEngine.js', 'Ai.js', 'Generate.js', 'Approvals.js', 'SetupMasterSheet.js', 'EngineSelfTest.js', 'EnvSetup.js', 'Code.js'];
 const all = fs.readdirSync(path.join(root, 'src/server')).filter((f) => f.endsWith('.js'));
 const missing = all.filter((f) => !order.includes(f));
 if (missing.length) throw new Error('Add to bundle order: ' + missing.join(', '));

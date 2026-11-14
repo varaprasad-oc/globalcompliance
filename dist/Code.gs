@@ -980,14 +980,60 @@ function dealRecord(deal, evaluation, userEmail, nowIso, existing) {
   };
 }
 
-/** Summary row for deal lists (no heavy JSON). */
+/** Summary row for deal lists and dashboards (value = first-year total of the Order Form package). */
 function dealSummary(rec) {
+  var q = null, d = {};
+  try { q = rec.quote_json ? JSON.parse(rec.quote_json) : null; } catch (e) { q = null; }
+  try { d = rec.input_json ? JSON.parse(rec.input_json) : {}; } catch (e) { d = {}; }
+  var op = null;
+  if (q && q.packages) {
+    var name = (d.commercial || {}).orderPackage || (q.packages[0] || {}).package;
+    op = q.packages.filter(function (p) { return p.package === name; })[0] || q.packages[0];
+  }
+  var value = op ? op.firstYearTotal + (q.optionalOneTimeTotal || 0) : 0;
   return {
     dealId: rec.deal_id, clientName: rec.client_name, country: rec.country, packages: rec.packages,
     currency: rec.currency, status: rec.status, needsApproval: isTrue(rec.needs_approval), approvalStatus: rec.approval_status,
     createdBy: rec.created_by, updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
-    version: Number(rec.version || 1)
+    version: Number(rec.version || 1),
+    orderPackage: op ? op.package : '',
+    value: value,
+    valueUsd: q && q.fxRate ? Math.round(value / q.fxRate) : 0,
+    discountPct: op ? op.effectiveDiscountPct : 0,
+    specialDiscountPct: op ? op.specialDiscountPct : 0
   };
+}
+
+/** Owner may move a generated deal along the sales pipeline. */
+var PIPELINE_STATUSES = ['Sent', 'Won', 'Lost'];
+function canSetStatus(currentStatus, newStatus) {
+  return PIPELINE_STATUSES.indexOf(newStatus) !== -1 && ['Generated', 'Sent', 'Won', 'Lost'].indexOf(currentStatus) !== -1;
+}
+
+/** Dashboard numbers from deal summaries (amounts in USD for comparability). */
+function dashboardStats(summaries, users) {
+  var nameOf = {};
+  (users || []).forEach(function (u) { nameOf[String(u.email).toLowerCase()] = u.name; });
+  var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, byStatus: {}, byRep: {}, byCountry: {}, byPackage: {} };
+  var discSum = 0, discN = 0;
+  function add(map, key, sm) {
+    key = key || '—';
+    map[key] = map[key] || { count: 0, valueUsd: 0 };
+    map[key].count++; map[key].valueUsd += sm.valueUsd || 0;
+  }
+  summaries.forEach(function (sm) {
+    var open = ['Lost'].indexOf(sm.status) === -1;
+    if (open && sm.status !== 'Won') s.pipelineUsd += sm.valueUsd || 0;
+    if (sm.status === 'Won') s.wonUsd += sm.valueUsd || 0;
+    if (sm.approvalStatus === 'Pending') s.pendingApprovals++;
+    if (sm.orderPackage) { discSum += sm.discountPct || 0; discN++; }
+    add(s.byStatus, sm.status, sm);
+    add(s.byRep, nameOf[String(sm.createdBy).toLowerCase()] || sm.createdBy, sm);
+    add(s.byCountry, sm.country, sm);
+    add(s.byPackage, sm.orderPackage, sm);
+  });
+  s.avgDiscountPct = discN ? Math.round(discSum / discN * 1000) / 1000 : 0;
+  return s;
 }
 
 /** Copy of a deal as a new draft (new id, version 1, status Draft). */
@@ -1320,6 +1366,7 @@ function apiSaveDeal(deal) {
       deal.version = Number(existing.version || 1) + 1;
       deal.status = DEAL_STATUS.DRAFT;
     }
+    if (existing && existing.status === DEAL_STATUS.REJECTED) deal.status = DEAL_STATUS.DRAFT;
     if (!deal.dealId) { deal.dealId = newId_('D'); deal.version = 1; deal.status = DEAL_STATUS.DRAFT; }
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
     var ev = evaluateDeal(m, deal);
@@ -1347,6 +1394,7 @@ function apiGetDeal(dealId) {
   if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
   var deal = JSON.parse(rec.input_json);
   deal.status = rec.status;
+  audit_('DEAL_VIEWED', {}, dealId);
   return { deal: deal, evaluation: evaluateDeal(getMaster(), deal), summary: dealSummary(rec) };
 }
 
@@ -1761,9 +1809,15 @@ function aiHealthCheck() {
 
 function apiGenerateDocs(dealId) {
   var user = requireUser_();
+  var rec = findDeal_(dealId);
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
+  return generateForDeal_(dealId, user);
+}
+
+/** Internal: generate for a deal (caller has already checked access). Used by Generate and by Approve. */
+function generateForDeal_(dealId, user) {
   var m = getMaster(true);
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
   var deal = JSON.parse(rec.input_json);
   applyCountryDefaults(m, deal);
   var ev = evaluateDeal(m, deal);
@@ -1804,6 +1858,7 @@ function apiGenerateDocs(dealId) {
     appendRecord_('Approvals', { approval_id: newId_('A'), deal_id: dealId, version: deal.version, requested_by: user.email, requested_at: new Date(),
       reasons: ev.approvalReasons.join(' | '), decision: '', decided_by: '', decided_at: '', comment: '' });
     approval = 'Pending';
+    notifyApprovers_(deal, ev, user);
   }
   var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), rec);
   newRec.approval_status = ev.needsApproval ? approval : 'Not required';
@@ -1842,6 +1897,126 @@ function apiDealDocuments(dealId) {
       pdfUrl: d.pdf_file_id ? 'https://drive.google.com/file/d/' + d.pdf_file_id + '/view' : '',
       createdAt: d.created_at instanceof Date ? d.created_at.toISOString() : String(d.created_at) };
   }).sort(function (a, b) { return b.version - a.version; });
+}
+
+/** Email every Superadmin that a deal is waiting for approval. */
+function notifyApprovers_(deal, ev, user) {
+  var to = (getMaster().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
+  if (!to.length) return;
+  var url = '';
+  try { url = ScriptApp.getService().getUrl(); } catch (e) { /* not deployed */ }
+  var body = 'Approval requested by ' + user.name + ' (' + user.email + ')\n\n' +
+    'Client: ' + (deal.client || {}).legalName + ' (' + (deal.client || {}).country + ')\nDeal: ' + deal.dealId + ' v' + deal.version + '\n\nReasons:\n- ' +
+    ev.approvalReasons.join('\n- ') + ((deal.approvalNote) ? '\n\nRep note: ' + deal.approvalNote : '') + '\n\nReview in the app (Approvals): ' + url;
+  try { MailApp.sendEmail({ to: to.join(','), subject: 'Approval needed – ' + ((deal.client || {}).shortName || (deal.client || {}).legalName), body: body, name: CONFIG.APP_NAME }); }
+  catch (e) { console.warn('approval email failed: ' + e); }
+}
+
+// ===================== Approvals.js =====================
+/**
+ * Sprint 8: approvals queue (Superadmin), pipeline status, dashboards, sharing re-sync.
+ */
+
+function apiListApprovals() {
+  requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  var users = getMaster().Users;
+  var deals = {};
+  readRecords_('Deals').forEach(function (r) { deals[r.deal_id] = r; });
+  return readRecords_('Approvals').filter(function (a) { return !a.decision; }).map(function (a) {
+    var rec = deals[a.deal_id];
+    if (!rec) return null;
+    var d = JSON.parse(rec.input_json), q = rec.quote_json ? JSON.parse(rec.quote_json) : null;
+    var owner = (users || []).filter(function (u) { return String(u.email).toLowerCase() === String(rec.created_by).toLowerCase(); })[0] || {};
+    return {
+      approvalId: a.approval_id, dealId: a.deal_id, version: Number(a.version), requestedAt: a.requested_at instanceof Date ? a.requested_at.toISOString() : String(a.requested_at),
+      requestedBy: owner.name || rec.created_by, reasons: String(a.reasons || '').split(' | '), note: d.approvalNote || '',
+      client: d.client.legalName, country: d.client.country, currency: rec.currency, summary: dealSummary(rec),
+      packages: q ? q.packages.map(function (p) { return { name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite,
+        specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal }; }) : [],
+      comms: q ? (q.comms || []).filter(function (c) { return c.specialPrice !== null; }) : [],
+      documents: apiDealDocuments(a.deal_id).filter(function (x) { return Number(x.version) === Number(a.version); })
+    };
+  }).filter(Boolean);
+}
+
+/** Approve or reject. Approve → final documents are generated automatically. */
+function apiDecideApproval(approvalId, decision, comment) {
+  var user = requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  if (['Approved', 'Rejected'].indexOf(decision) === -1) throw new Error('Decision must be Approved or Rejected');
+  if (decision === 'Rejected' && !String(comment || '').trim()) throw new Error('Please add a comment explaining the rejection.');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  var a, rec, deal;
+  try {
+    a = readRecords_('Approvals').filter(function (x) { return x.approval_id === approvalId; })[0];
+    if (!a || a.decision) throw new Error('Approval not found or already decided.');
+    a.decision = decision; a.decided_by = user.email; a.decided_at = new Date(); a.comment = comment || '';
+    writeRecord_('Approvals', a, a._row);
+    rec = findDeal_(a.deal_id);
+    deal = JSON.parse(rec.input_json);
+    rec.approval_status = decision;
+    rec.status = decision === 'Approved' ? DEAL_STATUS.APPROVED : DEAL_STATUS.REJECTED;
+    deal.status = rec.status;
+    rec.input_json = JSON.stringify(deal);
+    rec.updated_at = new Date().toISOString();
+    writeRecord_('Deals', rec, rec._row);
+    audit_('APPROVAL_' + decision.toUpperCase(), { approvalId: approvalId, comment: comment || '' }, a.deal_id);
+  } finally {
+    lock.releaseLock();
+  }
+
+  var gen = null;
+  if (decision === 'Approved') {
+    try { gen = generateForDeal_(a.deal_id, user); } catch (e) { gen = { error: String(e.message || e) }; }
+  }
+  try {
+    var c = deal.client || {};
+    MailApp.sendEmail({
+      to: rec.created_by, name: CONFIG.APP_NAME,
+      subject: (decision === 'Approved' ? 'Approved – ' : 'Rejected – ') + (c.shortName || c.legalName),
+      body: 'Your pricing for ' + c.legalName + ' (deal ' + a.deal_id + ') was ' + decision.toLowerCase() + ' by ' + user.name + '.' +
+        (comment ? '\n\nComment: ' + comment : '') +
+        (decision === 'Approved' ? (gen && !gen.error ? '\n\nFinal documents have been generated and emailed to you separately.' : '\n\nPlease open the deal and click Generate to create the final documents.') :
+          '\n\nPlease revise the deal and generate again to request a new approval.')
+    });
+  } catch (e) { console.warn('decision email failed: ' + e); }
+  return { decision: decision, generation: gen };
+}
+
+function apiSetDealStatus(dealId, status) {
+  var user = requireUser_();
+  var rec = findDeal_(dealId);
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('No access.');
+  if (!canSetStatus(rec.status, status)) throw new Error('A deal can be marked ' + status + ' only after its documents are generated.');
+  var deal = JSON.parse(rec.input_json);
+  deal.status = status; rec.status = status; rec.input_json = JSON.stringify(deal); rec.updated_at = new Date().toISOString();
+  writeRecord_('Deals', rec, rec._row);
+  audit_('STATUS_' + status.toUpperCase(), {}, dealId);
+  return dealSummary(rec);
+}
+
+/** Manager: own + team. Superadmin: everyone. */
+function apiDashboard() {
+  var user = requireUser_([CONFIG.ROLES.MANAGER, CONFIG.ROLES.SUPERADMIN]);
+  var users = getMaster().Users;
+  var rows = readRecords_('Deals').filter(function (r) { return canAccessDeal(user, r.created_by, users); }).map(dealSummary);
+  return { stats: dashboardStats(rows, users), deals: rows };
+}
+
+/** Superadmin tool: re-apply file sharing (owner + current manager) on every final/draft document, e.g. after a team change. */
+function apiResyncSharing() {
+  requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  var users = getMaster().Users, deals = {}, n = 0;
+  readRecords_('Deals').forEach(function (r) { deals[r.deal_id] = r; });
+  readRecords_('Documents').forEach(function (d) {
+    var rec = deals[d.deal_id];
+    if (!rec || d.status === 'Superseded') return;
+    var owner = (users || []).filter(function (u) { return String(u.email).toLowerCase() === String(rec.created_by).toLowerCase(); })[0] || {};
+    shareFiles_([d.doc_file_id, d.pdf_file_id].filter(String), [rec.created_by, owner.manager_email].filter(Boolean));
+    n++;
+  });
+  audit_('SHARING_RESYNC', { documents: n });
+  return n;
 }
 
 // ===================== SetupMasterSheet.js =====================

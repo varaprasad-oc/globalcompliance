@@ -92,6 +92,7 @@ function apiSaveDeal(deal) {
       deal.version = Number(existing.version || 1) + 1;
       deal.status = DEAL_STATUS.DRAFT;
     }
+    if (existing && existing.status === DEAL_STATUS.REJECTED) deal.status = DEAL_STATUS.DRAFT;
     if (!deal.dealId) { deal.dealId = newId_('D'); deal.version = 1; deal.status = DEAL_STATUS.DRAFT; }
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
     var ev = evaluateDeal(m, deal);
@@ -119,6 +120,7 @@ function apiGetDeal(dealId) {
   if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
   var deal = JSON.parse(rec.input_json);
   deal.status = rec.status;
+  audit_('DEAL_VIEWED', {}, dealId);
   return { deal: deal, evaluation: evaluateDeal(getMaster(), deal), summary: dealSummary(rec) };
 }
 

@@ -5,8 +5,8 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = vm.createContext({ console });
 ['Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js', 'DealLogic.js', 'AiLogic.js', 'GenLogic.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/server', f), 'utf8'), ctx));
 const M = ctx.masterFromSeed(ctx.SEED);
-const USER = { ok: true, email: 'varaprasad@optculture.com', name: 'Varaprasad SN', role: 'Manager' };
-const store = { deals: {}, clients: [] }; let seq = 0;
+let USER = { ok: true, email: 'varaprasad@optculture.com', name: 'Varaprasad SN', role: 'Manager' };
+const store = { deals: {}, clients: [], approvals: [] }; let seq = 0;
 const api = {
   apiBootstrap: () => ({ user: USER, lists: { markets: M.Markets.map((r) => r.market), currencies: M.Currencies.map((r) => r.code), packages: M.Packages.map((r) => r.package), countries: M.Countries,
     addOns: M.PriceItems.filter((r) => r.category === 'ADDON').map((r) => ({ id: r.item_id, label: r.label, packages: r.packages })),
@@ -23,9 +23,19 @@ const api = {
   apiDraftNarrative: (d, o) => { ctx.buildNarrativePrompt(M, d, o); return ctx.sanitizeNarrative(JSON.stringify({ executiveSummary: 'FRG is a leading franchisee.\n\nOne program for every brand. It costs USD 70.', journeys: ['Win-back: lapsed shoppers get bonus points.'], multiBrandIntro: 'Shared wallet.' }), M); },
   apiGenerateDocs: (id) => { const rec = store.deals[id]; const d = JSON.parse(rec.input_json); const ev = ctx.evaluateDeal(M, d); const plan = ctx.planGeneration(d, ev, rec.approval_status);
     if (!plan.ok) throw new Error(plan.reason); d.docNos = { PROPOSAL: 'OC-P-2026-0001', ORDER_FORM: 'OC-Q-2026-0001', TOS: 'OC-TOS-2026-0001', DPA: 'OC-DPA-2026-0001' }; d.status = plan.status;
-    store.deals[id] = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), rec);
+    const nr = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), rec);
+    if (plan.mode === 'DRAFT' && rec.approval_status !== 'Pending') { nr.approval_status = 'Pending'; store.approvals.push({ approvalId: 'A-1', dealId: id, reasons: ev.approvalReasons }); }
+    store.deals[id] = nr;
     return { mode: plan.mode, message: plan.reason, deal: d, results: plan.docTypes.map((t) => ({ type: t, label: t, docNo: d.docNos[t], docUrl: 'https://docs.google.com/x', pdfUrl: plan.mode === 'FINAL' ? 'https://drive.google.com/y' : '', warnings: [] })) }; },
-  apiDealDocuments: () => []
+  apiDealDocuments: () => [],
+  apiListApprovals: () => store.approvals.filter((a) => !a.decision).map((a) => { const r = store.deals[a.dealId]; const q = JSON.parse(r.quote_json); const d = JSON.parse(r.input_json);
+    return { approvalId: a.approvalId, dealId: a.dealId, version: 1, requestedAt: '2026-11-14', requestedBy: 'Varaprasad SN', reasons: a.reasons, note: d.approvalNote || '', client: d.client.legalName,
+      country: d.client.country, currency: r.currency, summary: ctx.dealSummary(r), comms: [], documents: [],
+      packages: q.packages.map((p) => ({ name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite, specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal })) }; }),
+  apiDecideApproval: (aid, dec, comment) => { const a = store.approvals.find((x) => x.approvalId === aid); a.decision = dec; const r = store.deals[a.dealId]; r.approval_status = dec; r.status = dec === 'Approved' ? 'Approved' : 'Rejected';
+    const gen = dec === 'Approved' ? api.apiGenerateDocs(a.dealId) : null; return { decision: dec, generation: gen }; },
+  apiDashboard: () => { const rows = Object.values(store.deals).map(ctx.dealSummary); return { stats: ctx.dashboardStats(rows, [{ email: 'varaprasad@optculture.com', name: 'Varaprasad SN' }]), deals: rows }; },
+  apiSetDealStatus: (id, st) => { const r = store.deals[id]; if (!ctx.canSetStatus(r.status, st)) throw new Error('not allowed'); r.status = st; return ctx.dealSummary(r); }
 };
 (async () => {
   const out = process.argv[2] || '.';
@@ -87,6 +97,27 @@ const api = {
   check('Draft documents listed with numbers', gr.includes('Draft documents created') && gr.includes('OC-DPA-2026-0001'));
   check('Status badge shows Pending approval', (await p.textContent('#dealStatus')).includes('Pending approval'));
   await p.screenshot({ path: path.join(out, 'sprint7-generated.png'), fullPage: true });
+  // Sprint 8: Amith approves, dashboard, pipeline status
+  USER = { ok: true, email: 'amith.lulla@optculture.com', name: 'Amith Lulla', role: 'Superadmin' };
+  await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForSelector('#view-deal:not(.hidden)'); await p.waitForTimeout(500);
+  check('Approvals menu shows 1 pending', (await p.textContent('#apprCount')).trim() === '1');
+  await p.click('nav a[data-view="appr"]'); await p.waitForTimeout(400);
+  const ap = await p.textContent('#appr');
+  check('Approval card shows proposed USD 70 and special discount', ap.includes('USD 70') && ap.includes('6.7%'));
+  await p.screenshot({ path: path.join(out, 'sprint8-approvals.png'), fullPage: true });
+  await p.click('[data-decide="Approved"]'); await p.waitForTimeout(700);
+  check('After approval the queue is empty', (await p.textContent('#appr')).includes('Nothing waiting'));
+  check('Deal is now final (Generated)', store.deals['D-TEST-1'].status === 'Generated');
+  await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
+  await p.click('[data-status="Sent"][data-id="D-TEST-1"]'); await p.waitForTimeout(500);
+  check('Pipeline status Sent saved', store.deals['D-TEST-1'].status === 'Sent');
+  await p.fill('#fText', 'nomatch'); await p.waitForTimeout(100);
+  check('Search filter works', (await p.textContent('#dealList')).includes('match the filter'));
+  await p.fill('#fText', '');
+  await p.click('nav a[data-view="dash"]'); await p.waitForTimeout(500);
+  const dash = await p.textContent('#dash');
+  check('Dashboard shows tiles and breakdowns', dash.includes('Open pipeline') && dash.includes('By Rep') && dash.includes('Varaprasad SN'));
+  await p.screenshot({ path: path.join(out, 'sprint8-dashboard.png'), fullPage: true });
   check('No page errors', errors.length === 0); if (errors.length) console.log(errors);
   await b.close();
 })();

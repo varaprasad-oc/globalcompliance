@@ -107,14 +107,60 @@ function dealRecord(deal, evaluation, userEmail, nowIso, existing) {
   };
 }
 
-/** Summary row for deal lists (no heavy JSON). */
+/** Summary row for deal lists and dashboards (value = first-year total of the Order Form package). */
 function dealSummary(rec) {
+  var q = null, d = {};
+  try { q = rec.quote_json ? JSON.parse(rec.quote_json) : null; } catch (e) { q = null; }
+  try { d = rec.input_json ? JSON.parse(rec.input_json) : {}; } catch (e) { d = {}; }
+  var op = null;
+  if (q && q.packages) {
+    var name = (d.commercial || {}).orderPackage || (q.packages[0] || {}).package;
+    op = q.packages.filter(function (p) { return p.package === name; })[0] || q.packages[0];
+  }
+  var value = op ? op.firstYearTotal + (q.optionalOneTimeTotal || 0) : 0;
   return {
     dealId: rec.deal_id, clientName: rec.client_name, country: rec.country, packages: rec.packages,
     currency: rec.currency, status: rec.status, needsApproval: isTrue(rec.needs_approval), approvalStatus: rec.approval_status,
     createdBy: rec.created_by, updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
-    version: Number(rec.version || 1)
+    version: Number(rec.version || 1),
+    orderPackage: op ? op.package : '',
+    value: value,
+    valueUsd: q && q.fxRate ? Math.round(value / q.fxRate) : 0,
+    discountPct: op ? op.effectiveDiscountPct : 0,
+    specialDiscountPct: op ? op.specialDiscountPct : 0
   };
+}
+
+/** Owner may move a generated deal along the sales pipeline. */
+var PIPELINE_STATUSES = ['Sent', 'Won', 'Lost'];
+function canSetStatus(currentStatus, newStatus) {
+  return PIPELINE_STATUSES.indexOf(newStatus) !== -1 && ['Generated', 'Sent', 'Won', 'Lost'].indexOf(currentStatus) !== -1;
+}
+
+/** Dashboard numbers from deal summaries (amounts in USD for comparability). */
+function dashboardStats(summaries, users) {
+  var nameOf = {};
+  (users || []).forEach(function (u) { nameOf[String(u.email).toLowerCase()] = u.name; });
+  var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, byStatus: {}, byRep: {}, byCountry: {}, byPackage: {} };
+  var discSum = 0, discN = 0;
+  function add(map, key, sm) {
+    key = key || '—';
+    map[key] = map[key] || { count: 0, valueUsd: 0 };
+    map[key].count++; map[key].valueUsd += sm.valueUsd || 0;
+  }
+  summaries.forEach(function (sm) {
+    var open = ['Lost'].indexOf(sm.status) === -1;
+    if (open && sm.status !== 'Won') s.pipelineUsd += sm.valueUsd || 0;
+    if (sm.status === 'Won') s.wonUsd += sm.valueUsd || 0;
+    if (sm.approvalStatus === 'Pending') s.pendingApprovals++;
+    if (sm.orderPackage) { discSum += sm.discountPct || 0; discN++; }
+    add(s.byStatus, sm.status, sm);
+    add(s.byRep, nameOf[String(sm.createdBy).toLowerCase()] || sm.createdBy, sm);
+    add(s.byCountry, sm.country, sm);
+    add(s.byPackage, sm.orderPackage, sm);
+  });
+  s.avgDiscountPct = discN ? Math.round(discSum / discN * 1000) / 1000 : 0;
+  return s;
 }
 
 /** Copy of a deal as a new draft (new id, version 1, status Draft). */

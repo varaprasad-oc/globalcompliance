@@ -6,9 +6,15 @@
 
 function apiGenerateDocs(dealId) {
   var user = requireUser_();
+  var rec = findDeal_(dealId);
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
+  return generateForDeal_(dealId, user);
+}
+
+/** Internal: generate for a deal (caller has already checked access). Used by Generate and by Approve. */
+function generateForDeal_(dealId, user) {
   var m = getMaster(true);
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
   var deal = JSON.parse(rec.input_json);
   applyCountryDefaults(m, deal);
   var ev = evaluateDeal(m, deal);
@@ -49,6 +55,7 @@ function apiGenerateDocs(dealId) {
     appendRecord_('Approvals', { approval_id: newId_('A'), deal_id: dealId, version: deal.version, requested_by: user.email, requested_at: new Date(),
       reasons: ev.approvalReasons.join(' | '), decision: '', decided_by: '', decided_at: '', comment: '' });
     approval = 'Pending';
+    notifyApprovers_(deal, ev, user);
   }
   var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), rec);
   newRec.approval_status = ev.needsApproval ? approval : 'Not required';
@@ -87,4 +94,17 @@ function apiDealDocuments(dealId) {
       pdfUrl: d.pdf_file_id ? 'https://drive.google.com/file/d/' + d.pdf_file_id + '/view' : '',
       createdAt: d.created_at instanceof Date ? d.created_at.toISOString() : String(d.created_at) };
   }).sort(function (a, b) { return b.version - a.version; });
+}
+
+/** Email every Superadmin that a deal is waiting for approval. */
+function notifyApprovers_(deal, ev, user) {
+  var to = (getMaster().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
+  if (!to.length) return;
+  var url = '';
+  try { url = ScriptApp.getService().getUrl(); } catch (e) { /* not deployed */ }
+  var body = 'Approval requested by ' + user.name + ' (' + user.email + ')\n\n' +
+    'Client: ' + (deal.client || {}).legalName + ' (' + (deal.client || {}).country + ')\nDeal: ' + deal.dealId + ' v' + deal.version + '\n\nReasons:\n- ' +
+    ev.approvalReasons.join('\n- ') + ((deal.approvalNote) ? '\n\nRep note: ' + deal.approvalNote : '') + '\n\nReview in the app (Approvals): ' + url;
+  try { MailApp.sendEmail({ to: to.join(','), subject: 'Approval needed – ' + ((deal.client || {}).shortName || (deal.client || {}).legalName), body: body, name: CONFIG.APP_NAME }); }
+  catch (e) { console.warn('approval email failed: ' + e); }
 }

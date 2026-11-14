@@ -12,7 +12,7 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 | 5 | Templates + legal | ✅ build · ⏳ G4 | All 4 templates generate correctly live (8/8 sample docs, 0 warnings, reviewed). Logo + brand colours. Remaining: legal review of ToS/DPA/SLA and OC inputs (entity signatories, DPA tech details) → Gate G4. Deploy v5 for clean party lines |
 | 6 | Deal entry UI | ✅ build · ⏳ G5 | 4-step wizard, live summary, review with approval/missing checks, save/open/clone drafts, My Deals with role filtering (32 unit tests + 10 browser checks). Needs v6 deploy + rep walkthrough → Gate G5 |
 | 7 | AI + generation | ✅ build · ⏳ live | Gemini drafting via Vertex AI (guardrails: no prices, JSON, length), one-click generation of selected docs, stable doc numbers, DRAFT+approval request vs FINAL+PDF, versions archived, email to owner (40 unit tests + 16 browser checks). Needs Cloud project link + v7 deploy |
-| 8 | Roles, dashboards, approvals | ☐ | |
+| 8 | Roles, dashboards, approvals | ✅ build · ⏳ live | Approvals queue (approve → final docs auto-generated; reject needs comment; emails both ways), Amith notified on request, Dashboard (manager: team; superadmin: all), My Deals search/filter + Sent/Won/Lost, audit of views/decisions, sharing re-sync tool (43 unit tests + 23 browser checks). Needs v7+v8 deploy |
 | 9 | Arabic, admin, polish | ☐ | |
 | 10 | UAT & go-live | ☐ | |
 
@@ -31,3 +31,4 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-14: v4 sample run: 8/8 documents OK incl. both DPAs (4D Egypt w/ partner sub-processor; 4B UAE). Logo inline, purple/white headers verified in document JSON. Fixed blank partner reg/address text → ToS/DPA v1.2 (needs v5 deploy).
 - 2026-11-14: Sprint 6 built: DealLogic.js (pure, tested), Deals.js (Sheet storage + API with server-side access checks), new UI (wizard, My Deals, calculator). Browser harness passes 10/10.
 - 2026-11-14: Sprint 7 built: AiLogic.js/GenLogic.js (pure, tested), Ai.js (Vertex), Generate.js (numbering, Documents/Approvals records, archive, email), UI AI + Generate. Awaiting GCP project for live AI.
+- 2026-11-14: Sprint 8 built: Approvals.js, dashboard stats (pure), generation refactor (generateForDeal_), approver notification, UI Dashboard/Approvals/filters/status. Browser harness 23/23.
