@@ -98,7 +98,9 @@ function dealRecord(deal, evaluation, userEmail, nowIso, existing) {
     input_json: JSON.stringify(deal),
     quote_json: evaluation.quote ? JSON.stringify(evaluation.quote) : '',
     needs_approval: !!evaluation.needsApproval,
-    approval_status: evaluation.needsApproval ? (existing && existing.approval_status === 'Approved' && existing.quote_json === JSON.stringify(evaluation.quote) ? 'Approved' : 'Required') : 'Not required',
+    approval_status: !evaluation.needsApproval ? 'Not required'
+      : (existing && (existing.approval_status === 'Approved' || existing.approval_status === 'Pending') && existing.quote_json === JSON.stringify(evaluation.quote))
+        ? existing.approval_status : 'Required',
     ai_draft_json: existing ? existing.ai_draft_json : '',
     final_text_json: JSON.stringify(deal.narrative || {}),
     version: Number(deal.version || 1)

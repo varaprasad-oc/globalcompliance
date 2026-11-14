@@ -971,7 +971,9 @@ function dealRecord(deal, evaluation, userEmail, nowIso, existing) {
     input_json: JSON.stringify(deal),
     quote_json: evaluation.quote ? JSON.stringify(evaluation.quote) : '',
     needs_approval: !!evaluation.needsApproval,
-    approval_status: evaluation.needsApproval ? (existing && existing.approval_status === 'Approved' && existing.quote_json === JSON.stringify(evaluation.quote) ? 'Approved' : 'Required') : 'Not required',
+    approval_status: !evaluation.needsApproval ? 'Not required'
+      : (existing && (existing.approval_status === 'Approved' || existing.approval_status === 'Pending') && existing.quote_json === JSON.stringify(evaluation.quote))
+        ? existing.approval_status : 'Required',
     ai_draft_json: existing ? existing.ai_draft_json : '',
     final_text_json: JSON.stringify(deal.narrative || {}),
     version: Number(deal.version || 1)
@@ -996,6 +998,115 @@ function cloneDeal(deal, newId) {
   c.status = DEAL_STATUS.DRAFT;
   c.client = c.client || {};
   return c;
+}
+
+// ===================== AiLogic.js =====================
+/**
+ * Sprint 7: Gemini narrative drafting – pure parts (prompt building + guardrails). Runs in Apps Script and Node.
+ * The narrative is the ONLY AI-written content; prices, terms and legal text always come from the Sheet and templates.
+ */
+
+/** Build the prompt for the proposal narrative from the rep's notes and standard module text. */
+function buildNarrativePrompt(master, deal, opts) {
+  opts = opts || {};
+  var row = (master.AIPrompts || []).filter(function (r) { return r.key === 'PROPOSAL_NARRATIVE'; })[0] || {};
+  var c = deal.client || {}, com = deal.commercial || {};
+  var pk = com.packages || [];
+  var modules = featureMatrix(master, pk)
+    .filter(function (f) { return pk.some(function (p) { return f.values[p] === 'Included'; }); })
+    .map(function (f) { return '- ' + f.feature + (f.description ? ': ' + f.description : ''); });
+  var tone = opts.tone === 'concise' ? 'Concise: short sentences, no more than 2 paragraphs in the executive summary.' : 'Formal and persuasive B2B tone, 3 paragraphs in the executive summary.';
+  var lang = opts.language === 'AR' ? 'Write in Modern Standard Arabic.' : 'Write in British English.';
+  var parts = [
+    String(row.prompt || ''),
+    'TONE: ' + tone,
+    'LANGUAGE: ' + lang,
+    'RULES: Do not mention any price, discount, fee, currency or number of money. Do not invent features, integrations, clients or results that are not in the notes or modules. Refer to the client by its short name. Return valid JSON only.',
+    'CLIENT: ' + (c.shortName || c.legalName || '') + ' (' + (c.legalName || '') + '), ' + (c.country || ''),
+    'BRANDS: ' + (c.brands || 'n/a') + ' · STORES: ' + (com.stores || 0) + ' · E-COMMERCE SITES: ' + (com.ecomSites || 0) +
+      ' · POS: ' + (c.pos || 'n/a') + ' · E-COMMERCE PLATFORM: ' + (c.ecomPlatform || 'n/a') + ' · WEBSITE: ' + (c.website || 'n/a'),
+    'MULTI-BRAND GROUP: ' + ((deal.proposal || {}).multiBrand ? 'yes – also write multiBrandIntro' : 'no – return multiBrandIntro as an empty string'),
+    'CLIENT NOTES (from the sales rep):\n' + ((deal.narrative || {}).notes || '(none)'),
+    'MODULES (only these may be mentioned):\n' + modules.join('\n'),
+    'OUTPUT JSON SCHEMA: {"executiveSummary": "paragraphs separated by a blank line", "journeys": ["Title: one-sentence journey", "Title: one-sentence journey"], "multiBrandIntro": "string"}'
+  ];
+  return parts.join('\n\n');
+}
+
+/** Parse Gemini's reply and apply guardrails. Returns {ok, narrative, warnings} – never throws. */
+function sanitizeNarrative(rawText, master) {
+  var warnings = [];
+  var txt = String(rawText || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
+  var obj;
+  try { obj = JSON.parse(txt); } catch (e) { return { ok: false, narrative: null, warnings: ['AI reply was not valid JSON'] }; }
+  var codes = (master.Currencies || []).map(function (c) { return c.code; }).concat(['\\$', '€', '£', 'USD', 'dollars?', 'dirhams?', 'riyals?', 'rupees?', 'pounds?']);
+  var moneyRe = new RegExp('((' + codes.join('|') + ')\\s?\\d[\\d,.]*)|(\\d[\\d,.]*\\s?(' + codes.join('|') + '))|(\\d+(\\.\\d+)?\\s?%\\s*(off|discount))', 'i');
+  function clean(s, maxLen) {
+    s = String(s || '').trim();
+    var sentences = s.split(/(?<=[.!?])\s+/);
+    var kept = sentences.filter(function (x) { if (moneyRe.test(x)) { warnings.push('Removed a sentence mentioning money: "' + x.slice(0, 60) + '…"'); return false; } return true; });
+    s = kept.join(' ').replace(/ ?\n ?/g, '\n');
+    if (s.length > maxLen) { s = s.slice(0, maxLen).replace(/\s+\S*$/, '') + '…'; warnings.push('Shortened a long section'); }
+    return s;
+  }
+  var paras = String(obj.executiveSummary || '').split(/\n\s*\n/).map(function (p) { return clean(p, 1200); }).filter(String);
+  var narrative = {
+    executiveSummary: paras.slice(0, 4).join('\n\n'),
+    journeys: (Array.isArray(obj.journeys) ? obj.journeys : []).slice(0, 3).map(function (j) { return clean(j, 400); }).filter(String),
+    multiBrandIntro: clean(obj.multiBrandIntro, 800)
+  };
+  if (!narrative.executiveSummary) return { ok: false, narrative: null, warnings: warnings.concat(['AI reply had no executive summary']) };
+  return { ok: true, narrative: narrative, warnings: warnings };
+}
+
+// ===================== GenLogic.js =====================
+/**
+ * Sprint 7: generation planning – pure (Apps Script + Node tests).
+ * Decides FINAL vs DRAFT, which documents to make, and the resulting deal status.
+ */
+
+/**
+ * @param {Object} deal        the saved deal
+ * @param {Object} evaluation  evaluateDeal() result
+ * @param {string} approvalStatus  Deals.approval_status ('Not required' | 'Required' | 'Pending' | 'Approved' | 'Rejected')
+ * @return {{ok, reason, mode, docTypes, status}}
+ */
+function planGeneration(deal, evaluation, approvalStatus) {
+  if (!evaluation.ok) return { ok: false, reason: 'Fix these first: ' + evaluation.errors.join('; ') };
+  var missing = Object.keys(evaluation.missing || {});
+  if (missing.length) {
+    return { ok: false, reason: 'Missing information: ' + missing.map(function (t) { return t + ' (' + evaluation.missing[t].join(', ') + ')'; }).join('; ') };
+  }
+  var docTypes = selectedDocs(deal);
+  var approved = approvalStatus === 'Approved';
+  var draft = evaluation.needsApproval && !approved;
+  return {
+    ok: true,
+    mode: draft ? 'DRAFT' : 'FINAL',
+    docTypes: docTypes,
+    status: draft ? DEAL_STATUS.PENDING : DEAL_STATUS.GENERATED,
+    reason: draft ? 'Special pricing needs Amith’s approval: DRAFT documents (no PDF) are created now; final PDFs are generated after approval.' : ''
+  };
+}
+
+/** Keep document numbers stable across versions: reuse the deal's existing numbers, only allocate missing ones. */
+function docNumbersNeeded(deal, docTypes) {
+  var have = deal.docNos || {};
+  return docTypes.filter(function (t) { return !have[t]; });
+}
+
+/** Email body for the rep after generation. */
+function generationEmail(deal, results, mode) {
+  var c = deal.client || {};
+  var lines = ['Documents for ' + (c.legalName || deal.dealId) + ' (deal ' + deal.dealId + ', v' + (deal.version || 1) + '):', ''];
+  results.forEach(function (r) {
+    lines.push('• ' + r.label + ' ' + r.docNo + (r.error ? ' – FAILED: ' + r.error : ''));
+    if (!r.error) { lines.push('  Doc: ' + r.docUrl); if (r.pdfUrl) lines.push('  PDF: ' + r.pdfUrl); }
+  });
+  lines.push('');
+  if (mode === 'DRAFT') lines.push('These are DRAFTS pending Amith’s approval of the special pricing. Do not send them to the client.');
+  lines.push('— OptCulture Sales Docs');
+  return { subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'OptCulture documents – ' + (c.shortName || c.legalName || deal.dealId), body: lines.join('\n') };
 }
 
 // ===================== MasterData.js =====================
@@ -1581,6 +1692,156 @@ function addDraftBanner_(doc) {
   var p = header.insertParagraph(0, 'DRAFT – PENDING APPROVAL – NOT FOR CLIENT USE');
   p.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
   p.editAsText().setBold(true).setForegroundColor('#c62828').setFontSize(10);
+}
+
+// ===================== Ai.js =====================
+/**
+ * Sprint 7: Gemini via Vertex AI. Uses the web app owner's Google token (cloud-platform scope) and the
+ * Google Cloud project linked to this Apps Script project.
+ * Script Properties: GCP_PROJECT_ID (required), GCP_LOCATION (optional, default "global").
+ */
+
+function callGemini_(prompt, model, temperature) {
+  var project = getProp_('GCP_PROJECT_ID');
+  if (!project) throw new Error('AI drafting is not set up yet (Script Property GCP_PROJECT_ID missing). You can type the narrative manually.');
+  var loc = getProp_('GCP_LOCATION') || 'global';
+  var host = loc === 'global' ? 'aiplatform.googleapis.com' : loc + '-aiplatform.googleapis.com';
+  var url = 'https://' + host + '/v1/projects/' + project + '/locations/' + loc + '/publishers/google/models/' + (model || 'gemini-2.5-flash') + ':generateContent';
+  var payload = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature: Number(temperature || 0.4), maxOutputTokens: 2048, responseMimeType: 'application/json' }
+  };
+  var lastErr;
+  for (var attempt = 1; attempt <= 2; attempt++) {
+    var res = UrlFetchApp.fetch(url, {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, payload: JSON.stringify(payload)
+    });
+    var code = res.getResponseCode();
+    if (code === 200) {
+      var body = JSON.parse(res.getContentText());
+      var cand = (body.candidates || [])[0];
+      var text = cand && cand.content && cand.content.parts ? cand.content.parts.map(function (p) { return p.text || ''; }).join('') : '';
+      if (text) return text;
+      lastErr = 'Empty AI response' + (cand && cand.finishReason ? ' (' + cand.finishReason + ')' : '');
+    } else {
+      lastErr = 'Vertex AI error ' + code + ': ' + res.getContentText().slice(0, 300);
+      if (code !== 429 && code < 500) break;
+      Utilities.sleep(1500);
+    }
+  }
+  throw new Error(lastErr);
+}
+
+/** Draft the proposal narrative. opts = { tone: 'formal' | 'concise', language: 'EN' | 'AR' } */
+function apiDraftNarrative(deal, opts) {
+  var user = requireUser_();
+  var m = getMaster();
+  var row = (m.AIPrompts || []).filter(function (r) { return r.key === 'PROPOSAL_NARRATIVE'; })[0] || {};
+  var raw = callGemini_(buildNarrativePrompt(m, deal, opts), row.model, row.temperature);
+  var res = sanitizeNarrative(raw, m);
+  audit_('AI_DRAFT', { ok: res.ok, warnings: res.warnings, tone: (opts || {}).tone }, deal.dealId || '');
+  if (!res.ok) throw new Error('The AI draft could not be used (' + res.warnings.join('; ') + '). Please try again.');
+  return res;
+}
+
+/** Editor check: run once after linking the Cloud project. */
+function aiHealthCheck() {
+  var t = callGemini_('Return JSON {"ok": true, "model": "<your model name>"}', null, 0);
+  console.log(t);
+  return t;
+}
+
+// ===================== Generate.js =====================
+/**
+ * Sprint 7: one click → all selected documents for a saved deal.
+ * FINAL (Doc + PDF) when no approval is needed or it has been granted; otherwise DRAFT (watermarked Doc, no PDF)
+ * plus an approval request in the Approvals tab (approval screen: Sprint 8).
+ */
+
+function apiGenerateDocs(dealId) {
+  var user = requireUser_();
+  var m = getMaster(true);
+  var rec = findDeal_(dealId);
+  if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
+  var deal = JSON.parse(rec.input_json);
+  applyCountryDefaults(m, deal);
+  var ev = evaluateDeal(m, deal);
+  var plan = planGeneration(deal, ev, rec.approval_status);
+  if (!plan.ok) throw new Error(plan.reason);
+
+  // stable document numbers per deal
+  deal.docNos = deal.docNos || {};
+  docNumbersNeeded(deal, plan.docTypes).forEach(function (t) { deal.docNos[t] = nextDocNo(t); });
+
+  var owner = rec.created_by;
+  var ownerUser = (m.Users || []).filter(function (u) { return String(u.email).toLowerCase() === String(owner).toLowerCase(); })[0] || {};
+  var shareWith = [owner, ownerUser.manager_email].filter(Boolean);
+  var ownerProfile = { name: ownerUser.name || user.name, email: owner, phone: ownerUser.phone || '' };
+
+  archivePreviousVersions_(dealId, deal.version);
+
+  var results = [];
+  plan.docTypes.forEach(function (t) {
+    var data = buildDocData(t, m, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: deal.docNos });
+    try {
+      var r = generateDocument(t, data, { clientName: deal.client.shortName || deal.client.legalName, version: deal.version, draft: plan.mode === 'DRAFT',
+        language: deal.language || 'EN', shareWith: shareWith });
+      var tpl = getActiveTemplate_(t, deal.language || 'EN');
+      appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: deal.language || 'EN', version: deal.version,
+        template_version: tpl.version, doc_file_id: r.docId, pdf_file_id: r.pdfId, created_by: user.email, created_at: new Date(),
+        status: plan.mode === 'DRAFT' ? 'Draft' : 'Final' });
+      results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], docUrl: r.docUrl, pdfUrl: r.pdfUrl, warnings: r.warnings });
+    } catch (e) {
+      results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], error: String(e.message || e) });
+    }
+  });
+
+  // save deal: numbers, status, approval request
+  deal.status = plan.status;
+  var approval = rec.approval_status;
+  if (plan.mode === 'DRAFT' && approval !== 'Pending') {
+    appendRecord_('Approvals', { approval_id: newId_('A'), deal_id: dealId, version: deal.version, requested_by: user.email, requested_at: new Date(),
+      reasons: ev.approvalReasons.join(' | '), decision: '', decided_by: '', decided_at: '', comment: '' });
+    approval = 'Pending';
+  }
+  var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), rec);
+  newRec.approval_status = ev.needsApproval ? approval : 'Not required';
+  writeRecord_('Deals', newRec, rec._row);
+  audit_('DOCS_GENERATED', { mode: plan.mode, docs: results.map(function (r) { return r.docNo + (r.error ? ' ERROR' : ''); }) }, dealId);
+
+  try {
+    var mail = generationEmail(deal, results, plan.mode);
+    MailApp.sendEmail({ to: owner, subject: mail.subject, body: mail.body, name: CONFIG.APP_NAME });
+  } catch (e) { console.warn('email failed: ' + e); }
+
+  return { mode: plan.mode, message: plan.reason, results: results, deal: deal, summary: dealSummary(newRec) };
+}
+
+/** Move files of earlier versions of this deal to _Archive and mark them Superseded. */
+function archivePreviousVersions_(dealId, currentVersion) {
+  var archiveId = getProp_('FOLDER_ARCHIVE');
+  if (!archiveId) return;
+  var archive = DriveApp.getFolderById(archiveId);
+  readRecords_('Documents').forEach(function (d) {
+    if (d.deal_id !== dealId || Number(d.version) >= Number(currentVersion) || d.status === 'Superseded') return;
+    [d.doc_file_id, d.pdf_file_id].filter(String).forEach(function (id) { try { DriveApp.getFileById(id).moveTo(archive); } catch (e) { console.warn(e); } });
+    d.status = 'Superseded';
+    writeRecord_('Documents', d, d._row);
+  });
+}
+
+/** Documents of a deal (latest first) for the UI. */
+function apiDealDocuments(dealId) {
+  var user = requireUser_();
+  var rec = findDeal_(dealId);
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('No access.');
+  return readRecords_('Documents').filter(function (d) { return d.deal_id === dealId; }).map(function (d) {
+    return { docNo: d.doc_no, type: d.doc_type, label: DOC_LABEL[d.doc_type], version: Number(d.version), status: d.status,
+      docUrl: d.doc_file_id ? 'https://docs.google.com/document/d/' + d.doc_file_id + '/edit' : '',
+      pdfUrl: d.pdf_file_id ? 'https://drive.google.com/file/d/' + d.pdf_file_id + '/view' : '',
+      createdAt: d.created_at instanceof Date ? d.created_at.toISOString() : String(d.created_at) };
+  }).sort(function (a, b) { return b.version - a.version; });
 }
 
 // ===================== SetupMasterSheet.js =====================

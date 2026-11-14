@@ -3,7 +3,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = vm.createContext({ console });
-['Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js', 'DealLogic.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/server', f), 'utf8'), ctx));
+['Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js', 'DealLogic.js', 'AiLogic.js', 'GenLogic.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/server', f), 'utf8'), ctx));
 const M = ctx.masterFromSeed(ctx.SEED);
 const USER = { ok: true, email: 'varaprasad@optculture.com', name: 'Varaprasad SN', role: 'Manager' };
 const store = { deals: {}, clients: [] }; let seq = 0;
@@ -19,7 +19,13 @@ const api = {
   apiListDeals: () => Object.values(store.deals).map(ctx.dealSummary),
   apiGetDeal: (id) => { const r = store.deals[id]; const d = JSON.parse(r.input_json); return { deal: d, evaluation: ctx.evaluateDeal(M, d), summary: ctx.dealSummary(r) }; },
   apiCloneDeal: (id) => { const c = ctx.cloneDeal(JSON.parse(store.deals[id].input_json), null); c.dealId = null; return api.apiSaveDeal(c); },
-  apiPreviewQuote: (i) => ctx.buildQuote(M, i)
+  apiPreviewQuote: (i) => ctx.buildQuote(M, i),
+  apiDraftNarrative: (d, o) => { ctx.buildNarrativePrompt(M, d, o); return ctx.sanitizeNarrative(JSON.stringify({ executiveSummary: 'FRG is a leading franchisee.\n\nOne program for every brand. It costs USD 70.', journeys: ['Win-back: lapsed shoppers get bonus points.'], multiBrandIntro: 'Shared wallet.' }), M); },
+  apiGenerateDocs: (id) => { const rec = store.deals[id]; const d = JSON.parse(rec.input_json); const ev = ctx.evaluateDeal(M, d); const plan = ctx.planGeneration(d, ev, rec.approval_status);
+    if (!plan.ok) throw new Error(plan.reason); d.docNos = { PROPOSAL: 'OC-P-2026-0001', ORDER_FORM: 'OC-Q-2026-0001', TOS: 'OC-TOS-2026-0001', DPA: 'OC-DPA-2026-0001' }; d.status = plan.status;
+    store.deals[id] = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), rec);
+    return { mode: plan.mode, message: plan.reason, deal: d, results: plan.docTypes.map((t) => ({ type: t, label: t, docNo: d.docNos[t], docUrl: 'https://docs.google.com/x', pdfUrl: plan.mode === 'FINAL' ? 'https://drive.google.com/y' : '', warnings: [] })) }; },
+  apiDealDocuments: () => []
 };
 (async () => {
   const out = process.argv[2] || '.';
@@ -64,6 +70,23 @@ const api = {
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(300);
   await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(400);
   check('Open restores special price', (await p.inputValue('input[data-map="commercial.specialPrices"][data-key="Loyalty"]')) === '70');
+  // Sprint 7: AI draft + generate
+  await p.click('#steps div[data-step="3"]');
+  await p.fill('[data-f="narrative.notes"]', 'Franchisee for SKECHERS, ANTA, ECCO; 46 stores; one program.');
+  await p.click('#btnAi'); await p.waitForTimeout(500);
+  const es = await p.inputValue('[data-f="narrative.executiveSummary"]');
+  check('AI fills the summary and strips the money sentence', es.includes('leading franchisee') && !es.includes('USD 70'));
+  check('AI fills journeys', (await p.inputValue('[data-f="narrative.journeys"]')).startsWith('Win-back'));
+  await p.click('#steps div[data-step="1"]');
+  await p.fill('[data-f="client.billingContact.email"]', 'finance@frg.example');
+  await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(700);
+  check('Generate button enabled when complete', !(await p.isDisabled('#btnGenerate')));
+  check('Hint says drafts + approval', (await p.textContent('#genHint')).includes('DRAFTS'));
+  await p.click('#btnGenerate'); await p.waitForTimeout(800);
+  const gr = await p.textContent('#genResult');
+  check('Draft documents listed with numbers', gr.includes('Draft documents created') && gr.includes('OC-DPA-2026-0001'));
+  check('Status badge shows Pending approval', (await p.textContent('#dealStatus')).includes('Pending approval'));
+  await p.screenshot({ path: path.join(out, 'sprint7-generated.png'), fullPage: true });
   check('No page errors', errors.length === 0); if (errors.length) console.log(errors);
   await b.close();
 })();

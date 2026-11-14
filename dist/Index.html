@@ -161,7 +161,8 @@
                 <label><input type="checkbox" data-f="proposal.multiBrand"> Multi-brand group (adds the unified program section)</label>
                 <label><input type="checkbox" data-f="proposal.showConsulting" checked> Show consulting rates</label>
               </div>
-              <h3>Narrative <span class="muted" style="font-weight:normal">(Gemini drafting arrives in Sprint 7; you can type it now)</span></h3>
+              <h3>Narrative</h3>
+              <div class="bar" style="justify-content:flex-start;margin-bottom:8px"><select id="aiTone" style="width:auto"><option value="formal">Formal</option><option value="concise">Concise</option></select> <button class="purple" id="btnAi" type="button">✨ Draft with AI (Gemini)</button> <span id="aiStatus" class="muted"></span></div>
               <div class="grid">
                 <div class="wide"><label>Notes about the client (3–4 lines, used by AI later)</label><textarea data-f="narrative.notes"></textarea></div>
                 <div class="wide"><label>Executive summary (blank line between paragraphs)</label><textarea data-f="narrative.executiveSummary" style="min-height:110px"></textarea></div>
@@ -181,9 +182,11 @@
             <div class="card step hidden" data-step="4">
               <h3 style="margin-top:0">Review</h3>
               <div id="review"></div>
+              <div id="genResult"></div>
+              <div id="docList"></div>
               <div class="bar" style="margin-top:12px">
-                <span class="muted">Document generation is switched on in Sprint 7.</span>
-                <span><button class="secondary" id="btnSave2">Save draft</button> <button class="purple" disabled title="Sprint 7">Generate documents</button></span>
+                <span id="genHint" class="muted"></span>
+                <span><button class="secondary" id="btnSave2">Save draft</button> <button class="purple" id="btnGenerate" disabled>Generate documents</button></span>
               </div>
             </div>
 
@@ -293,6 +296,8 @@
     $('btnSave').onclick = save; $('btnSave2').onclick = save;
     $('btnNew2').onclick = function () { newDeal(); show('deal'); };
     $('calcBtn').onclick = calc;
+    $('btnAi').onclick = draftAi;
+    $('btnGenerate').onclick = generate;
   }
 
   function refreshOrderPackages() {
@@ -348,7 +353,7 @@
   function newDeal() {
     fill({ client: { businessContact: {}, billingContact: {} }, commercial: { stores: 1, ecomSites: 0, packages: ['Loyalty'], termMonths: 12, billingCycle: 'Annual', paymentMethod: 'Bank Transfer', autoRenew: true },
       docs: { PROPOSAL: true, ORDER_FORM: true, TOS: true, DPA: true }, language: 'EN', proposal: { showConsulting: true }, narrative: {}, dpa: {} });
-    $('clientPick').value = ''; go(1); $('side').innerHTML = '<span class="muted">Fill in the client and commercials…</span>';
+    $('clientPick').value = ''; $('genResult').innerHTML = ''; $('docList').innerHTML = ''; go(1); $('side').innerHTML = '<span class="muted">Fill in the client and commercials…</span>';
   }
 
   function go(n) {
@@ -411,6 +416,8 @@
     var miss = Object.keys(ev.missing || {});
     if (miss.length) h += '<h3>Missing information</h3><ul class="tight">' + miss.map(function (t) { return '<li><b>' + DOC_LABEL[t] + ':</b> ' + ev.missing[t].map(esc).join(', ') + '</li>'; }).join('') + '</ul>';
     if (ev.readyToGenerate) h += '<p><span class="badge ok">All selected documents have the information they need.</span></p>';
+    $('btnGenerate').disabled = !ev.readyToGenerate;
+    $('genHint').textContent = !ev.readyToGenerate ? 'Complete the items above to enable generation.' : (ev.needsApproval ? 'Will create DRAFTS and request Amith’s approval.' : 'Will create final Docs + PDFs.');
     $('review').innerHTML = h;
   }
 
@@ -435,8 +442,58 @@
             (BOOT.user.role !== 'Rep' ? '<td>' + esc(r.createdBy === mine ? 'Me' : r.createdBy) + '</td>' : '') +
             '<td><button class="secondary" data-open="' + esc(r.dealId) + '">Open</button> <button class="secondary" data-clone="' + esc(r.dealId) + '">Clone</button></td></tr>';
         }).join('') + '</table>';
-      qa('[data-open]').forEach(function (b) { b.onclick = function () { run('apiGetDeal', b.dataset.open).then(function (r) { fill(r.deal); show('deal'); go(4); }); }; });
+      qa('[data-open]').forEach(function (b) { b.onclick = function () { run('apiGetDeal', b.dataset.open).then(function (r) { fill(r.deal); show('deal'); go(4); loadDocs(r.deal.dealId); }); }; });
       qa('[data-clone]').forEach(function (b) { b.onclick = function () { run('apiCloneDeal', b.dataset.clone).then(function (r) { fill(r.deal); show('deal'); go(1); toast('Cloned as ' + r.deal.dealId); }); }; });
+    });
+  }
+
+  // ---------- AI drafting ----------
+  function draftAi() {
+    var d = collect();
+    if (!d.narrative || !d.narrative.notes) { toast('Type 3–4 lines of notes about the client first'); return; }
+    $('btnAi').disabled = true; $('aiStatus').textContent = 'Gemini is drafting… (10–30 s)';
+    run('apiDraftNarrative', d, { tone: $('aiTone').value, language: d.language || 'EN' }).then(function (r) {
+      var n = r.narrative;
+      document.querySelector('[data-f="narrative.executiveSummary"]').value = n.executiveSummary;
+      document.querySelector('[data-f="narrative.journeys"]').value = (n.journeys || []).join('\n');
+      if (n.multiBrandIntro) document.querySelector('[data-f="narrative.multiBrandIntro"]').value = n.multiBrandIntro;
+      DEAL.aiDraft = { at: new Date().toISOString(), tone: $('aiTone').value, narrative: n };
+      $('aiStatus').textContent = 'Draft ready – review and edit before generating.' + (r.warnings.length ? ' (' + r.warnings.length + ' safety edit(s) applied)' : '');
+      changed();
+    }).catch(function () { $('aiStatus').textContent = 'AI drafting failed – you can type the narrative manually.'; })
+      .finally(function () { $('btnAi').disabled = false; });
+  }
+
+  // ---------- generation ----------
+  function generate() {
+    var d = collect();
+    $('btnGenerate').disabled = true; $('genResult').innerHTML = '<p class="muted">Saving and generating documents… this takes about 1–2 minutes.</p>';
+    run('apiSaveDeal', d).then(function (saved) {
+      fill(saved.deal);
+      return run('apiGenerateDocs', saved.deal.dealId);
+    }).then(function (g) {
+      fill(g.deal);
+      var h = '<h3>' + (g.mode === 'DRAFT' ? 'Draft documents created' : 'Documents created') + '</h3>';
+      if (g.message) h += '<p><span class="badge warn">' + esc(g.message) + '</span></p>';
+      h += '<table><tr><th>Document</th><th>No.</th><th>Links</th></tr>' + g.results.map(function (r) {
+        return '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.docNo) + '</td><td>' + (r.error ? '<span class="error">' + esc(r.error) + '</span>' :
+          '<a href="' + esc(r.docUrl) + '" target="_blank">Google Doc</a>' + (r.pdfUrl ? ' · <a href="' + esc(r.pdfUrl) + '" target="_blank">PDF</a>' : '') +
+          (r.warnings && r.warnings.length ? '<br><span class="muted">' + r.warnings.length + ' warning(s): ' + esc(r.warnings.join('; ')) + '</span>' : '')) + '</td></tr>';
+      }).join('') + '</table><p class="muted">The links were also emailed to the deal owner.</p>';
+      $('genResult').innerHTML = h;
+      toast(g.mode === 'DRAFT' ? 'Drafts created – approval requested' : 'Documents created');
+    }).catch(function (e) { $('genResult').innerHTML = '<p class="error">' + esc(e.message) + '</p>'; })
+      .finally(function () { $('btnGenerate').disabled = false; });
+  }
+
+  function loadDocs(dealId) {
+    $('docList').innerHTML = '';
+    run('apiDealDocuments', dealId).then(function (docs) {
+      if (!docs.length) return;
+      $('docList').innerHTML = '<h3>Generated documents</h3><table><tr><th>Document</th><th>No.</th><th>Version</th><th>Status</th><th>Links</th></tr>' + docs.map(function (d) {
+        return '<tr><td>' + esc(d.label) + '</td><td>' + esc(d.docNo) + '</td><td>v' + d.version + '</td><td>' + esc(d.status) + '</td><td>' +
+          (d.docUrl ? '<a href="' + esc(d.docUrl) + '" target="_blank">Doc</a>' : '') + (d.pdfUrl ? ' · <a href="' + esc(d.pdfUrl) + '" target="_blank">PDF</a>' : '') + '</td></tr>';
+      }).join('') + '</table>';
     });
   }
 

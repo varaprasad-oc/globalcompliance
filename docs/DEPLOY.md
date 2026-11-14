@@ -47,3 +47,12 @@ npm test
 ```bash
 npm run placeholders
 ```
+
+## E. Gemini (Vertex AI) for AI drafting (Sprint 7)
+1. https://console.cloud.google.com: create (or pick) a project, e.g. `optculture-sales-docs`, and link billing.
+2. APIs & Services → Library → enable **Vertex AI API**.
+3. APIs & Services → OAuth consent screen → **Internal**, app name "OptCulture Sales Docs", support email = your email. Save.
+4. Note the **Project number** and **Project ID** (Cloud console home page).
+5. Apps Script → Project Settings → Google Cloud Platform (GCP) Project → **Change project** → paste the **project number**.
+6. Apps Script → Project Settings → Script Properties: `GCP_PROJECT_ID` = project ID; `GCP_LOCATION` = `global` (or a region, e.g. `europe-west4`, if data residency is required and the model is offered there).
+7. Run `aiHealthCheck` in the editor and approve permissions. The log should show JSON from Gemini.
