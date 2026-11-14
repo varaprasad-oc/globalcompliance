@@ -1,7 +1,7 @@
 /** Web app entry point and client-callable API (google.script.run). */
 
 function doGet() {
-  var t = HtmlService.createTemplateFromFile('ui/Index');
+  var t = uiTemplate_();
   return t.evaluate()
     .setTitle(CONFIG.APP_NAME)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -36,4 +36,9 @@ function apiBootstrap() {
 function apiPreviewQuote(input) {
   requireUser_();
   return buildQuote(getMaster(), input);
+}
+
+/** UI file is "ui/Index" when pushed with clasp, "Index" when pasted from dist/. */
+function uiTemplate_() {
+  try { return HtmlService.createTemplateFromFile('ui/Index'); } catch (e) { return HtmlService.createTemplateFromFile('Index'); }
 }
