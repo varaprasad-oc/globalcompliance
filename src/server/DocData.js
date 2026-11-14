@@ -78,7 +78,9 @@ function buildDocData(docType, master, deal, quote, ctx) {
     SupportHours: _v(terms.support_hours), ExecutiveName: _v(terms.executive_contact_name), ExecutiveEmail: _v(terms.executive_contact_email),
     LegalEmail: _v(terms.legal_email)
   };
-  var flags = { IsPartner: isPartner, IsOptCultureEntity: !isPartner, HasMsa: !!com.msaRef, HasPO: !!com.poNumber };
+  var rel = ctx.related || {};
+  var flags = { IsPartner: isPartner, IsOptCultureEntity: !isPartner, HasMsa: !!com.msaRef, HasPO: !!com.poNumber,
+    HasProposalNo: !!rel.PROPOSAL, HasOrderFormNo: !!rel.ORDER_FORM, HasTosNo: !!rel.TOS, HasDpaNo: !!rel.DPA };
   var lists = {}, tables = {}, texts = {}, images = {};
   if (entity.logo_file_id) images.EntityLogo = entity.logo_file_id;
 

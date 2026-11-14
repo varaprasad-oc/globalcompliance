@@ -94,6 +94,10 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 - `IsOptCultureEntity` (sample: false)
 - `HasMsa` (sample: false)
 - `HasPO` (sample: false)
+- `HasProposalNo` (sample: false)
+- `HasOrderFormNo` (sample: false)
+- `HasTosNo` (sample: false)
+- `HasDpaNo` (sample: false)
 - `MultiBrand` (sample: true)
 - `ShowConsulting` (sample: true)
 - `HasSpecialPrice` (sample: true)
@@ -204,6 +208,10 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 - `IsOptCultureEntity` (sample: false)
 - `HasMsa` (sample: false)
 - `HasPO` (sample: false)
+- `HasProposalNo` (sample: false)
+- `HasOrderFormNo` (sample: false)
+- `HasTosNo` (sample: false)
+- `HasDpaNo` (sample: false)
 
 ### Lists
 - `SubscriptionLines`: keys `{{product}}`, `{{scope}}`, `{{billing}}`, `{{amount}}`
@@ -282,6 +290,10 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 - `IsOptCultureEntity` (sample: false)
 - `HasMsa` (sample: false)
 - `HasPO` (sample: false)
+- `HasProposalNo` (sample: false)
+- `HasOrderFormNo` (sample: false)
+- `HasTosNo` (sample: false)
+- `HasDpaNo` (sample: false)
 
 ### Lists
 - `OptCultureEntities`: keys `{{country}}`, `{{name}}`
@@ -365,6 +377,10 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 - `IsOptCultureEntity` (sample: false)
 - `HasMsa` (sample: false)
 - `HasPO` (sample: false)
+- `HasProposalNo` (sample: false)
+- `HasOrderFormNo` (sample: false)
+- `HasTosNo` (sample: false)
+- `HasDpaNo` (sample: false)
 - `Addendum4A` (sample: false)
 - `Addendum4B` (sample: false)
 - `Addendum4C` (sample: false)

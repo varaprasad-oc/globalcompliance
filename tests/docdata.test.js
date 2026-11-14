@@ -70,3 +70,13 @@ test('Template token checker flags unknown placeholders', () => {
   const text = '{{ClientShortName}} {{#IF MultiBrand}}x{{/IF MultiBrand}} {{TABLE:PlanMatrix}} {{EACH:Usage}}{{label}} {{Typo}} {{#IF Nope}}';
   eq(C().checkTemplateTokens(text, d), ['Typo', '#IF Nope']);
 });
+
+test('ToS and SLA drafts use only known placeholders', () => {
+  const fs = require('fs'), path = require('path');
+  const d = build('TOS');
+  const strip = (t) => t.replace(/`[^`]*`/g, '');
+  const tos = strip(fs.readFileSync(path.join(__dirname, '..', 'docs', 'templates', 'TOS.md'), 'utf8'));
+  const sla = strip(fs.readFileSync(path.join(__dirname, '..', 'docs', 'templates', 'SLA.md'), 'utf8'));
+  eq(C().checkTemplateTokens(tos, d), []);
+  eq(C().checkTemplateTokens(sla, d), []);
+});
