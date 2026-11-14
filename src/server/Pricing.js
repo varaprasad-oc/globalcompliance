@@ -13,7 +13,8 @@
  *   packages: ['Loyalty', 'Advanced'],          // packages to quote
  *   specialPrices: { Loyalty: 150 },             // optional, per site per month, in quote currency
  *   addOns: ['GIFT_CARDS'],                      // optional ADDON item_ids
- *   oneTimeItems: [{ id: 'MIGRATION_100K', qty: 1 }]   // optional ONE_TIME items (STORE_INSTALL is automatic)
+ *   oneTimeItems: [{ id: 'MIGRATION_100K', qty: 1 }],  // optional ONE_TIME items (STORE_INSTALL is automatic)
+ *   specialComms: { COMMS_100K: 200 }             // optional negotiated platform-comms price per tier, in quote currency
  * }
  */
 
@@ -171,6 +172,23 @@ function buildQuote(master, input) {
     return it ? itemLine(it, Number(sel.qty) || 1) : null;
   }).filter(Boolean);
 
+  // Platform comms: volume tiers, FX only. Special price below list -> approval; below floor is flagged.
+  var comms = (master.CommsTiers || []).filter(function (t) { return isTrue(t.active); })
+    .sort(function (a, b) { return a.display_order - b.display_order; })
+    .map(function (t) {
+      var list = price(t.list_usd, 'FX_ONLY');
+      var floor = price(t.floor_usd, 'FX_ONLY');
+      var sp = (input.specialComms || {})[t.tier_id];
+      var special = (sp === '' || sp === null || sp === undefined) ? null : Number(sp);
+      var fin = special === null ? list : special;
+      if (special !== null && special < list) {
+        approvalReasons.push('Platform comms (' + Number(t.messages).toLocaleString('en-US') + ' / month): special ' + formatMoney(input.currency, special) +
+          ' vs list ' + formatMoney(input.currency, list) + (special < floor ? ' — BELOW FLOOR ' + formatMoney(input.currency, floor) : ''));
+      }
+      return { id: t.tier_id, label: t.label, unit: 'per month', qty: 1, messages: Number(t.messages),
+        listPrice: list, floorPrice: floor, specialPrice: special, unitPrice: fin, total: fin, text: '', belowFloor: special !== null && special < floor };
+    });
+
   var byCat = function (cat) {
     return items.filter(function (i) { return i.category === cat; })
       .sort(function (a, b) { return a.display_order - b.display_order; })
@@ -194,7 +212,8 @@ function buildQuote(master, input) {
     packages: packages,
     optionalOneTime: optionalOneTime,
     optionalOneTimeTotal: optionalOneTime.reduce(function (s, l) { return s + (l.total || 0); }, 0),
-    usage: byCat('USAGE'),
+    comms: comms,
+    usage: comms.concat(byCat('USAGE')),
     consulting: byCat('CONSULTING'),
     rateCardOneTime: byCat('ONE_TIME'),
     rateCardAddOns: byCat('ADDON'),

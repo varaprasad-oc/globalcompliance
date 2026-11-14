@@ -73,3 +73,10 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## Correction (2026-11-14)
 - Amith's Google account is **amith.lulla@optculture.com** (not amith@). Updated in the code, docs and the live Master Sheet (Users, CommercialTerms).
+
+## Pricing sign-off answers (Gate G2, 2026-11-14)
+- Store-count slab is calculated on **sites = physical stores + e-commerce sites**.
+- Rounding: nearest 5 in the quote currency; amounts below 10 x step (50) round to a whole number.
+- Special price **above** standard: no approval. **Below** standard: superadmin approval.
+- Platform messaging fees use **volume tiers** (CommsTiers tab): 100,000/month = USD 250 (floor 100); 1,000,000/month = USD 1,500 (floor 500). Currency-converted only, no market or store-count discount. Below list → approval; below floor → flagged in the approval request.
+- Egypt default quote currency: **USD** (rep can change).

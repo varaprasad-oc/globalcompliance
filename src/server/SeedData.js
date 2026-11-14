@@ -117,7 +117,6 @@ var SEED = {
       ['AGENTIC_EXTRA_100K', 'ADDON', 'Agentic Marketing – each additional 100,000 receipts after 1 million', 'per month', 500, 'FULL', '', 'ALL', 6, true],
 
       ['STORAGE_10GB', 'USAGE', 'Storage beyond two years of customer data – per every 10 GB / 100,000 receipts', 'per month', 10, 'FULL', '', 'ALL', 1, true],
-      ['PLATFORM_COMMS', 'USAGE', 'Platform charges – outbound multi-channel conversations (email, SMS, chat, WhatsApp & push). Email & push included; SMS & WhatsApp charged extra.', 'per 100,000', 250, 'FX_ONLY', '', 'ALL', 2, true],
       ['SMS', 'USAGE', 'SMS costs (optional)', '', '', 'TEXT', 'Custom quote as per geography', 'ALL', 3, true],
       ['WHATSAPP', 'USAGE', 'WhatsApp charges (optional)', '', '', 'TEXT', 'Actuals as per Meta price list + {whatsapp_markup_pct}', 'ALL', 4, true],
 
@@ -185,6 +184,17 @@ var SEED = {
       ['executive_contact_email', 'amith.lulla@optculture.com', 'SLA escalation – Executive Director'],
       ['legal_email', 'legal@optculture.com', 'ToS contact'],
       ['default_hosting_region', '', 'DPA hosting region (to be confirmed by OC Tech)']
+    ]
+  },
+
+  CommsTiers: {
+    kind: 'master',
+    // Platform charges for outbound multi-channel conversations (email, SMS, chat, WhatsApp & push).
+    // Volume tiers, currency-converted only (no market/slab discount). Price below list needs approval; floor = lowest acceptable.
+    headers: ['tier_id', 'label', 'messages', 'list_usd', 'floor_usd', 'display_order', 'active'],
+    rows: [
+      ['COMMS_100K', 'Platform charges – up to 100,000 conversations / month (email & push included; SMS & WhatsApp charged extra)', 100000, 250, 100, 1, true],
+      ['COMMS_1M', 'Platform charges – up to 1,000,000 conversations / month (email & push included; SMS & WhatsApp charged extra)', 1000000, 1500, 500, 2, true]
     ]
   },
 

@@ -15,7 +15,8 @@ test('Developed / USD / <10 sites matches rate card exactly', () => {
   eq(r.packages.map((p) => line(p.oneTime, 'ECOM_INSTALL').unitPrice), [500, 1000, 1000], 'ecom install');
   eq(r.packages.map((p) => p.overagePer1000), [30, 45, 60], 'overage');
   eq(line(r.usage, 'STORAGE_10GB').unitPrice, 10);
-  eq(line(r.usage, 'PLATFORM_COMMS').unitPrice, 250);
+  eq(line(r.usage, 'COMMS_100K').unitPrice, 250);
+  eq(line(r.usage, 'COMMS_1M').unitPrice, 1500);
   eq(r.rateCardOneTime.map((l) => l.unitPrice), [150, 125, 1000, 4000, null, 10000, 20000]);
   eq(r.rateCardAddOns.map((l) => l.unitPrice), [50, 50, 5000, 2500, 10000, 500]);
   eq(r.needsApproval, false);
@@ -43,7 +44,8 @@ test('Emerging / EGP / 46 stores + 1 e-com (FRG-like)', () => {
   eq(line(p.oneTime, 'SETUP').unitPrice, 57915);
   eq(p.overagePer1000, 1450);
   eq(line(r.usage, 'STORAGE_10GB').unitPrice, 320);
-  eq(line(r.usage, 'PLATFORM_COMMS').unitPrice, 13750, 'FX only, no discount');
+  eq(line(r.usage, 'COMMS_100K').unitPrice, 13750, 'FX only, no discount');
+  eq(line(r.usage, 'COMMS_1M').unitPrice, 82500);
 });
 
 test('High Income / AED rounding: nearest 5, small values to whole number', () => {
@@ -102,4 +104,13 @@ test('Formatting helpers', () => {
   eq(C().formatMoney('USD', 1800), 'USD 1,800');
   eq(C().formatPct(0.175), '17.5%');
   eq(C().formatLongDate('2026-11-01T00:00:00'), '1st November 2026');
+});
+
+test('Platform comms volume tiers: special below list needs approval, below floor flagged', () => {
+  const r = q({ packages: ['Loyalty'], specialComms: { COMMS_100K: 200, COMMS_1M: 400 } });
+  eq(r.comms.map((c) => [c.listPrice, c.floorPrice, c.unitPrice, c.belowFloor]), [[250, 100, 200, false], [1500, 500, 400, true]]);
+  eq(r.needsApproval, true);
+  eq(r.approvalReasons.length, 2);
+  eq(/BELOW FLOOR/.test(r.approvalReasons[1]), true);
+  eq(q({ packages: ['Loyalty'] }).needsApproval, false);
 });

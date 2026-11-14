@@ -204,7 +204,6 @@ var SEED = {
       ['AGENTIC_EXTRA_100K', 'ADDON', 'Agentic Marketing – each additional 100,000 receipts after 1 million', 'per month', 500, 'FULL', '', 'ALL', 6, true],
 
       ['STORAGE_10GB', 'USAGE', 'Storage beyond two years of customer data – per every 10 GB / 100,000 receipts', 'per month', 10, 'FULL', '', 'ALL', 1, true],
-      ['PLATFORM_COMMS', 'USAGE', 'Platform charges – outbound multi-channel conversations (email, SMS, chat, WhatsApp & push). Email & push included; SMS & WhatsApp charged extra.', 'per 100,000', 250, 'FX_ONLY', '', 'ALL', 2, true],
       ['SMS', 'USAGE', 'SMS costs (optional)', '', '', 'TEXT', 'Custom quote as per geography', 'ALL', 3, true],
       ['WHATSAPP', 'USAGE', 'WhatsApp charges (optional)', '', '', 'TEXT', 'Actuals as per Meta price list + {whatsapp_markup_pct}', 'ALL', 4, true],
 
@@ -272,6 +271,17 @@ var SEED = {
       ['executive_contact_email', 'amith.lulla@optculture.com', 'SLA escalation – Executive Director'],
       ['legal_email', 'legal@optculture.com', 'ToS contact'],
       ['default_hosting_region', '', 'DPA hosting region (to be confirmed by OC Tech)']
+    ]
+  },
+
+  CommsTiers: {
+    kind: 'master',
+    // Platform charges for outbound multi-channel conversations (email, SMS, chat, WhatsApp & push).
+    // Volume tiers, currency-converted only (no market/slab discount). Price below list needs approval; floor = lowest acceptable.
+    headers: ['tier_id', 'label', 'messages', 'list_usd', 'floor_usd', 'display_order', 'active'],
+    rows: [
+      ['COMMS_100K', 'Platform charges – up to 100,000 conversations / month (email & push included; SMS & WhatsApp charged extra)', 100000, 250, 100, 1, true],
+      ['COMMS_1M', 'Platform charges – up to 1,000,000 conversations / month (email & push included; SMS & WhatsApp charged extra)', 1000000, 1500, 500, 2, true]
     ]
   },
 
@@ -361,7 +371,8 @@ var SEED = {
  *   packages: ['Loyalty', 'Advanced'],          // packages to quote
  *   specialPrices: { Loyalty: 150 },             // optional, per site per month, in quote currency
  *   addOns: ['GIFT_CARDS'],                      // optional ADDON item_ids
- *   oneTimeItems: [{ id: 'MIGRATION_100K', qty: 1 }]   // optional ONE_TIME items (STORE_INSTALL is automatic)
+ *   oneTimeItems: [{ id: 'MIGRATION_100K', qty: 1 }],  // optional ONE_TIME items (STORE_INSTALL is automatic)
+ *   specialComms: { COMMS_100K: 200 }             // optional negotiated platform-comms price per tier, in quote currency
  * }
  */
 
@@ -519,6 +530,23 @@ function buildQuote(master, input) {
     return it ? itemLine(it, Number(sel.qty) || 1) : null;
   }).filter(Boolean);
 
+  // Platform comms: volume tiers, FX only. Special price below list -> approval; below floor is flagged.
+  var comms = (master.CommsTiers || []).filter(function (t) { return isTrue(t.active); })
+    .sort(function (a, b) { return a.display_order - b.display_order; })
+    .map(function (t) {
+      var list = price(t.list_usd, 'FX_ONLY');
+      var floor = price(t.floor_usd, 'FX_ONLY');
+      var sp = (input.specialComms || {})[t.tier_id];
+      var special = (sp === '' || sp === null || sp === undefined) ? null : Number(sp);
+      var fin = special === null ? list : special;
+      if (special !== null && special < list) {
+        approvalReasons.push('Platform comms (' + Number(t.messages).toLocaleString('en-US') + ' / month): special ' + formatMoney(input.currency, special) +
+          ' vs list ' + formatMoney(input.currency, list) + (special < floor ? ' — BELOW FLOOR ' + formatMoney(input.currency, floor) : ''));
+      }
+      return { id: t.tier_id, label: t.label, unit: 'per month', qty: 1, messages: Number(t.messages),
+        listPrice: list, floorPrice: floor, specialPrice: special, unitPrice: fin, total: fin, text: '', belowFloor: special !== null && special < floor };
+    });
+
   var byCat = function (cat) {
     return items.filter(function (i) { return i.category === cat; })
       .sort(function (a, b) { return a.display_order - b.display_order; })
@@ -542,7 +570,8 @@ function buildQuote(master, input) {
     packages: packages,
     optionalOneTime: optionalOneTime,
     optionalOneTimeTotal: optionalOneTime.reduce(function (s, l) { return s + (l.total || 0); }, 0),
-    usage: byCat('USAGE'),
+    comms: comms,
+    usage: comms.concat(byCat('USAGE')),
     consulting: byCat('CONSULTING'),
     rateCardOneTime: byCat('ONE_TIME'),
     rateCardAddOns: byCat('ADDON'),
@@ -747,7 +776,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
     lists.UsageLines = [{
       metric: 'Receipts', included: op.receiptsIncludedPerSite.toLocaleString('en-US') + ' per site / month', rate: m(op.overagePer1000) + ' per additional 1,000'
     }].concat(quote.usage.map(function (l) {
-      return { metric: l.label, included: l.id === 'PLATFORM_COMMS' ? 'Email & push included' : '—', rate: l.text || (m(l.unitPrice) + ' ' + l.unit) };
+      return { metric: l.label, included: /^COMMS_/.test(l.id) ? Number(l.messages).toLocaleString('en-US') + ' conversations / month' : '—', rate: l.text || (m(l.unitPrice) + ' ' + l.unit) };
     }));
 
     lists.OneTimeLines = op.oneTime.concat(quote.optionalOneTime).map(function (l) {

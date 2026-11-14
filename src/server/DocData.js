@@ -180,7 +180,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
     lists.UsageLines = [{
       metric: 'Receipts', included: op.receiptsIncludedPerSite.toLocaleString('en-US') + ' per site / month', rate: m(op.overagePer1000) + ' per additional 1,000'
     }].concat(quote.usage.map(function (l) {
-      return { metric: l.label, included: l.id === 'PLATFORM_COMMS' ? 'Email & push included' : '—', rate: l.text || (m(l.unitPrice) + ' ' + l.unit) };
+      return { metric: l.label, included: /^COMMS_/.test(l.id) ? Number(l.messages).toLocaleString('en-US') + ' conversations / month' : '—', rate: l.text || (m(l.unitPrice) + ' ' + l.unit) };
     }));
 
     lists.OneTimeLines = op.oneTime.concat(quote.optionalOneTime).map(function (l) {
