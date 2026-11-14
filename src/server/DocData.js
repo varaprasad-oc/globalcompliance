@@ -43,12 +43,14 @@ function buildDocData(docType, master, deal, quote, ctx) {
   var country = (master.Countries || []).filter(function (r) { return r.country === c.country; })[0] || {};
   var date = ctx.docDate ? new Date(ctx.docDate) : new Date();
   var user = ctx.user || {};
+  var isAr = ctx.language === 'AR';
+  var fmtDate = isAr ? formatLongDateAr : formatLongDate;
 
   var fields = {
     DocNo: _v(ctx.docNo),
-    DocDate: formatLongDate(date),
+    DocDate: fmtDate(date),
     DocVersion: 'v' + (deal.version || 1),
-    ValidUntil: formatLongDate(_addDays(date, docType === 'ORDER_FORM' ? terms.quote_valid_days : terms.offer_validity_days)),
+    ValidUntil: fmtDate(_addDays(date, docType === 'ORDER_FORM' ? terms.quote_valid_days : terms.offer_validity_days)),
     ProposalNo: _v((ctx.related || {}).PROPOSAL), OrderFormNo: _v((ctx.related || {}).ORDER_FORM),
     TosNo: _v((ctx.related || {}).TOS), DpaNo: _v((ctx.related || {}).DPA),
 
@@ -116,7 +118,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
     // Modules: features included in at least one selected package that have a description
     lists.Modules = featureMatrix(master, pkgNames)
       .filter(function (f) { return f.description && pkgNames.some(function (pn) { return f.values[pn] === 'Included'; }); })
-      .map(function (f) { return { title: f.feature, text: f.description }; });
+      .map(function (f) { return { title: f.feature, text: (isAr && f.descriptionAr) ? f.descriptionAr : f.description }; });
 
     tables.PlanMatrix = {
       headers: ['Capability'].concat(pkgNames),
@@ -178,9 +180,9 @@ function buildDocData(docType, master, deal, quote, ctx) {
     var start = com.startDate ? new Date(com.startDate) : null;
     var term = Number(com.termMonths || 12);
     fields.OrderPackage = op.package;
-    fields.SubscriptionStartDate = start ? formatLongDate(start) : 'On go-live';
+    fields.SubscriptionStartDate = start ? fmtDate(start) : (isAr ? 'عند التشغيل' : 'On go-live');
     fields.SubscriptionTerm = term + ' months';
-    fields.SubscriptionEndDate = start ? formatLongDate(_addMonths(start, term)) : term + ' months from go-live';
+    fields.SubscriptionEndDate = start ? fmtDate(_addMonths(start, term)) : term + ' months from go-live';
     fields.RenewalTerm = term + ' months';
     fields.AutoRenewal = _yesNo(com.autoRenew !== false);
     fields.BillingCycle = _v(com.billingCycle || 'Annual');
@@ -237,7 +239,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
         .map(function (s) { return { name: s.name, service: s.service + (s.condition ? ' (' + s.condition + ')' : ''), location: s.location }; }));
   }
 
-  return { docType: docType, fields: fields, flags: flags, lists: lists, tables: tables, texts: texts, images: images, style: style };
+  return { docType: docType, language: ctx.language || 'EN', fields: fields, flags: flags, lists: lists, tables: tables, texts: texts, images: images, style: style };
 }
 
 /** Required inputs per document; returns missing-field messages. */

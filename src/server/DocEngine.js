@@ -46,6 +46,7 @@ function generateDocument(docType, data, opts) {
   });
   styleAllTableHeaders_(body, (data.style && data.style.tableHeaderBg) || TABLE_STYLE.headerBg);
   sections.forEach(function (sec) { warnings = warnings.concat(highlightLeftovers_(sec)); });
+  if ((opts.language || data.language) === 'AR') applyRtl_(body);
   if (opts.draft) addDraftBanner_(doc);
   doc.saveAndClose();
 
@@ -330,4 +331,20 @@ function addDraftBanner_(doc) {
   var p = header.insertParagraph(0, 'DRAFT – PENDING APPROVAL – NOT FOR CLIENT USE');
   p.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
   p.editAsText().setBold(true).setForegroundColor('#c62828').setFontSize(10);
+}
+
+/** Arabic documents: right-to-left paragraphs (incl. table cells), right-aligned unless centred. */
+function applyRtl_(container) {
+  var n = container.getNumChildren();
+  for (var i = 0; i < n; i++) {
+    var el = container.getChild(i), t = el.getType();
+    if (t === DocumentApp.ElementType.PARAGRAPH || t === DocumentApp.ElementType.LIST_ITEM) {
+      var p = t === DocumentApp.ElementType.PARAGRAPH ? el.asParagraph() : el.asListItem();
+      p.setLeftToRight(false);
+      if (p.getAlignment() !== DocumentApp.HorizontalAlignment.CENTER) p.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+    } else if (t === DocumentApp.ElementType.TABLE) {
+      var tb = el.asTable();
+      for (var r = 0; r < tb.getNumRows(); r++) for (var c = 0; c < tb.getRow(r).getNumCells(); c++) applyRtl_(tb.getRow(r).getCell(c));
+    }
+  }
 }

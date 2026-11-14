@@ -642,12 +642,14 @@ function buildDocData(docType, master, deal, quote, ctx) {
   var country = (master.Countries || []).filter(function (r) { return r.country === c.country; })[0] || {};
   var date = ctx.docDate ? new Date(ctx.docDate) : new Date();
   var user = ctx.user || {};
+  var isAr = ctx.language === 'AR';
+  var fmtDate = isAr ? formatLongDateAr : formatLongDate;
 
   var fields = {
     DocNo: _v(ctx.docNo),
-    DocDate: formatLongDate(date),
+    DocDate: fmtDate(date),
     DocVersion: 'v' + (deal.version || 1),
-    ValidUntil: formatLongDate(_addDays(date, docType === 'ORDER_FORM' ? terms.quote_valid_days : terms.offer_validity_days)),
+    ValidUntil: fmtDate(_addDays(date, docType === 'ORDER_FORM' ? terms.quote_valid_days : terms.offer_validity_days)),
     ProposalNo: _v((ctx.related || {}).PROPOSAL), OrderFormNo: _v((ctx.related || {}).ORDER_FORM),
     TosNo: _v((ctx.related || {}).TOS), DpaNo: _v((ctx.related || {}).DPA),
 
@@ -715,7 +717,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
     // Modules: features included in at least one selected package that have a description
     lists.Modules = featureMatrix(master, pkgNames)
       .filter(function (f) { return f.description && pkgNames.some(function (pn) { return f.values[pn] === 'Included'; }); })
-      .map(function (f) { return { title: f.feature, text: f.description }; });
+      .map(function (f) { return { title: f.feature, text: (isAr && f.descriptionAr) ? f.descriptionAr : f.description }; });
 
     tables.PlanMatrix = {
       headers: ['Capability'].concat(pkgNames),
@@ -777,9 +779,9 @@ function buildDocData(docType, master, deal, quote, ctx) {
     var start = com.startDate ? new Date(com.startDate) : null;
     var term = Number(com.termMonths || 12);
     fields.OrderPackage = op.package;
-    fields.SubscriptionStartDate = start ? formatLongDate(start) : 'On go-live';
+    fields.SubscriptionStartDate = start ? fmtDate(start) : (isAr ? 'عند التشغيل' : 'On go-live');
     fields.SubscriptionTerm = term + ' months';
-    fields.SubscriptionEndDate = start ? formatLongDate(_addMonths(start, term)) : term + ' months from go-live';
+    fields.SubscriptionEndDate = start ? fmtDate(_addMonths(start, term)) : term + ' months from go-live';
     fields.RenewalTerm = term + ' months';
     fields.AutoRenewal = _yesNo(com.autoRenew !== false);
     fields.BillingCycle = _v(com.billingCycle || 'Annual');
@@ -836,7 +838,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
         .map(function (s) { return { name: s.name, service: s.service + (s.condition ? ' (' + s.condition + ')' : ''), location: s.location }; }));
   }
 
-  return { docType: docType, fields: fields, flags: flags, lists: lists, tables: tables, texts: texts, images: images, style: style };
+  return { docType: docType, language: ctx.language || 'EN', fields: fields, flags: flags, lists: lists, tables: tables, texts: texts, images: images, style: style };
 }
 
 /** Required inputs per document; returns missing-field messages. */
@@ -1043,6 +1045,7 @@ function cloneDeal(deal, newId) {
   c.version = 1;
   c.status = DEAL_STATUS.DRAFT;
   c.client = c.client || {};
+  delete c.docNos; delete c.pricingSnapshot; delete c.approvalNote; delete c.aiDraft;  // a clone gets new numbers and today's prices
   return c;
 }
 
@@ -1153,6 +1156,95 @@ function generationEmail(deal, results, mode) {
   if (mode === 'DRAFT') lines.push('These are DRAFTS pending Amith’s approval of the special pricing. Do not send them to the client.');
   lines.push('— OptCulture Sales Docs');
   return { subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'OptCulture documents – ' + (c.shortName || c.legalName || deal.dealId), body: lines.join('\n') };
+}
+
+// ===================== AdminLogic.js =====================
+/**
+ * Sprint 9: admin rules, price snapshots and language availability. Pure JS (Apps Script + Node tests).
+ */
+
+/** Tabs the Superadmin may edit in the app, with column types and the key column. */
+var ADMIN_TABS = {
+  Users: { key: 'email', bool: ['active'], numeric: [] },
+  Entities: { key: 'entity_id', bool: ['active'], numeric: [] },
+  Countries: { key: 'country', bool: [], numeric: [] },
+  Markets: { key: 'market', bool: [], numeric: ['discount'] },
+  Currencies: { key: 'code', bool: [], numeric: ['fx_rate', 'rounding_step'] },
+  Slabs: { key: 'label', bool: [], numeric: ['min_sites', 'max_sites', 'discount'] },
+  Packages: { key: 'package', bool: ['active'], numeric: ['price_per_site_month', 'setup_fee', 'ecom_install_fee', 'overage_per_1000_receipts', 'receipts_included_per_site', 'display_order'] },
+  PriceItems: { key: 'item_id', bool: ['active'], numeric: ['usd_price', 'display_order'] },
+  CommsTiers: { key: 'tier_id', bool: ['active'], numeric: ['messages', 'list_usd', 'floor_usd', 'display_order'] },
+  Features: { key: 'feature', bool: [], numeric: ['display_order'] },
+  CommercialTerms: { key: 'key', bool: [], numeric: [] },
+  SubProcessors: { key: 'name', bool: ['active'], numeric: ['display_order'] },
+  Templates: { key: 'file_id', bool: ['active'], numeric: [] },
+  AIPrompts: { key: 'key', bool: [], numeric: ['temperature'] }
+};
+
+/** Pricing tabs frozen into each deal so old deals keep their prices after a price-list change. */
+var PRICING_TABS = ['Markets', 'Currencies', 'Slabs', 'Packages', 'PriceItems', 'CommsTiers', 'CommercialTerms'];
+
+/** Validate and type a row before saving. Returns {ok, row, errors}. */
+function coerceAdminRow(tab, headers, obj) {
+  var cfg = ADMIN_TABS[tab];
+  if (!cfg) return { ok: false, errors: ['This tab cannot be edited in the app: ' + tab] };
+  var errors = [], row = {};
+  headers.forEach(function (h) {
+    var v = obj[h];
+    if (cfg.bool.indexOf(h) !== -1) v = v === true || String(v).toUpperCase() === 'TRUE';
+    else if (cfg.numeric.indexOf(h) !== -1) {
+      if (v === '' || v === null || v === undefined) v = '';
+      else if (isNaN(Number(v))) errors.push(h + ' must be a number');
+      else v = Number(v);
+    } else v = v === undefined || v === null ? '' : String(v).trim();
+    row[h] = v;
+  });
+  if (!row[cfg.key] && row[cfg.key] !== 0) errors.push(cfg.key + ' is required');
+  if (tab === 'Users') {
+    if (!/^[^@\s]+@optculture\.com$/i.test(row.email)) errors.push('User email must end with @optculture.com');
+    if (['Rep', 'Manager', 'Superadmin'].indexOf(row.role) === -1) errors.push('Role must be Rep, Manager or Superadmin');
+    if (row.manager_email && !/@optculture\.com$/i.test(row.manager_email)) errors.push('Manager email must end with @optculture.com');
+    row.email = String(row.email).toLowerCase();
+  }
+  ['discount'].forEach(function (k) { if (k in row && row[k] !== '' && (row[k] < 0 || row[k] >= 1)) errors.push('discount must be between 0 and 0.99 (e.g. 0.25 for 25%)'); });
+  if (tab === 'Currencies' && !(row.fx_rate > 0)) errors.push('fx_rate must be greater than 0');
+  if (tab === 'CommsTiers' && row.floor_usd !== '' && row.list_usd !== '' && row.floor_usd > row.list_usd) errors.push('floor_usd cannot be above list_usd');
+  if (tab === 'Features') ['Engagement', 'Loyalty', 'Advanced'].forEach(function (p) { if (p in row && ['Included', 'Not included', 'Add-on'].indexOf(row[p]) === -1) errors.push(p + ' must be Included, Not included or Add-on'); });
+  if (tab === 'Templates' && ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].indexOf(row.doc_type) === -1) errors.push('doc_type must be PROPOSAL, ORDER_FORM, TOS or DPA');
+  if (tab === 'Templates' && ['EN', 'AR', 'BI'].indexOf(row.language) === -1) errors.push('language must be EN, AR or BI');
+  return { ok: errors.length === 0, row: row, errors: errors };
+}
+
+/** Copy of the pricing tabs (stored with a deal at first save). */
+function pricingSnapshot(master) {
+  var s = { takenAt: new Date().toISOString() };
+  PRICING_TABS.forEach(function (t) { s[t] = JSON.parse(JSON.stringify(master[t] || [])); });
+  return s;
+}
+
+/** Master with the deal's frozen pricing tabs (non-pricing tabs stay current). */
+function withSnapshot(master, snap) {
+  if (!snap) return master;
+  var m = {};
+  Object.keys(master).forEach(function (k) { m[k] = master[k]; });
+  PRICING_TABS.forEach(function (t) { if (snap[t]) m[t] = snap[t]; });
+  return m;
+}
+
+/** Which languages have an active template per document type: {PROPOSAL: ['EN'], ...} */
+function availableLanguages(master) {
+  var out = { PROPOSAL: [], ORDER_FORM: [], TOS: [], DPA: [] };
+  (master.Templates || []).forEach(function (t) {
+    if (isTrue(t.active) && t.file_id && out[t.doc_type] && out[t.doc_type].indexOf(t.language) === -1) out[t.doc_type].push(t.language);
+  });
+  return out;
+}
+
+/** Arabic long date, e.g. "1 نوفمبر 2026": Arabic month names, Western digits (common in GCC contracts). */
+function formatLongDateAr(d) {
+  d = new Date(d);
+  var months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
 }
 
 // ===================== MasterData.js =====================
@@ -1331,6 +1423,7 @@ function apiFormLists() {
   return {
     countries: m.Countries,
     entities: m.Entities.filter(function (e) { return isTrue(e.active); }).map(function (e) { return { id: e.entity_id, name: e.legal_name, type: e.type, country: e.country }; }),
+    languages: availableLanguages(m),
     commsTiers: (m.CommsTiers || []).filter(function (t) { return isTrue(t.active); }).map(function (t) { return { id: t.tier_id, messages: t.messages, label: t.label }; }),
     clients: readRecords_('Clients').filter(function (r) { return canAccessDeal(user, r.owner_email, m.Users); }).map(function (r) {
       return { clientId: r.client_id, legalName: r.legal_name, shortName: r.short_name, country: r.country, address: r.address,
@@ -1345,7 +1438,7 @@ function safeJson_(s) { try { return JSON.parse(s || '{}'); } catch (e) { return
 /** Live check while the rep fills the form (no saving). */
 function apiEvaluateDeal(deal) {
   requireUser_();
-  var m = getMaster();
+  var m = withSnapshot(getMaster(), deal.refreshPrices ? null : deal.pricingSnapshot);
   applyCountryDefaults(m, deal);
   return { deal: deal, evaluation: evaluateDeal(m, deal) };
 }
@@ -1368,8 +1461,9 @@ function apiSaveDeal(deal) {
     }
     if (existing && existing.status === DEAL_STATUS.REJECTED) deal.status = DEAL_STATUS.DRAFT;
     if (!deal.dealId) { deal.dealId = newId_('D'); deal.version = 1; deal.status = DEAL_STATUS.DRAFT; }
+    if (!deal.pricingSnapshot || deal.refreshPrices) { deal.pricingSnapshot = pricingSnapshot(m); delete deal.refreshPrices; }
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
-    var ev = evaluateDeal(m, deal);
+    var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var rec = dealRecord(deal, ev, user.email, new Date().toISOString(), existing);
     writeRecord_('Deals', rec, existing ? existing._row : null);
     audit_(existing ? 'DEAL_UPDATED' : 'DEAL_CREATED', { version: deal.version, needsApproval: ev.needsApproval }, deal.dealId);
@@ -1395,7 +1489,7 @@ function apiGetDeal(dealId) {
   var deal = JSON.parse(rec.input_json);
   deal.status = rec.status;
   audit_('DEAL_VIEWED', {}, dealId);
-  return { deal: deal, evaluation: evaluateDeal(getMaster(), deal), summary: dealSummary(rec) };
+  return { deal: deal, evaluation: evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal), summary: dealSummary(rec) };
 }
 
 function apiCloneDeal(dealId) {
@@ -1456,6 +1550,7 @@ function generateDocument(docType, data, opts) {
   });
   styleAllTableHeaders_(body, (data.style && data.style.tableHeaderBg) || TABLE_STYLE.headerBg);
   sections.forEach(function (sec) { warnings = warnings.concat(highlightLeftovers_(sec)); });
+  if ((opts.language || data.language) === 'AR') applyRtl_(body);
   if (opts.draft) addDraftBanner_(doc);
   doc.saveAndClose();
 
@@ -1742,6 +1837,22 @@ function addDraftBanner_(doc) {
   p.editAsText().setBold(true).setForegroundColor('#c62828').setFontSize(10);
 }
 
+/** Arabic documents: right-to-left paragraphs (incl. table cells), right-aligned unless centred. */
+function applyRtl_(container) {
+  var n = container.getNumChildren();
+  for (var i = 0; i < n; i++) {
+    var el = container.getChild(i), t = el.getType();
+    if (t === DocumentApp.ElementType.PARAGRAPH || t === DocumentApp.ElementType.LIST_ITEM) {
+      var p = t === DocumentApp.ElementType.PARAGRAPH ? el.asParagraph() : el.asListItem();
+      p.setLeftToRight(false);
+      if (p.getAlignment() !== DocumentApp.HorizontalAlignment.CENTER) p.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
+    } else if (t === DocumentApp.ElementType.TABLE) {
+      var tb = el.asTable();
+      for (var r = 0; r < tb.getNumRows(); r++) for (var c = 0; c < tb.getRow(r).getNumCells(); c++) applyRtl_(tb.getRow(r).getCell(c));
+    }
+  }
+}
+
 // ===================== Ai.js =====================
 /**
  * Sprint 7: Gemini via Vertex AI. Uses the web app owner's Google token (cloud-platform scope) and the
@@ -1819,8 +1930,9 @@ function generateForDeal_(dealId, user) {
   var m = getMaster(true);
   var rec = findDeal_(dealId);
   var deal = JSON.parse(rec.input_json);
-  applyCountryDefaults(m, deal);
-  var ev = evaluateDeal(m, deal);
+  var pm = withSnapshot(m, deal.pricingSnapshot);
+  applyCountryDefaults(pm, deal);
+  var ev = evaluateDeal(pm, deal);
   var plan = planGeneration(deal, ev, rec.approval_status);
   if (!plan.ok) throw new Error(plan.reason);
 
@@ -1837,12 +1949,13 @@ function generateForDeal_(dealId, user) {
 
   var results = [];
   plan.docTypes.forEach(function (t) {
-    var data = buildDocData(t, m, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: deal.docNos });
+    var lang = docLanguage_(deal, t, pm);
+    var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: deal.docNos, language: lang });
     try {
       var r = generateDocument(t, data, { clientName: deal.client.shortName || deal.client.legalName, version: deal.version, draft: plan.mode === 'DRAFT',
-        language: deal.language || 'EN', shareWith: shareWith });
-      var tpl = getActiveTemplate_(t, deal.language || 'EN');
-      appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: deal.language || 'EN', version: deal.version,
+        language: lang, shareWith: shareWith });
+      var tpl = getActiveTemplate_(t, lang);
+      appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: lang, version: deal.version,
         template_version: tpl.version, doc_file_id: r.docId, pdf_file_id: r.pdfId, created_by: user.email, created_at: new Date(),
         status: plan.mode === 'DRAFT' ? 'Draft' : 'Final' });
       results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], docUrl: r.docUrl, pdfUrl: r.pdfUrl, warnings: r.warnings });
@@ -1910,6 +2023,12 @@ function notifyApprovers_(deal, ev, user) {
     ev.approvalReasons.join('\n- ') + ((deal.approvalNote) ? '\n\nRep note: ' + deal.approvalNote : '') + '\n\nReview in the app (Approvals): ' + url;
   try { MailApp.sendEmail({ to: to.join(','), subject: 'Approval needed – ' + ((deal.client || {}).shortName || (deal.client || {}).legalName), body: body, name: CONFIG.APP_NAME }); }
   catch (e) { console.warn('approval email failed: ' + e); }
+}
+
+/** Language for one document: the deal's language if an active template exists for it, otherwise English. */
+function docLanguage_(deal, docType, master) {
+  var want = deal.language || 'EN';
+  return (availableLanguages(master)[docType] || []).indexOf(want) !== -1 ? want : 'EN';
 }
 
 // ===================== Approvals.js =====================
@@ -2017,6 +2136,98 @@ function apiResyncSharing() {
   });
   audit_('SHARING_RESYNC', { documents: n });
   return n;
+}
+
+// ===================== Admin.js =====================
+/**
+ * Sprint 9: Superadmin screens – edit master data in the app (with validation, cache refresh, audit + ChangeLog)
+ * and register new template versions (checked for unknown placeholders before activation).
+ */
+
+function apiAdminTabs() {
+  requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  return Object.keys(ADMIN_TABS);
+}
+
+function apiAdminGetTab(tab) {
+  requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  if (!ADMIN_TABS[tab]) throw new Error('Not editable: ' + tab);
+  var rows = readRecords_(tab).map(function (r) {
+    var o = {};
+    Object.keys(r).forEach(function (k) { o[k] = r[k] instanceof Date ? r[k].toISOString() : r[k]; });
+    return o;
+  });
+  return { tab: tab, headers: SEED[tab].headers, key: ADMIN_TABS[tab].key, rows: rows };
+}
+
+/** Save one row (rowNumber = sheet row to overwrite, or null to add). */
+function apiAdminSaveRow(tab, rowNumber, obj, reason) {
+  var user = requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  var headers = SEED[tab] && SEED[tab].headers;
+  var res = coerceAdminRow(tab, headers || [], obj || {});
+  if (!res.ok) throw new Error(res.errors.join('; '));
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var existing = readRecords_(tab);
+    var key = ADMIN_TABS[tab].key;
+    var clash = existing.filter(function (r) { return String(r[key]) === String(res.row[key]) && r._row !== rowNumber; })[0];
+    if (clash) throw new Error(key + ' "' + res.row[key] + '" already exists (row ' + clash._row + ').');
+    var before = rowNumber ? existing.filter(function (r) { return r._row === rowNumber; })[0] : null;
+    if (rowNumber && !before) throw new Error('Row not found – reload and try again.');
+    writeRecord_(tab, res.row, rowNumber || null);
+    clearMasterCache();
+    var changed = before ? headers.filter(function (h) { return String(before[h]) !== String(res.row[h]); }) : headers;
+    appendRecord_('ChangeLog', { date: new Date(), raised_by: user.email, area: tab, change: (before ? 'Edited ' : 'Added ') + res.row[key] + ': ' +
+      changed.map(function (h) { return h + (before ? ' ' + before[h] + ' → ' : ' = ') + res.row[h]; }).join('; ') + (reason ? ' — ' + reason : ''),
+      gate_affected: PRICING_TABS.indexOf(tab) !== -1 ? 'G2 pricing' : '', status: 'Applied', sprint: '' });
+    audit_('ADMIN_SAVE', { tab: tab, key: res.row[key], changed: changed });
+    return { ok: true, changed: changed };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Check a Google Doc as a template for docType: unknown placeholders and unbalanced IF blocks. */
+function apiAdminCheckTemplate(fileIdOrUrl, docType) {
+  requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  var id = String(fileIdOrUrl).replace(/^.*\/d\/([a-zA-Z0-9_-]+).*$/, '$1');
+  var doc = DocumentApp.openById(id);
+  var text = [doc.getBody().getText(), doc.getHeader() ? doc.getHeader().getText() : '', doc.getFooter() ? doc.getFooter().getText() : ''].join('\n');
+  var m = getMaster();
+  var sample = sampleDealForChecks_();
+  var data = buildDocData(docType, m, sample, buildQuote(m, sample.commercial), { docNo: 'CHECK', related: { PROPOSAL: 'x', ORDER_FORM: 'x', TOS: 'x', DPA: 'x' } });
+  var unknown = checkTemplateTokens(text, data).filter(function (t) { return ['label', 'amount', 'title', 'text'].indexOf(t) === -1; });
+  var opens = (text.match(/\{\{#IF !?\w+\}\}/g) || []).length, closes = (text.match(/\{\{\/IF \w+\}\}/g) || []).length;
+  return { fileId: id, title: doc.getName(), unknown: unknown, ifBalanced: opens === closes, ok: unknown.length === 0 && opens === closes };
+}
+
+/** Register a new template version: checks it, deactivates the previous active one for the same type + language. */
+function apiAdminRegisterTemplate(fileIdOrUrl, docType, language, version, notes) {
+  var user = requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  var chk = apiAdminCheckTemplate(fileIdOrUrl, docType);
+  if (!chk.ok) throw new Error('Template has problems: ' + (chk.unknown.length ? 'unknown placeholders ' + chk.unknown.join(', ') : '') + (chk.ifBalanced ? '' : ' unbalanced {{#IF}} blocks'));
+  readRecords_('Templates').forEach(function (t) {
+    if (t.doc_type === docType && t.language === language && isTrue(t.active)) { t.active = false; writeRecord_('Templates', t, t._row); }
+  });
+  apiAdminSaveRow('Templates', null, { doc_type: docType, language: language, file_id: chk.fileId, version: "'" + String(version || ''), active: true, notes: notes || ('Registered by ' + user.email) },
+    'New ' + language + ' template for ' + docType);
+  try { DriveApp.getFileById(chk.fileId).moveTo(DriveApp.getFolderById(getProp_('FOLDER_TEMPLATES'))); } catch (e) { /* already there or no access */ }
+  return chk;
+}
+
+function sampleDealForChecks_() {
+  return {
+    dealId: 'CHECK', version: 1,
+    client: { legalName: 'Sample Client LLC', shortName: 'Sample', country: 'United Arab Emirates', address: 'Dubai', regNo: '1', brands: 'A, B', pos: 'POS', ecomPlatform: 'Shop',
+      businessContact: { name: 'a', email: 'a@example.com' }, billingContact: { name: 'b', email: 'b@example.com' }, signatoryName: 'S', signatoryTitle: 'T' },
+    entityId: 'OC-AE',
+    commercial: { market: 'High Income', currency: 'AED', stores: 12, ecomSites: 1, packages: ['Loyalty', 'Advanced'], specialPrices: { Loyalty: 300 }, addOns: ['GIFT_CARDS'],
+      oneTimeItems: [{ id: 'MIGRATION_100K', qty: 1 }], orderPackage: 'Loyalty', termMonths: 12, msaRef: 'MSA-1', poNumber: 'PO-1' },
+    proposal: { multiBrand: true, showConsulting: true },
+    narrative: { executiveSummary: 'x', journeys: ['A: b'], multiBrandIntro: 'y' },
+    dpa: { hostingRegion: 'x' }
+  };
 }
 
 // ===================== SetupMasterSheet.js =====================

@@ -3,21 +3,23 @@
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = vm.createContext({ console });
-['Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js', 'DealLogic.js', 'AiLogic.js', 'GenLogic.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/server', f), 'utf8'), ctx));
+['Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js', 'DealLogic.js', 'AiLogic.js', 'GenLogic.js', 'AdminLogic.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/server', f), 'utf8'), ctx));
 const M = ctx.masterFromSeed(ctx.SEED);
+M.Templates = ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].map((t) => ({ doc_type: t, language: 'EN', file_id: 'f-' + t, active: true })).concat([{ doc_type: 'TOS', language: 'AR', file_id: 'f-ar', active: true }]);
 let USER = { ok: true, email: 'varaprasad@optculture.com', name: 'Varaprasad SN', role: 'Manager' };
 const store = { deals: {}, clients: [], approvals: [] }; let seq = 0;
 const api = {
   apiBootstrap: () => ({ user: USER, lists: { markets: M.Markets.map((r) => r.market), currencies: M.Currencies.map((r) => r.code), packages: M.Packages.map((r) => r.package), countries: M.Countries,
     addOns: M.PriceItems.filter((r) => r.category === 'ADDON').map((r) => ({ id: r.item_id, label: r.label, packages: r.packages })),
     oneTimeItems: M.PriceItems.filter((r) => r.category === 'ONE_TIME' && r.item_id !== 'STORE_INSTALL').map((r) => ({ id: r.item_id, label: r.label, unit: r.unit })) } }),
-  apiFormLists: () => ({ countries: M.Countries, entities: M.Entities.map((e) => ({ id: e.entity_id, name: e.legal_name, type: e.type, country: e.country })),
+  apiFormLists: () => ({ languages: ctx.availableLanguages(M), countries: M.Countries, entities: M.Entities.map((e) => ({ id: e.entity_id, name: e.legal_name, type: e.type, country: e.country })),
     commsTiers: M.CommsTiers.map((t) => ({ id: t.tier_id, messages: t.messages, label: t.label })), clients: store.clients }),
-  apiEvaluateDeal: (d) => { ctx.applyCountryDefaults(M, d); return { deal: d, evaluation: ctx.evaluateDeal(M, d) }; },
+  apiEvaluateDeal: (d) => { const m = ctx.withSnapshot(M, d.refreshPrices ? null : d.pricingSnapshot); ctx.applyCountryDefaults(m, d); return { deal: d, evaluation: ctx.evaluateDeal(m, d) }; },
   apiSaveDeal: (d) => { ctx.applyCountryDefaults(M, d); const ex = d.dealId ? store.deals[d.dealId] : null; if (!d.dealId) { d.dealId = 'D-TEST-' + (++seq); d.version = 1; d.status = 'Draft'; }
-    const ev = ctx.evaluateDeal(M, d); const rec = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), ex); store.deals[d.dealId] = rec; return { deal: d, evaluation: ev, summary: ctx.dealSummary(rec) }; },
+    if (!d.pricingSnapshot || d.refreshPrices) { d.pricingSnapshot = ctx.pricingSnapshot(M); delete d.refreshPrices; }
+    const ev = ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d); const rec = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), ex); store.deals[d.dealId] = rec; return { deal: d, evaluation: ev, summary: ctx.dealSummary(rec) }; },
   apiListDeals: () => Object.values(store.deals).map(ctx.dealSummary),
-  apiGetDeal: (id) => { const r = store.deals[id]; const d = JSON.parse(r.input_json); return { deal: d, evaluation: ctx.evaluateDeal(M, d), summary: ctx.dealSummary(r) }; },
+  apiGetDeal: (id) => { const r = store.deals[id]; const d = JSON.parse(r.input_json); return { deal: d, evaluation: ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d), summary: ctx.dealSummary(r) }; },
   apiCloneDeal: (id) => { const c = ctx.cloneDeal(JSON.parse(store.deals[id].input_json), null); c.dealId = null; return api.apiSaveDeal(c); },
   apiPreviewQuote: (i) => ctx.buildQuote(M, i),
   apiDraftNarrative: (d, o) => { ctx.buildNarrativePrompt(M, d, o); return ctx.sanitizeNarrative(JSON.stringify({ executiveSummary: 'FRG is a leading franchisee.\n\nOne program for every brand. It costs USD 70.', journeys: ['Win-back: lapsed shoppers get bonus points.'], multiBrandIntro: 'Shared wallet.' }), M); },
@@ -35,6 +37,12 @@ const api = {
   apiDecideApproval: (aid, dec, comment) => { const a = store.approvals.find((x) => x.approvalId === aid); a.decision = dec; const r = store.deals[a.dealId]; r.approval_status = dec; r.status = dec === 'Approved' ? 'Approved' : 'Rejected';
     const gen = dec === 'Approved' ? api.apiGenerateDocs(a.dealId) : null; return { decision: dec, generation: gen }; },
   apiDashboard: () => { const rows = Object.values(store.deals).map(ctx.dealSummary); return { stats: ctx.dashboardStats(rows, [{ email: 'varaprasad@optculture.com', name: 'Varaprasad SN' }]), deals: rows }; },
+  apiAdminTabs: () => Object.keys(ctx.ADMIN_TABS),
+  apiAdminGetTab: (tab) => ({ tab, headers: ctx.SEED[tab].headers, key: ctx.ADMIN_TABS[tab].key, rows: M[tab].map((r, i) => Object.assign({ _row: i + 2 }, r)) }),
+  apiAdminSaveRow: (tab, rowNo, obj) => { const r = ctx.coerceAdminRow(tab, ctx.SEED[tab].headers, obj); if (!r.ok) throw new Error(r.errors.join('; '));
+    if (rowNo) M[tab][rowNo - 2] = r.row; else M[tab].push(r.row); return { ok: true, changed: ['x'] }; },
+  apiAdminCheckTemplate: () => ({ title: 'Doc', unknown: ['Typo'], ifBalanced: true, ok: false }),
+  apiResyncSharing: () => 0,
   apiSetDealStatus: (id, st) => { const r = store.deals[id]; if (!ctx.canSetStatus(r.status, st)) throw new Error('not allowed'); r.status = st; return ctx.dealSummary(r); }
 };
 (async () => {
@@ -118,6 +126,26 @@ const api = {
   const dash = await p.textContent('#dash');
   check('Dashboard shows tiles and breakdowns', dash.includes('Open pipeline') && dash.includes('By Rep') && dash.includes('Varaprasad SN'));
   await p.screenshot({ path: path.join(out, 'sprint8-dashboard.png'), fullPage: true });
+  // Sprint 9: admin price change does not affect the saved deal; language hint
+  await p.click('nav a[data-view="admin"]'); await p.waitForTimeout(500);
+  await p.selectOption('#admTab', 'Packages'); await p.waitForTimeout(400);
+  await p.click('[data-adm="1"]'); await p.waitForTimeout(200);
+  await p.fill('[data-adm-f="price_per_site_month"]', 'abc'); await p.click('#admSave'); await p.waitForTimeout(300);
+  check('Admin validation rejects a non-number price', (await p.textContent('#toast')).includes('must be a number'));
+  await p.fill('[data-adm-f="price_per_site_month"]', '130'); await p.click('#admSave'); await p.waitForTimeout(400);
+  check('Admin saved new Loyalty price', M.Packages[1].price_per_site_month === 130);
+  check('New deals use the new price', ctx.buildQuote(M, { market: 'Developed', currency: 'USD', stores: 1, ecomSites: 0, packages: ['Loyalty'] }).packages[0].standardPricePerSite === 130);
+  await p.screenshot({ path: path.join(out, 'sprint9-admin.png'), fullPage: true });
+  await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
+  await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(600);
+  check('Saved deal keeps frozen price (USD 75 standard)', (await p.textContent('#review')).includes('USD 75'));
+  await p.click('#steps div[data-step="2"]'); check('Price-freeze notice shown on step 2', (await p.isVisible('#priceFreeze')) && (await p.textContent('#priceFreezeText')).includes('Prices frozen'));
+  await p.click('#steps div[data-step="3"]'); await p.selectOption('#language', 'AR'); await p.waitForTimeout(200);
+  const lh = await p.textContent('#langHint');
+  check('Language hint: Arabic ToS available, others fall back to English', lh.includes('In Arabic: ToS') && lh.includes('Proposal, Order Form, DPA'));
+  await p.click('nav a[data-view="admin"]'); await p.waitForTimeout(300);
+  await p.fill('#tplUrl', 'https://docs.google.com/document/d/abc/edit'); await p.click('#tplCheck'); await p.waitForTimeout(300);
+  check('Template check reports unknown tags', (await p.textContent('#tplResult')).includes('Typo'));
   check('No page errors', errors.length === 0); if (errors.length) console.log(errors);
   await b.close();
 })();

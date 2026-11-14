@@ -57,6 +57,7 @@ function apiFormLists() {
   return {
     countries: m.Countries,
     entities: m.Entities.filter(function (e) { return isTrue(e.active); }).map(function (e) { return { id: e.entity_id, name: e.legal_name, type: e.type, country: e.country }; }),
+    languages: availableLanguages(m),
     commsTiers: (m.CommsTiers || []).filter(function (t) { return isTrue(t.active); }).map(function (t) { return { id: t.tier_id, messages: t.messages, label: t.label }; }),
     clients: readRecords_('Clients').filter(function (r) { return canAccessDeal(user, r.owner_email, m.Users); }).map(function (r) {
       return { clientId: r.client_id, legalName: r.legal_name, shortName: r.short_name, country: r.country, address: r.address,
@@ -71,7 +72,7 @@ function safeJson_(s) { try { return JSON.parse(s || '{}'); } catch (e) { return
 /** Live check while the rep fills the form (no saving). */
 function apiEvaluateDeal(deal) {
   requireUser_();
-  var m = getMaster();
+  var m = withSnapshot(getMaster(), deal.refreshPrices ? null : deal.pricingSnapshot);
   applyCountryDefaults(m, deal);
   return { deal: deal, evaluation: evaluateDeal(m, deal) };
 }
@@ -94,8 +95,9 @@ function apiSaveDeal(deal) {
     }
     if (existing && existing.status === DEAL_STATUS.REJECTED) deal.status = DEAL_STATUS.DRAFT;
     if (!deal.dealId) { deal.dealId = newId_('D'); deal.version = 1; deal.status = DEAL_STATUS.DRAFT; }
+    if (!deal.pricingSnapshot || deal.refreshPrices) { deal.pricingSnapshot = pricingSnapshot(m); delete deal.refreshPrices; }
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
-    var ev = evaluateDeal(m, deal);
+    var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var rec = dealRecord(deal, ev, user.email, new Date().toISOString(), existing);
     writeRecord_('Deals', rec, existing ? existing._row : null);
     audit_(existing ? 'DEAL_UPDATED' : 'DEAL_CREATED', { version: deal.version, needsApproval: ev.needsApproval }, deal.dealId);
@@ -121,7 +123,7 @@ function apiGetDeal(dealId) {
   var deal = JSON.parse(rec.input_json);
   deal.status = rec.status;
   audit_('DEAL_VIEWED', {}, dealId);
-  return { deal: deal, evaluation: evaluateDeal(getMaster(), deal), summary: dealSummary(rec) };
+  return { deal: deal, evaluation: evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal), summary: dealSummary(rec) };
 }
 
 function apiCloneDeal(dealId) {

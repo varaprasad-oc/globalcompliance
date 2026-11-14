@@ -62,7 +62,7 @@
       <a data-view="calc">Price Calculator</a>
       <a data-view="dash" class="role-mgr hidden">Dashboard</a>
       <a data-view="appr" class="role-admin hidden">Approvals <span id="apprCount" class="badge warn hidden"></span></a>
-      <a class="soon role-admin hidden" title="Sprint 9">Admin (soon)</a>
+      <a data-view="admin" class="role-admin hidden">Admin</a>
     </nav>
     <main>
       <div id="denied" class="card hidden"><h2>Access denied</h2><p id="deniedMsg"></p></div>
@@ -129,6 +129,7 @@
               <div id="onetime"></div>
               <h3>Platform messaging (negotiated price, optional)</h3>
               <div class="grid" id="comms"></div>
+              <div id="priceFreeze" class="hidden" style="margin:10px 0"><span class="badge warn" id="priceFreezeText"></span> <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" data-f="refreshPrices" style="width:auto"> Use today’s price list on next save</label></div>
               <h3>Order Form terms</h3>
               <div class="grid">
                 <div><label>Package on the Order Form</label><select data-f="commercial.orderPackage" id="orderPackage"></select></div>
@@ -152,7 +153,7 @@
                 <label><input type="checkbox" data-f="docs.TOS" checked> Terms of Service (+SLA)</label>
                 <label><input type="checkbox" data-f="docs.DPA" checked> DPA (PDPL)</label>
               </div>
-              <div class="grid"><div><label>Language</label><select data-f="language"><option value="EN">English</option><option value="AR" disabled>Arabic (Sprint 9)</option><option value="BI" disabled>Bilingual (Sprint 9)</option></select></div></div>
+              <div class="grid"><div><label>Language</label><select data-f="language" id="language"><option value="EN">English</option><option value="AR">Arabic</option><option value="BI">Bilingual (English + Arabic)</option></select></div><div class="wide"><span id="langHint" class="muted"></span></div></div>
               <h3>Proposal</h3>
               <div class="grid">
                 <div class="wide"><label>Title</label><input data-f="proposal.title" placeholder="Unified Omnichannel Loyalty & Customer Engagement Platform"></div>
@@ -219,6 +220,31 @@
         <div class="card"><h2>Approvals</h2><div id="appr">Loading…</div></div>
       </div>
 
+      <!-- ===================== ADMIN ===================== -->
+      <div id="view-admin" class="hidden">
+        <div class="card">
+          <div class="bar"><h2 style="margin:0">Admin – Master data</h2><span><select id="admTab" style="width:auto"></select> <button class="secondary" id="admAdd">+ Add row</button></span></div>
+          <p class="muted">Changes apply immediately to new deals. Existing deals keep the prices frozen when they were first saved. Every change is logged in ChangeLog and AuditLog.</p>
+          <div id="admEdit" class="card hidden" style="background:var(--soft)"></div>
+          <div id="admTable" style="overflow-x:auto">Loading…</div>
+        </div>
+        <div class="card">
+          <h2>Register a new template version</h2>
+          <p class="muted">Make a copy of the current template in <b>_Templates</b>, edit or translate it (keep every {{tag}}), then paste its link here. The app checks the tags before activating it, and the previous version for that document and language is switched off.</p>
+          <div class="grid">
+            <div class="wide"><label>Google Doc link</label><input id="tplUrl" placeholder="https://docs.google.com/document/d/…"></div>
+            <div><label>Document</label><select id="tplType"><option value="PROPOSAL">Proposal</option><option value="ORDER_FORM">Order Form</option><option value="TOS">Terms of Service</option><option value="DPA">DPA</option></select></div>
+            <div><label>Language</label><select id="tplLang"><option value="EN">English</option><option value="AR">Arabic</option><option value="BI">Bilingual</option></select></div>
+            <div><label>Version</label><input id="tplVer" placeholder="e.g. 1.3"></div>
+            <div class="wide"><label>Notes</label><input id="tplNotes" placeholder="e.g. Arabic translation by …, legal review done"></div>
+          </div>
+          <p><button class="secondary" id="tplCheck">Check template</button> <button id="tplReg">Check &amp; activate</button></p>
+          <div id="tplResult"></div>
+          <h3>Other tools</h3>
+          <p><button class="secondary" id="btnResync">Re-apply document sharing</button> <span class="muted">Use after changing a rep’s manager.</span></p>
+        </div>
+      </div>
+
       <!-- ===================== PRICE CALCULATOR ===================== -->
       <div id="view-calc" class="hidden">
         <div class="card">
@@ -271,11 +297,12 @@
 
   qa('nav a[data-view]').forEach(function (a) { a.onclick = function () { if (a.dataset.view === 'deal' && a.id === 'navNew') newDeal(); show(a.dataset.view); }; });
   function show(v) {
-    ['deal', 'list', 'calc', 'dash', 'appr'].forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
+    ['deal', 'list', 'calc', 'dash', 'appr', 'admin'].forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
     qa('nav a[data-view]').forEach(function (a) { a.classList.toggle('active', a.dataset.view === v); });
     if (v === 'list') loadList();
     if (v === 'dash') loadDash();
     if (v === 'appr') loadApprovals();
+    if (v === 'admin') loadAdmin();
   }
 
   // ---------- form building ----------
@@ -313,6 +340,12 @@
     $('btnNew2').onclick = function () { newDeal(); show('deal'); };
     $('calcBtn').onclick = calc;
     $('fText').oninput = renderList; $('fStatus').onchange = renderList;
+    qa('[data-f^="docs."]').concat([$('language')]).forEach(function (el) { el.addEventListener('change', langHint); });
+    $('admTab').onchange = function () { admLoad($('admTab').value); };
+    $('admAdd').onclick = function () { admEdit(null); };
+    $('tplCheck').onclick = function () { tplRun('apiAdminCheckTemplate'); };
+    $('tplReg').onclick = function () { tplRun('apiAdminRegisterTemplate'); };
+    $('btnResync').onclick = function () { run('apiResyncSharing').then(function (n) { toast('Sharing re-applied on ' + n + ' documents'); }); };
     $('btnAi').onclick = draftAi;
     $('btnGenerate').onclick = generate;
   }
@@ -365,6 +398,10 @@
     if (com.orderPackage) $('orderPackage').value = com.orderPackage;
     $('dealTitle').textContent = d.dealId ? (d.client && d.client.legalName ? d.client.legalName : 'Deal') + ' · ' + d.dealId + ' · v' + (d.version || 1) : 'New Deal';
     $('dealStatus').textContent = d.status || 'Draft';
+    var snap = d.pricingSnapshot;
+    $('priceFreeze').classList.toggle('hidden', !snap);
+    if (snap) $('priceFreezeText').textContent = 'Prices frozen from the price list of ' + String(snap.takenAt).slice(0, 10);
+    langHint();
   }
 
   function newDeal() {
@@ -523,6 +560,65 @@
         };
       });
     });
+  }
+
+  // ---------- languages ----------
+  function langHint() {
+    if (!LISTS || !LISTS.languages) return;
+    var lang = $('language').value, names = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'ToS', DPA: 'DPA' };
+    if (lang === 'EN') { $('langHint').textContent = ''; return; }
+    var sel = Object.keys(names).filter(function (t) { var c = document.querySelector('[data-f="docs.' + t + '"]'); return c && c.checked; });
+    var yes = sel.filter(function (t) { return (LISTS.languages[t] || []).indexOf(lang) !== -1; }), no = sel.filter(function (t) { return yes.indexOf(t) === -1; });
+    $('langHint').innerHTML = (yes.length ? 'In ' + (lang === 'AR' ? 'Arabic' : 'bilingual') + ': ' + yes.map(function (t) { return names[t]; }).join(', ') + '. ' : '') +
+      (no.length ? '<span class="badge warn">No ' + (lang === 'AR' ? 'Arabic' : 'bilingual') + ' template yet for ' + no.map(function (t) { return names[t]; }).join(', ') + ' – these will be generated in English.</span>' : '');
+  }
+
+  // ---------- admin ----------
+  var ADM = null;
+  function loadAdmin() {
+    if ($('admTab').options.length) { admLoad($('admTab').value); return; }
+    run('apiAdminTabs').then(function (tabs) { $('admTab').innerHTML = opts(tabs); admLoad(tabs[0]); });
+  }
+  function admLoad(tab) {
+    $('admTable').innerHTML = 'Loading…'; $('admEdit').classList.add('hidden');
+    run('apiAdminGetTab', tab).then(function (r) {
+      ADM = r;
+      $('admTable').innerHTML = '<table><tr>' + r.headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '<th></th></tr>' + r.rows.map(function (row, i) {
+        return '<tr>' + r.headers.map(function (h) { var v = String(row[h] == null ? '' : row[h]); return '<td>' + esc(v.length > 70 ? v.slice(0, 70) + '…' : v) + '</td>'; }).join('') +
+          '<td><button class="secondary" data-adm="' + i + '">Edit</button></td></tr>';
+      }).join('') + '</table>';
+      qa('[data-adm]').forEach(function (b) { b.onclick = function () { admEdit(ADM.rows[Number(b.dataset.adm)]); }; });
+    });
+  }
+  function admEdit(row) {
+    var box = $('admEdit'); box.classList.remove('hidden');
+    box.innerHTML = '<h3 style="margin-top:0">' + (row ? 'Edit ' + esc(row[ADM.key]) : 'Add row') + ' – ' + esc(ADM.tab) + '</h3><div class="grid">' + ADM.headers.map(function (h) {
+      var v = row ? row[h] : '';
+      var long = String(v || '').length > 60 || /description|prompt|label|address/.test(h);
+      return '<div class="' + (long ? 'wide' : '') + '"><label>' + esc(h) + (h === ADM.key ? ' <span class="req">*</span>' : '') + '</label>' +
+        (long ? '<textarea data-adm-f="' + esc(h) + '">' + esc(v) + '</textarea>' : '<input data-adm-f="' + esc(h) + '" value="' + esc(v) + '">') + '</div>';
+    }).join('') + '<div class="wide"><label>Reason for the change (kept in ChangeLog)</label><input id="admReason"></div></div>' +
+      '<p><button id="admSave">Save</button> <button class="secondary" id="admCancel">Cancel</button></p>';
+    $('admCancel').onclick = function () { box.classList.add('hidden'); };
+    $('admSave').onclick = function () {
+      var o = {}; qa('[data-adm-f]').forEach(function (e) { o[e.dataset.admF] = e.value; });
+      $('admSave').disabled = true;
+      run('apiAdminSaveRow', ADM.tab, row ? row._row : null, o, $('admReason').value).then(function (r) { toast('Saved (' + r.changed.length + ' field(s) changed)'); admLoad(ADM.tab); })
+        .catch(function () { $('admSave').disabled = false; });
+    };
+    box.scrollIntoView({ behavior: 'smooth' });
+  }
+  function tplRun(fn) {
+    var url = $('tplUrl').value.trim();
+    if (!url) { toast('Paste the Google Doc link first'); return; }
+    $('tplResult').innerHTML = '<p class="muted">Checking…</p>';
+    var args = fn === 'apiAdminCheckTemplate' ? [fn, url, $('tplType').value] : [fn, url, $('tplType').value, $('tplLang').value, $('tplVer').value, $('tplNotes').value];
+    run.apply(null, args).then(function (r) {
+      $('tplResult').innerHTML = '<p>' + esc(r.title) + ': ' + (r.ok ? '<span class="badge ok">All tags recognised</span>' : '<span class="badge err">Problems found</span>') + '</p>' +
+        (r.unknown.length ? '<p class="error">Unknown tags: ' + r.unknown.map(esc).join(', ') + '</p>' : '') + (r.ifBalanced ? '' : '<p class="error">Some {{#IF}} blocks are not closed.</p>') +
+        (fn === 'apiAdminRegisterTemplate' ? '<p><span class="badge ok">Activated</span> – new documents will use this template.</p>' : '');
+      run('apiFormLists').then(function (l) { LISTS = l; });
+    }).catch(function (e) { $('tplResult').innerHTML = '<p class="error">' + esc(e.message) + '</p>'; });
   }
 
   // ---------- AI drafting ----------

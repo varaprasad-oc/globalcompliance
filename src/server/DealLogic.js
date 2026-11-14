@@ -170,5 +170,6 @@ function cloneDeal(deal, newId) {
   c.version = 1;
   c.status = DEAL_STATUS.DRAFT;
   c.client = c.client || {};
+  delete c.docNos; delete c.pricingSnapshot; delete c.approvalNote; delete c.aiDraft;  // a clone gets new numbers and today's prices
   return c;
 }

@@ -16,8 +16,9 @@ function generateForDeal_(dealId, user) {
   var m = getMaster(true);
   var rec = findDeal_(dealId);
   var deal = JSON.parse(rec.input_json);
-  applyCountryDefaults(m, deal);
-  var ev = evaluateDeal(m, deal);
+  var pm = withSnapshot(m, deal.pricingSnapshot);
+  applyCountryDefaults(pm, deal);
+  var ev = evaluateDeal(pm, deal);
   var plan = planGeneration(deal, ev, rec.approval_status);
   if (!plan.ok) throw new Error(plan.reason);
 
@@ -34,12 +35,13 @@ function generateForDeal_(dealId, user) {
 
   var results = [];
   plan.docTypes.forEach(function (t) {
-    var data = buildDocData(t, m, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: deal.docNos });
+    var lang = docLanguage_(deal, t, pm);
+    var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: deal.docNos, language: lang });
     try {
       var r = generateDocument(t, data, { clientName: deal.client.shortName || deal.client.legalName, version: deal.version, draft: plan.mode === 'DRAFT',
-        language: deal.language || 'EN', shareWith: shareWith });
-      var tpl = getActiveTemplate_(t, deal.language || 'EN');
-      appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: deal.language || 'EN', version: deal.version,
+        language: lang, shareWith: shareWith });
+      var tpl = getActiveTemplate_(t, lang);
+      appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: lang, version: deal.version,
         template_version: tpl.version, doc_file_id: r.docId, pdf_file_id: r.pdfId, created_by: user.email, created_at: new Date(),
         status: plan.mode === 'DRAFT' ? 'Draft' : 'Final' });
       results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], docUrl: r.docUrl, pdfUrl: r.pdfUrl, warnings: r.warnings });
@@ -107,4 +109,10 @@ function notifyApprovers_(deal, ev, user) {
     ev.approvalReasons.join('\n- ') + ((deal.approvalNote) ? '\n\nRep note: ' + deal.approvalNote : '') + '\n\nReview in the app (Approvals): ' + url;
   try { MailApp.sendEmail({ to: to.join(','), subject: 'Approval needed – ' + ((deal.client || {}).shortName || (deal.client || {}).legalName), body: body, name: CONFIG.APP_NAME }); }
   catch (e) { console.warn('approval email failed: ' + e); }
+}
+
+/** Language for one document: the deal's language if an active template exists for it, otherwise English. */
+function docLanguage_(deal, docType, master) {
+  var want = deal.language || 'EN';
+  return (availableLanguages(master)[docType] || []).indexOf(want) !== -1 ? want : 'EN';
 }
