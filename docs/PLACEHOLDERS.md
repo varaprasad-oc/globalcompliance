@@ -83,7 +83,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{SupportPhone}}` | +91 9666004933 |
 | `{{SupportHours}}` | Monday to Friday, 10 AM to 6 PM |
 | `{{ExecutiveName}}` | Amith Lulla |
-| `{{ExecutiveEmail}}` | amith@optculture.com |
+| `{{ExecutiveEmail}}` | amith.lulla@optculture.com |
 | `{{LegalEmail}}` | legal@optculture.com |
 | `{{ProposalTitle}}` | Unified Omnichannel Loyalty & Customer Engagement Platform |
 | `{{ProposalTagline}}` | Earn anywhere. Redeem everywhere. |
@@ -184,7 +184,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{SupportPhone}}` | +91 9666004933 |
 | `{{SupportHours}}` | Monday to Friday, 10 AM to 6 PM |
 | `{{ExecutiveName}}` | Amith Lulla |
-| `{{ExecutiveEmail}}` | amith@optculture.com |
+| `{{ExecutiveEmail}}` | amith.lulla@optculture.com |
 | `{{LegalEmail}}` | legal@optculture.com |
 | `{{OrderPackage}}` | Loyalty |
 | `{{SubscriptionStartDate}}` | 1st December 2026 |
@@ -282,7 +282,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{SupportPhone}}` | +91 9666004933 |
 | `{{SupportHours}}` | Monday to Friday, 10 AM to 6 PM |
 | `{{ExecutiveName}}` | Amith Lulla |
-| `{{ExecutiveEmail}}` | amith@optculture.com |
+| `{{ExecutiveEmail}}` | amith.lulla@optculture.com |
 | `{{LegalEmail}}` | legal@optculture.com |
 
 ### Flags
@@ -362,7 +362,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{SupportPhone}}` | +91 9666004933 |
 | `{{SupportHours}}` | Monday to Friday, 10 AM to 6 PM |
 | `{{ExecutiveName}}` | Amith Lulla |
-| `{{ExecutiveEmail}}` | amith@optculture.com |
+| `{{ExecutiveEmail}}` | amith.lulla@optculture.com |
 | `{{LegalEmail}}` | legal@optculture.com |
 | `{{DpaAddendum}}` | 4D |
 | `{{HostingRegion}}` | EU (Frankfurt) |

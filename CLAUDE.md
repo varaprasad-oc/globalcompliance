@@ -17,7 +17,7 @@ as Google Doc + PDF in a Shared Drive. Pricing comes from a Master Sheet; Gemini
 - When a sprint completes, give a **detailed sprint update**: what was built, how it was verified, open items, and what's needed from OptCulture.
 - Ask questions as choose-one options (AskUserQuestion), one batch at a time.
 - No high-end tech: Apps Script, Sheets, Docs, Drive only (plus Vertex AI Gemini).
-- Superadmin and sole approver: Amith (CEO), amith@optculture.com. Users are all @optculture.com.
+- Superadmin and sole approver: Amith (CEO), amith.lulla@optculture.com. Users are all @optculture.com.
 - Commit and push work to `main` (the stop hook requires a clean tree).
 
 ## Code layout

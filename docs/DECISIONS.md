@@ -35,7 +35,7 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - Rep edits/regenerates; AI draft + final both logged
 
 ## People & storage
-- Superadmin: Amith (CEO) – amith@optculture.com
+- Superadmin: Amith (CEO) – amith.lulla@optculture.com
 - Root folder in Amith's Drive with subfolders:
   - Proposals
   - Quotations & Order Forms
@@ -60,7 +60,7 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - ToS liability cap: 12 months of fees
 - ToS: add 24-month non-solicitation of employees clause
 - Email/push platform fee: USD 250 per 100,000 (rate card correct)
-- Superadmin / escalation contact: amith@optculture.com
+- Superadmin / escalation contact: amith.lulla@optculture.com
 - Fix old-agreement errors when reusing wording (5.4 Customer, 2.1 "third party", 9.8, IP indemnity not US-only)
 - Legal text to be reviewed by counsel before client use
 
@@ -70,3 +70,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - DPA: one core DPA + country addendum chosen automatically from client location (KSA PDPL, UAE PDPL, India DPDP, Egypt PDPL, EU/UK GDPR, other)
 - When a partner contracts, OptCulture's platform entity is listed as sub-processor
 - DPA drafted by Claude for legal review (docs/templates/DPA.md)
+
+## Correction (2026-11-14)
+- Amith's Google account is **amith.lulla@optculture.com** (not amith@). Updated in the code, docs and the live Master Sheet (Users, CommercialTerms).

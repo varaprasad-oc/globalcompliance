@@ -181,7 +181,7 @@ Create tabs, each with an ID column and data validation:
 ### 5.3 ToS, DPA & SLA templates
 1. ToS: add the 24-month non-solicitation clause, an entity list including RIS Services DMCC and the partner clause, and the Contracting Entity & Jurisdiction Schedule.
 2. DPA: core plus addenda 4A–4F (from `docs/templates/DPA.md`); the addendum is auto-selected by country.
-3. SLA schedule from the old Exhibit C (99.9% uptime, severity table, escalation matrix with amith@optculture.com, support hours).
+3. SLA schedule from the old Exhibit C (99.9% uptime, severity table, escalation matrix with amith.lulla@optculture.com, support hours).
 4. Correct errors carried over from the old agreement (5.4, 2.1, 9.8, US-only IP indemnity).
 
 ### 5.4 Legal review & freeze

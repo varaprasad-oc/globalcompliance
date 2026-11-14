@@ -4,7 +4,7 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 
 | Sprint | Theme | Status | Notes |
 |---|---|---|---|
-| 0 | Inputs checklist | 🟡 | Shared Drive access received ✅. Still open: docs-admin@ account, Amith email confirmation, DPA tech inputs, feature descriptions, legal reviewer |
+| 0 | Inputs checklist | 🟡 | Shared Drive access received ✅. Still open: docs-admin@ account, DPA tech inputs, feature descriptions, legal reviewer |
 | 1 | Foundations & access | 🟡 | Folders created in the Shared Drive ✅ (docs/ENVIRONMENT.md). Remaining: Apps Script project + web app deployment (needs docs-admin@ or Varaprasad to run clasp/editor) |
 | 2 | Master Sheet | 🟡 | Live Master DB created, loaded, validated, protected ✅. Pending Amith sign-off → Gate G1 |
 | 3 | Pricing engine | 🟡 | Engine done, 14/14 tests pass, price calculator screen works; Amith sign-off (G2) pending |
@@ -22,3 +22,4 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-14: Sprint 4 engine built offline (21/21 tests). SECURITY.md and DEPLOY.md written. Drive access is still view-only.
 - 2026-11-14: Revised ToS and SLA schedule drafted for legal review (22/22 tests).
 - 2026-11-14: Shared Drive access granted. Created 6 folders and the Master DB Sheet (21 tabs, dropdowns, protection). Read-back check found 2 text values that Sheets had mis-parsed (phone numbers, 99.9%); fixed, and the setup script hardened. Live pricing verified.
+- 2026-11-14: Amith's email corrected to amith.lulla@optculture.com everywhere, including the live Sheet.
