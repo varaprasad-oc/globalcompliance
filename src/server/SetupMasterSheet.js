@@ -55,7 +55,7 @@ function setupMasterSheet() {
       .setFontWeight('bold').setBackground(def.kind === 'master' ? '#1f3b57' : '#5b6b7a').setFontColor('#ffffff');
     sh.setFrozenRows(1);
     if (def.rows && def.rows.length) {
-      sh.getRange(2, 1, def.rows.length, def.headers.length).setValues(def.rows);
+      sh.getRange(2, 1, def.rows.length, def.headers.length).setValues(def.rows.map(function (r) { return r.map(asSheetValue_); }));
     }
     sh.autoResizeColumns(1, def.headers.length);
     sh.setTabColor(def.kind === 'master' ? '#1f3b57' : '#9aa5b1');
@@ -69,6 +69,11 @@ function setupMasterSheet() {
   clearMasterCache();
   console.log('Master Sheet ready: ' + ss.getUrl());
   return ss.getUrl();
+}
+
+/** Keep phone numbers ("+91 …") and percentages ("99.9%") as text — Sheets would otherwise parse them as formulas/numbers. */
+function asSheetValue_(v) {
+  return (typeof v === 'string' && (/^[+=\-]/.test(v) || /%$/.test(v))) ? "'" + v : v;
 }
 
 function writeSchemaReadme_(ss) {
