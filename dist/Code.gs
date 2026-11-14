@@ -231,7 +231,7 @@ var SEED = {
       ['Loyalty', 'Not included', 'Included', 'Included', 'A flexible loyalty program designed for omnichannel earn and burn. Members accrue points at any store or online and redeem on any channel, with tier benefits, multipliers and category accelerators.', '', 12],
       ['Rewards', 'Not included', 'Included', 'Included', 'Configure reward structures aligned to brand goals (points, spend tiers, engagement milestones, surprise rewards) to drive participation, repeat purchases and basket size.', '', 13],
       ['Fraud Alerts', 'Not included', 'Included', 'Included', '', '', 14],
-      ['Loyalty Cards on Wallets', 'Not included', 'Included', 'Included', 'Issue a digital loyalty card that lives in the customer\'s Apple Wallet or Google Wallet — no app to download — with tier status, point balance and offers pushed to the lock-screen.', '', 15],
+      ['Loyalty Cards on Apple Wallet & Google Wallet (standard)', 'Not included', 'Included', 'Included', 'Issue a digital loyalty card that lives in the customer\'s Apple Wallet or Google Wallet — no app to download — with tier status, point balance and offers pushed to the lock-screen.', '', 15],
       ['Affiliates/Referrals', 'Not included', 'Not included', 'Included', 'Empower existing members to refer friends and family, with automated tracking and rewards paid into the member wallet.', '', 16],
       ['Membership Program', 'Not included', 'Not included', 'Included', '', '', 17],
       ['Family Membership', 'Not included', 'Not included', 'Included', '', '', 18],

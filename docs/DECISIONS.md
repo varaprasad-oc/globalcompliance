@@ -84,3 +84,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 ## Branding (2026-11-14)
 - OptCulture logo (red speech bubble "OC" + wordmark) at the top of every document via {{IMAGE:OptCultureLogo}}.
 - Headings: OptCulture red #B6262B. Table headers: purple background with white bold text: `brand_table_header_bg` in CommercialTerms (currently #7B3FE4, an approximation of the swatch; replace with the exact brand hex).
+
+## Wallet loyalty cards (2026-11-14)
+- Loyalty Cards on Apple Wallet & Google Wallet are **standard (Included)** in Loyalty and Advanced, never an add-on; not included in Engagement. Feature renamed to "Loyalty Cards on Apple Wallet & Google Wallet (standard)" in the Features tab. Gift Cards stay an add-on.
