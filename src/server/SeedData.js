@@ -175,7 +175,27 @@ var SEED = {
       ['consulting_free_months', 3, 'Free consulting after go-live'],
       ['renewal_notice_days', 60, 'Non-renewal notice period'],
       ['data_export_days', 30, 'Customer data available after termination'],
-      ['round_whole_below_steps', 10, 'Prices below rounding_step x N are rounded to a whole number instead of the step']
+      ['round_whole_below_steps', 10, 'Prices below rounding_step x N are rounded to a whole number instead of the step'],
+      ['quote_valid_days', 30, 'Order Form quote valid for N days'],
+      ['uptime_pct', '99.9%', 'SLA monthly availability'],
+      ['support_email', 'support@optculture.com', 'SLA contact'],
+      ['support_phone', '+91 9666004933', 'SLA call/WhatsApp number'],
+      ['support_hours', 'Monday to Friday, 10 AM to 6 PM', 'SLA working hours'],
+      ['executive_contact_name', 'Amith Lulla', 'SLA escalation – Executive Director'],
+      ['executive_contact_email', 'amith@optculture.com', 'SLA escalation – Executive Director'],
+      ['legal_email', 'legal@optculture.com', 'ToS contact'],
+      ['default_hosting_region', '', 'DPA hosting region (to be confirmed by OC Tech)']
+    ]
+  },
+
+  SubProcessors: {
+    kind: 'master',
+    // To be completed by OC Tech (Sprint 0 input 0.9)
+    headers: ['name', 'service', 'location', 'condition', 'display_order', 'active'],
+    rows: [
+      ['TBC – cloud hosting provider', 'Cloud hosting', 'TBC', '', 1, true],
+      ['Meta Platforms (WhatsApp Business)', 'WhatsApp messaging', 'Global', 'if used', 2, true],
+      ['Apple / Google', 'Wallet passes and push notifications', 'Global', 'if used', 3, true]
     ]
   },
 

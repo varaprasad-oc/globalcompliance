@@ -4,10 +4,12 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ console });
-['Util.js', 'SeedData.js', 'Pricing.js'].forEach((f) => {
+['Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js'].forEach((f) => {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'server', f), 'utf8'), ctx, { filename: f });
 });
 
+global.__ctx = ctx;
+global.M = ctx.masterFromSeed(ctx.SEED);
 let passed = 0, failed = 0;
 global.test = (name, fn) => {
   try { fn(ctx); passed++; console.log('  ✓ ' + name); }
