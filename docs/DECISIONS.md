@@ -87,3 +87,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## Wallet loyalty cards (2026-11-14)
 - Loyalty Cards on Apple Wallet & Google Wallet are **standard (Included)** in Loyalty and Advanced, never an add-on; not included in Engagement. Feature renamed to "Loyalty Cards on Apple Wallet & Google Wallet (standard)" in the Features tab. Gift Cards stay an add-on.
+
+## Launch without AI (2026-11-15)
+- Go-live without Gemini. The AI button is hidden while Script Property GCP_PROJECT_ID is empty; reps type the narrative. Enabling later = connect Vertex AI (docs/DEPLOY.md §E), no code change.

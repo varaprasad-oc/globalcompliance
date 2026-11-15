@@ -292,7 +292,7 @@
     $('nav').classList.remove('hidden');
     if (b.user.role === 'Superadmin') { qa('.role-admin').forEach(function (e) { e.classList.remove('hidden'); }); refreshApprCount(); }
     if (b.user.role !== 'Rep') qa('.role-mgr').forEach(function (e) { e.classList.remove('hidden'); });
-    return run('apiFormLists').then(function (l) { LISTS = l; buildForm(); show('deal'); newDeal(); });
+    return run('apiFormLists').then(function (l) { LISTS = l; buildForm(); applyAiSetting(); show('deal'); newDeal(); });
   }).catch(function (e) { deny(e.message); });
 
   function deny(msg) { $('who').textContent = ''; $('denied').classList.remove('hidden'); $('deniedMsg').textContent = msg; }
@@ -571,6 +571,15 @@
         };
       });
     });
+  }
+
+  // ---------- AI on/off ----------
+  function applyAiSetting() {
+    var on = !!(LISTS && LISTS.aiEnabled);
+    $('btnAi').classList.toggle('hidden', !on); $('aiTone').classList.toggle('hidden', !on);
+    if (!on) $('aiStatus').textContent = 'Type the executive summary and journeys below.';
+    var notes = document.querySelector('[data-f="narrative.notes"]');
+    if (notes && !on) notes.closest('div').classList.add('hidden');
   }
 
   // ---------- languages ----------
