@@ -40,6 +40,7 @@ function generateDocument(docType, data, opts) {
   applyListParagraphs_(body, data.lists, warnings);
   applyTexts_(body, data.texts);
   applyTables_(body, data.tables, warnings);
+  applyPageBreaks_(body);
   sections.forEach(function (sec) { applyImages_(sec, data.images); });
   sections.forEach(function (sec) {
     Object.keys(data.fields).forEach(function (k) { replaceLiteral_(sec, '{{' + k + '}}', data.fields[k]); });
@@ -318,9 +319,9 @@ function replaceLiteral_(el, token, value) {
   while ((f = el.findText(pattern)) && guard++ < 1000) {
     var t = f.getElement().asText();
     var s = f.getStartOffset(), e = f.getEndOffsetInclusive();
-    // Insert first, then delete the tag: the new text keeps the tag's own style. (Deleting first can leave an empty
-    // run, and Google Docs then copies the style of the previous text – e.g. a white table header.)
-    if (v) { t.insertText(s, v); t.deleteText(s + v.length, e + v.length); }
+    // Insert INSIDE the tag (after its first character) so the new text copies the tag's own style. Inserting at the
+    // start of a cell/paragraph makes Google Docs copy the previous element's style (e.g. a white table header).
+    if (v) { t.insertText(s + 1, v); t.deleteText(s, s); t.deleteText(s + v.length, e + v.length - 1); }
     else t.deleteText(s, e);
   }
 }
@@ -358,5 +359,18 @@ function applyRtl_(container) {
       var tb = el.asTable();
       for (var r = 0; r < tb.getNumRows(); r++) for (var c = 0; c < tb.getRow(r).getNumCells(); c++) applyRtl_(tb.getRow(r).getCell(c));
     }
+  }
+}
+
+/** A paragraph containing only {{PAGEBREAK}} becomes a page break. */
+function applyPageBreaks_(body) {
+  var f, guard = 0;
+  while ((f = body.findText('\\{\\{PAGEBREAK\\}\\}')) && guard++ < 50) {
+    var par = f.getElement().getParent();
+    while (par.getType() !== DocumentApp.ElementType.PARAGRAPH) par = par.getParent();
+    if (par.getParent().getType() !== DocumentApp.ElementType.BODY_SECTION) { replaceLiteral_(par, '{{PAGEBREAK}}', ''); continue; }
+    var idx = body.getChildIndex(par);
+    body.insertPageBreak(idx);
+    _removeChild(body, idx + 1);
   }
 }

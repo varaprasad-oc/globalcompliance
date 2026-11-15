@@ -267,6 +267,7 @@ function checkTemplateTokens(text, data) {
     var ok;
     var mIf = t.match(/^[#\/]IF\s+!?(\w+)$/);
     var mTag = t.match(/^(EACH|LIST|TABLE|TEXT|IMAGE):(\w+)$/);
+    if (t === 'PAGEBREAK') return;
     if (mIf) ok = mIf[1] in data.flags;
     else if (mTag) ok = mTag[1] === 'IMAGE' ? ['OptCultureLogo', 'EntityLogo'].indexOf(mTag[2]) !== -1 : { EACH: data.lists, LIST: data.lists, TABLE: data.tables, TEXT: data.texts }[mTag[1]].hasOwnProperty(mTag[2]);
     else ok = t in data.fields || t in listKeys;
