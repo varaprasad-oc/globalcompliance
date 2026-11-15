@@ -173,3 +173,33 @@ function cloneDeal(deal, newId) {
   delete c.docNos; delete c.pricingSnapshot; delete c.approvalNote; delete c.aiDraft;  // a clone gets new numbers and today's prices
   return c;
 }
+
+/**
+ * Security: fields the browser must not control. Price snapshot, document numbers, status, version and
+ * client id always come from the stored deal (or are set fresh for a new deal).
+ */
+function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
+  var d = JSON.parse(JSON.stringify(incoming || {}));
+  var refresh = !!d.refreshPrices;
+  delete d.refreshPrices;
+  if (!stored) {
+    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT;
+    delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId;
+    return d;
+  }
+  d.dealId = stored.dealId;
+  d.docNos = stored.docNos;
+  d.clientId = stored.clientId;
+  d.pricingSnapshot = refresh || !stored.pricingSnapshot ? freshSnapshot : stored.pricingSnapshot;
+  var revised = ['Generated', 'Sent', 'Won', 'Lost'].indexOf(existingStatus) !== -1;
+  d.version = Number(stored.version || 1) + (revised ? 1 : 0);
+  d.status = revised || existingStatus === DEAL_STATUS.REJECTED ? DEAL_STATUS.DRAFT : (existingStatus || DEAL_STATUS.DRAFT);
+  return d;
+}
+
+/** Google Sheets cells hold at most 50,000 characters. */
+function assertCellSizes(rec) {
+  ['input_json', 'quote_json', 'final_text_json'].forEach(function (k) {
+    if (String(rec[k] || '').length > 49000) throw new Error('This deal is too large to save (' + k + '). Shorten the narrative or notes.');
+  });
+}

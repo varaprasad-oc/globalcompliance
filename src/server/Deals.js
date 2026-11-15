@@ -17,7 +17,7 @@ function readRecords_(tab) {
 function writeRecord_(tab, obj, rowNumber) {
   var sh = getMasterSpreadsheet_().getSheetByName(tab);
   var headers = SEED[tab].headers;
-  var row = headers.map(function (h) { return obj[h] === undefined ? '' : obj[h]; });
+  var row = headers.map(function (h) { return sheetSafe(obj[h] === undefined ? '' : obj[h]); });
   if (rowNumber) sh.getRange(rowNumber, 1, 1, headers.length).setValues([row]);
   else sh.appendRow(row);
 }
@@ -71,8 +71,10 @@ function safeJson_(s) { try { return JSON.parse(s || '{}'); } catch (e) { return
 
 /** Live check while the rep fills the form (no saving). */
 function apiEvaluateDeal(deal) {
-  requireUser_();
-  var m = withSnapshot(getMaster(), deal.refreshPrices ? null : deal.pricingSnapshot);
+  var user = requireUser_();
+  var stored = deal.dealId ? findDeal_(deal.dealId) : null;
+  var snap = stored && canAccessDeal(user, stored.created_by, getMaster().Users) && !deal.refreshPrices ? JSON.parse(stored.input_json).pricingSnapshot : null;
+  var m = withSnapshot(getMaster(), snap);
   applyCountryDefaults(m, deal);
   return { deal: deal, evaluation: evaluateDeal(m, deal) };
 }
@@ -84,21 +86,16 @@ function apiSaveDeal(deal) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    applyCountryDefaults(m, deal);
     var existing = deal.dealId ? findDeal_(deal.dealId) : null;
     if (deal.dealId && !existing) throw new Error('Deal not found: ' + deal.dealId);
     if (existing && !canAccessDeal(user, existing.created_by, m.Users)) throw new Error('You do not have access to this deal.');
-    if (existing && [DEAL_STATUS.DRAFT, DEAL_STATUS.REJECTED, DEAL_STATUS.APPROVED, DEAL_STATUS.PENDING].indexOf(existing.status) === -1) {
-      // Generated / Won / Lost deals are revised as a new version
-      deal.version = Number(existing.version || 1) + 1;
-      deal.status = DEAL_STATUS.DRAFT;
-    }
-    if (existing && existing.status === DEAL_STATUS.REJECTED) deal.status = DEAL_STATUS.DRAFT;
-    if (!deal.dealId) { deal.dealId = newId_('D'); deal.version = 1; deal.status = DEAL_STATUS.DRAFT; }
-    if (!deal.pricingSnapshot || deal.refreshPrices) { deal.pricingSnapshot = pricingSnapshot(m); delete deal.refreshPrices; }
+    deal = protectDealFields(deal, existing ? JSON.parse(existing.input_json) : null, existing ? existing.status : null, pricingSnapshot(m));
+    applyCountryDefaults(m, deal);
+    if (!deal.dealId) deal.dealId = newId_('D');
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var rec = dealRecord(deal, ev, user.email, new Date().toISOString(), existing);
+    assertCellSizes(rec);
     writeRecord_('Deals', rec, existing ? existing._row : null);
     audit_(existing ? 'DEAL_UPDATED' : 'DEAL_CREATED', { version: deal.version, needsApproval: ev.needsApproval }, deal.dealId);
     return { deal: deal, evaluation: ev, summary: dealSummary(rec) };

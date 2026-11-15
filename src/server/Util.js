@@ -45,3 +45,8 @@ function formatLongDate(d) {
   var months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   return day + sfx + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
 }
+
+/** Security: text starting with = + - @ would be run as a spreadsheet formula. Store it as plain text instead. */
+function sheetSafe(v) {
+  return (typeof v === 'string' && /^[=+\-@]/.test(v)) ? "'" + v : v;
+}

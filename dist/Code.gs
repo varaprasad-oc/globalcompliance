@@ -84,6 +84,11 @@ function formatLongDate(d) {
   return day + sfx + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
 }
 
+/** Security: text starting with = + - @ would be run as a spreadsheet formula. Store it as plain text instead. */
+function sheetSafe(v) {
+  return (typeof v === 'string' && /^[=+\-@]/.test(v)) ? "'" + v : v;
+}
+
 // ===================== SeedData.js =====================
 /**
  * Master Sheet schema + initial data (seeded from "Pricing MasterSheet 2026 – Pricing v2" and agreed decisions).
@@ -1049,6 +1054,36 @@ function cloneDeal(deal, newId) {
   return c;
 }
 
+/**
+ * Security: fields the browser must not control. Price snapshot, document numbers, status, version and
+ * client id always come from the stored deal (or are set fresh for a new deal).
+ */
+function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
+  var d = JSON.parse(JSON.stringify(incoming || {}));
+  var refresh = !!d.refreshPrices;
+  delete d.refreshPrices;
+  if (!stored) {
+    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT;
+    delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId;
+    return d;
+  }
+  d.dealId = stored.dealId;
+  d.docNos = stored.docNos;
+  d.clientId = stored.clientId;
+  d.pricingSnapshot = refresh || !stored.pricingSnapshot ? freshSnapshot : stored.pricingSnapshot;
+  var revised = ['Generated', 'Sent', 'Won', 'Lost'].indexOf(existingStatus) !== -1;
+  d.version = Number(stored.version || 1) + (revised ? 1 : 0);
+  d.status = revised || existingStatus === DEAL_STATUS.REJECTED ? DEAL_STATUS.DRAFT : (existingStatus || DEAL_STATUS.DRAFT);
+  return d;
+}
+
+/** Google Sheets cells hold at most 50,000 characters. */
+function assertCellSizes(rec) {
+  ['input_json', 'quote_json', 'final_text_json'].forEach(function (k) {
+    if (String(rec[k] || '').length > 49000) throw new Error('This deal is too large to save (' + k + '). Shorten the narrative or notes.');
+  });
+}
+
 // ===================== AiLogic.js =====================
 /**
  * Sprint 7: Gemini narrative drafting – pure parts (prompt building + guardrails). Runs in Apps Script and Node.
@@ -1247,6 +1282,43 @@ function formatLongDateAr(d) {
   return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
 }
 
+/**
+ * Go-live readiness from master data + script properties. Returns [{level: 'BLOCKER'|'WARN'|'OK', item, detail}].
+ */
+function goLiveFindings(master, props) {
+  var out = [];
+  function add(level, item, detail) { out.push({ level: level, item: item, detail: detail || '' }); }
+  ['MASTER_SHEET_ID', 'FOLDER_PROPOSALS', 'FOLDER_ORDER_FORMS', 'FOLDER_LEGAL', 'FOLDER_TEMPLATES', 'FOLDER_ARCHIVE'].forEach(function (k) {
+    add(props[k] ? 'OK' : 'BLOCKER', 'Script property ' + k, props[k] ? '' : 'missing – run setupScriptProperties()');
+  });
+  add(props.GCP_PROJECT_ID ? 'OK' : 'WARN', 'Gemini (Vertex AI)', props.GCP_PROJECT_ID ? 'project ' + props.GCP_PROJECT_ID : 'not connected – reps must type the narrative');
+  var langs = availableLanguages(master);
+  ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].forEach(function (t) { add(langs[t].indexOf('EN') !== -1 ? 'OK' : 'BLOCKER', 'English template ' + t, langs[t].indexOf('EN') !== -1 ? '' : 'no active EN template'); });
+  (master.Templates || []).forEach(function (t) {
+    if (isTrue(t.active) && /draft/i.test(String(t.version) + ' ' + String(t.notes))) add('WARN', 'Template ' + t.doc_type + ' ' + t.language + ' v' + t.version, 'still marked draft / pending legal review');
+  });
+  var users = master.Users || [];
+  add(users.some(function (u) { return u.role === 'Superadmin' && isTrue(u.active); }) ? 'OK' : 'BLOCKER', 'Superadmin user', '');
+  var reps = users.filter(function (u) { return u.role === 'Rep' && isTrue(u.active); });
+  add(reps.length ? 'OK' : 'WARN', 'Sales reps added', reps.length + ' active rep(s)');
+  users.forEach(function (u) {
+    if (u.role === 'Rep' && !u.manager_email) add('WARN', 'Rep without manager', u.email);
+    if (!/@optculture\.com$/i.test(String(u.email))) add('BLOCKER', 'User outside domain', u.email);
+  });
+  (master.Entities || []).filter(function (e) { return isTrue(e.active); }).forEach(function (e) {
+    var gaps = ['signatory_name', 'signatory_title', 'address'].filter(function (k) { return !e[k]; });
+    if (e.type === 'Partner' && !e.reg_no) gaps.push('reg_no');
+    if (gaps.length) add('WARN', 'Entity ' + e.entity_id + ' incomplete', 'missing ' + gaps.join(', '));
+  });
+  (master.SubProcessors || []).forEach(function (s) { if (/TBC/i.test(s.name + ' ' + s.location)) add('WARN', 'DPA sub-processor to confirm', s.name); });
+  var terms = {};
+  (master.CommercialTerms || []).forEach(function (r) { terms[r.key] = r.value; });
+  if (!terms.default_hosting_region) add('WARN', 'DPA hosting region', 'CommercialTerms.default_hosting_region is empty');
+  if (!terms.optculture_logo_file_id) add('WARN', 'Logo', 'CommercialTerms.optculture_logo_file_id is empty');
+  add(props.BACKUP_TRIGGER ? 'OK' : 'WARN', 'Daily backup', props.BACKUP_TRIGGER ? '' : 'run installTriggers()');
+  return out;
+}
+
 // ===================== MasterData.js =====================
 /** Reads the Master Sheet into { TabName: [objects] } with a short cache. */
 
@@ -1290,7 +1362,7 @@ function clearMasterCache() {
 function appendRecord_(tab, obj) {
   var sh = getMasterSpreadsheet_().getSheetByName(tab);
   var headers = SEED[tab].headers;
-  sh.appendRow(headers.map(function (h) { return obj[h] === undefined ? '' : obj[h]; }));
+  sh.appendRow(headers.map(function (h) { return sheetSafe(obj[h] === undefined ? '' : obj[h]); }));
 }
 
 function audit_(action, details, dealId, docNo) {
@@ -1383,7 +1455,7 @@ function readRecords_(tab) {
 function writeRecord_(tab, obj, rowNumber) {
   var sh = getMasterSpreadsheet_().getSheetByName(tab);
   var headers = SEED[tab].headers;
-  var row = headers.map(function (h) { return obj[h] === undefined ? '' : obj[h]; });
+  var row = headers.map(function (h) { return sheetSafe(obj[h] === undefined ? '' : obj[h]); });
   if (rowNumber) sh.getRange(rowNumber, 1, 1, headers.length).setValues([row]);
   else sh.appendRow(row);
 }
@@ -1437,8 +1509,10 @@ function safeJson_(s) { try { return JSON.parse(s || '{}'); } catch (e) { return
 
 /** Live check while the rep fills the form (no saving). */
 function apiEvaluateDeal(deal) {
-  requireUser_();
-  var m = withSnapshot(getMaster(), deal.refreshPrices ? null : deal.pricingSnapshot);
+  var user = requireUser_();
+  var stored = deal.dealId ? findDeal_(deal.dealId) : null;
+  var snap = stored && canAccessDeal(user, stored.created_by, getMaster().Users) && !deal.refreshPrices ? JSON.parse(stored.input_json).pricingSnapshot : null;
+  var m = withSnapshot(getMaster(), snap);
   applyCountryDefaults(m, deal);
   return { deal: deal, evaluation: evaluateDeal(m, deal) };
 }
@@ -1450,21 +1524,16 @@ function apiSaveDeal(deal) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    applyCountryDefaults(m, deal);
     var existing = deal.dealId ? findDeal_(deal.dealId) : null;
     if (deal.dealId && !existing) throw new Error('Deal not found: ' + deal.dealId);
     if (existing && !canAccessDeal(user, existing.created_by, m.Users)) throw new Error('You do not have access to this deal.');
-    if (existing && [DEAL_STATUS.DRAFT, DEAL_STATUS.REJECTED, DEAL_STATUS.APPROVED, DEAL_STATUS.PENDING].indexOf(existing.status) === -1) {
-      // Generated / Won / Lost deals are revised as a new version
-      deal.version = Number(existing.version || 1) + 1;
-      deal.status = DEAL_STATUS.DRAFT;
-    }
-    if (existing && existing.status === DEAL_STATUS.REJECTED) deal.status = DEAL_STATUS.DRAFT;
-    if (!deal.dealId) { deal.dealId = newId_('D'); deal.version = 1; deal.status = DEAL_STATUS.DRAFT; }
-    if (!deal.pricingSnapshot || deal.refreshPrices) { deal.pricingSnapshot = pricingSnapshot(m); delete deal.refreshPrices; }
+    deal = protectDealFields(deal, existing ? JSON.parse(existing.input_json) : null, existing ? existing.status : null, pricingSnapshot(m));
+    applyCountryDefaults(m, deal);
+    if (!deal.dealId) deal.dealId = newId_('D');
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var rec = dealRecord(deal, ev, user.email, new Date().toISOString(), existing);
+    assertCellSizes(rec);
     writeRecord_('Deals', rec, existing ? existing._row : null);
     audit_(existing ? 'DEAL_UPDATED' : 'DEAL_CREATED', { version: deal.version, needsApproval: ev.needsApproval }, deal.dealId);
     return { deal: deal, evaluation: ev, summary: dealSummary(rec) };
@@ -1961,6 +2030,7 @@ function generateForDeal_(dealId, user) {
       results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], docUrl: r.docUrl, pdfUrl: r.pdfUrl, warnings: r.warnings });
     } catch (e) {
       results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], error: String(e.message || e) });
+      notifyFailure_('Generating ' + DOC_LABEL[t] + ' for deal ' + dealId, e);
     }
   });
 
@@ -2228,6 +2298,69 @@ function sampleDealForChecks_() {
     narrative: { executiveSummary: 'x', journeys: ['A: b'], multiBrandIntro: 'y' },
     dpa: { hostingRegion: 'x' }
   };
+}
+
+// ===================== Ops.js =====================
+/**
+ * Sprint 10: operations – daily backup, failure alerts, go-live check.
+ */
+
+/** Copy the Master Sheet to _Archive/Backups (keeps the last 30). Runs daily via installTriggers(). */
+function backupMasterSheet() {
+  try {
+    var src = DriveApp.getFileById(getProp_('MASTER_SHEET_ID'));
+    var folder = getOrCreateFolder_(DriveApp.getFolderById(getProp_('FOLDER_ARCHIVE')), 'Backups');
+    src.makeCopy('Master DB backup ' + Utilities.formatDate(new Date(), 'Asia/Dubai', 'yyyy-MM-dd HH:mm'), folder);
+    var files = [], it = folder.getFiles();
+    while (it.hasNext()) files.push(it.next());
+    files.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
+    files.slice(30).forEach(function (f) { f.setTrashed(true); });
+    console.log('Backup done; kept ' + Math.min(files.length, 30));
+  } catch (e) {
+    notifyFailure_('Daily Master Sheet backup', e);
+    throw e;
+  }
+}
+
+/** Install the daily backup (02:00 Dubai). Safe to run more than once. */
+function installTriggers() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'backupMasterSheet') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('backupMasterSheet').timeBased().everyDays(1).atHour(2).inTimezone('Asia/Dubai').create();
+  setProp_('BACKUP_TRIGGER', new Date().toISOString());
+  console.log('Daily backup trigger installed');
+}
+
+/** Email superadmins (and alert_email, if set) when something important fails. Never throws. */
+function notifyFailure_(context, err) {
+  try {
+    var m = getMaster();
+    var to = (m.Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
+    var extra = ((m.CommercialTerms || []).filter(function (r) { return r.key === 'alert_email'; })[0] || {}).value;
+    if (extra) to.push(extra);
+    if (!to.length) return;
+    MailApp.sendEmail({ to: to.join(','), name: CONFIG.APP_NAME, subject: '[Alert] ' + CONFIG.APP_NAME + ': ' + context + ' failed',
+      body: context + ' failed at ' + new Date().toISOString() + '\n\nError: ' + (err && err.message ? err.message : err) +
+        '\n\nUser: ' + Session.getActiveUser().getEmail() + '\nRemaining email quota today: ' + MailApp.getRemainingDailyQuota() });
+  } catch (e) { console.error('alert failed', e); }
+}
+
+/** Editor + Admin check before go-live. */
+function goLiveCheck() {
+  var props = PropertiesService.getScriptProperties().getProperties();
+  var findings = goLiveFindings(getMaster(true), props);
+  // live checks: templates and logo can be opened
+  (getMaster().Templates || []).filter(function (t) { return isTrue(t.active); }).forEach(function (t) {
+    try { DriveApp.getFileById(t.file_id).getName(); } catch (e) { findings.push({ level: 'BLOCKER', item: 'Template ' + t.doc_type + ' ' + t.language, detail: 'file cannot be opened' }); }
+  });
+  findings.push({ level: MailApp.getRemainingDailyQuota() > 50 ? 'OK' : 'WARN', item: 'Email quota', detail: MailApp.getRemainingDailyQuota() + ' left today' });
+  var summary = { blockers: findings.filter(function (f) { return f.level === 'BLOCKER'; }).length, warnings: findings.filter(function (f) { return f.level === 'WARN'; }).length };
+  console.log(JSON.stringify({ summary: summary, findings: findings }, null, 2));
+  return { summary: summary, findings: findings };
+}
+
+function apiGoLiveCheck() {
+  requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  return goLiveCheck();
 }
 
 // ===================== SetupMasterSheet.js =====================

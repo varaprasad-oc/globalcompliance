@@ -14,7 +14,7 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 | 7 | AI + generation | ✅ build · ⏳ live | Gemini drafting via Vertex AI (guardrails: no prices, JSON, length), one-click generation of selected docs, stable doc numbers, DRAFT+approval request vs FINAL+PDF, versions archived, email to owner (40 unit tests + 16 browser checks). Needs Cloud project link + v7 deploy |
 | 8 | Roles, dashboards, approvals | ✅ build · ⏳ live | Approvals queue (approve → final docs auto-generated; reject needs comment; emails both ways), Amith notified on request, Dashboard (manager: team; superadmin: all), My Deals search/filter + Sent/Won/Lost, audit of views/decisions, sharing re-sync tool (43 unit tests + 23 browser checks). Needs v7+v8 deploy |
 | 9 | Arabic, admin, polish | ✅ build · ⏳ live | Arabic/bilingual support (RTL, AR dates, AR module text, per-document fallback to EN), Admin screens (14 master tabs, validation, ChangeLog), template registration with tag check, price snapshot per deal (old deals keep old prices), sharing re-sync, clone fix (48 unit tests + 30 browser checks). Arabic templates await professional translation (docs/TRANSLATION.md) |
-| 10 | UAT & go-live | ☐ | |
+| 10 | UAT & go-live | 🟡 | Security fixes (formula injection, server-owned deal fields, cell size), daily backup + failure alerts, go-live check (UI + editor), UAT script (17 scenarios), user/admin guides, go-live plan (53 unit tests + 31 browser checks). Remaining: v10 deploy, live UAT, pilot, blockers in docs/GO_LIVE.md |
 
 ## Log
 - 2026-11-14: Plan agreed. Repo scaffolded. Offline work started on Sprints 1–3 while waiting for the Drive.
@@ -33,3 +33,4 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-14: Sprint 7 built: AiLogic.js/GenLogic.js (pure, tested), Ai.js (Vertex), Generate.js (numbering, Documents/Approvals records, archive, email), UI AI + Generate. Awaiting GCP project for live AI.
 - 2026-11-14: Sprint 8 built: Approvals.js, dashboard stats (pure), generation refactor (generateForDeal_), approver notification, UI Dashboard/Approvals/filters/status. Browser harness 23/23.
 - 2026-11-14: Sprint 9 built: AdminLogic.js (pure), Admin.js, RTL in engine, Arabic data, price snapshots, UI Admin/language hints. Fixed: clones no longer reuse document numbers. Browser harness 30/30.
+- 2026-11-15: Sprint 10 built: security review found and fixed 3 issues; Ops.js (backup, alerts, go-live check); UAT.md, USER_GUIDE.md, ADMIN_GUIDE.md, GO_LIVE.md.

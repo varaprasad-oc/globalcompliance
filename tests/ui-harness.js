@@ -43,6 +43,7 @@ const api = {
     if (rowNo) M[tab][rowNo - 2] = r.row; else M[tab].push(r.row); return { ok: true, changed: ['x'] }; },
   apiAdminCheckTemplate: () => ({ title: 'Doc', unknown: ['Typo'], ifBalanced: true, ok: false }),
   apiResyncSharing: () => 0,
+  apiGoLiveCheck: () => { const f = ctx.goLiveFindings(M, {}); return { summary: { blockers: f.filter((x) => x.level === 'BLOCKER').length, warnings: f.filter((x) => x.level === 'WARN').length }, findings: f }; },
   apiSetDealStatus: (id, st) => { const r = store.deals[id]; if (!ctx.canSetStatus(r.status, st)) throw new Error('not allowed'); r.status = st; return ctx.dealSummary(r); }
 };
 (async () => {
@@ -146,6 +147,9 @@ const api = {
   await p.click('nav a[data-view="admin"]'); await p.waitForTimeout(300);
   await p.fill('#tplUrl', 'https://docs.google.com/document/d/abc/edit'); await p.click('#tplCheck'); await p.waitForTimeout(300);
   check('Template check reports unknown tags', (await p.textContent('#tplResult')).includes('Typo'));
+  await p.click('#btnGoLive'); await p.waitForTimeout(300);
+  check('Go-live check lists blockers', (await p.textContent('#goLive')).includes('blocker'));
+  await p.screenshot({ path: path.join(out, 'sprint10-golive.png'), fullPage: true });
   check('No page errors', errors.length === 0); if (errors.length) console.log(errors);
   await b.close();
 })();

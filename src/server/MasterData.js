@@ -40,7 +40,7 @@ function clearMasterCache() {
 function appendRecord_(tab, obj) {
   var sh = getMasterSpreadsheet_().getSheetByName(tab);
   var headers = SEED[tab].headers;
-  sh.appendRow(headers.map(function (h) { return obj[h] === undefined ? '' : obj[h]; }));
+  sh.appendRow(headers.map(function (h) { return sheetSafe(obj[h] === undefined ? '' : obj[h]); }));
 }
 
 function audit_(action, details, dealId, docNo) {

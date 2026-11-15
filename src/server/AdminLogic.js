@@ -85,3 +85,40 @@ function formatLongDateAr(d) {
   var months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
   return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
 }
+
+/**
+ * Go-live readiness from master data + script properties. Returns [{level: 'BLOCKER'|'WARN'|'OK', item, detail}].
+ */
+function goLiveFindings(master, props) {
+  var out = [];
+  function add(level, item, detail) { out.push({ level: level, item: item, detail: detail || '' }); }
+  ['MASTER_SHEET_ID', 'FOLDER_PROPOSALS', 'FOLDER_ORDER_FORMS', 'FOLDER_LEGAL', 'FOLDER_TEMPLATES', 'FOLDER_ARCHIVE'].forEach(function (k) {
+    add(props[k] ? 'OK' : 'BLOCKER', 'Script property ' + k, props[k] ? '' : 'missing – run setupScriptProperties()');
+  });
+  add(props.GCP_PROJECT_ID ? 'OK' : 'WARN', 'Gemini (Vertex AI)', props.GCP_PROJECT_ID ? 'project ' + props.GCP_PROJECT_ID : 'not connected – reps must type the narrative');
+  var langs = availableLanguages(master);
+  ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].forEach(function (t) { add(langs[t].indexOf('EN') !== -1 ? 'OK' : 'BLOCKER', 'English template ' + t, langs[t].indexOf('EN') !== -1 ? '' : 'no active EN template'); });
+  (master.Templates || []).forEach(function (t) {
+    if (isTrue(t.active) && /draft/i.test(String(t.version) + ' ' + String(t.notes))) add('WARN', 'Template ' + t.doc_type + ' ' + t.language + ' v' + t.version, 'still marked draft / pending legal review');
+  });
+  var users = master.Users || [];
+  add(users.some(function (u) { return u.role === 'Superadmin' && isTrue(u.active); }) ? 'OK' : 'BLOCKER', 'Superadmin user', '');
+  var reps = users.filter(function (u) { return u.role === 'Rep' && isTrue(u.active); });
+  add(reps.length ? 'OK' : 'WARN', 'Sales reps added', reps.length + ' active rep(s)');
+  users.forEach(function (u) {
+    if (u.role === 'Rep' && !u.manager_email) add('WARN', 'Rep without manager', u.email);
+    if (!/@optculture\.com$/i.test(String(u.email))) add('BLOCKER', 'User outside domain', u.email);
+  });
+  (master.Entities || []).filter(function (e) { return isTrue(e.active); }).forEach(function (e) {
+    var gaps = ['signatory_name', 'signatory_title', 'address'].filter(function (k) { return !e[k]; });
+    if (e.type === 'Partner' && !e.reg_no) gaps.push('reg_no');
+    if (gaps.length) add('WARN', 'Entity ' + e.entity_id + ' incomplete', 'missing ' + gaps.join(', '));
+  });
+  (master.SubProcessors || []).forEach(function (s) { if (/TBC/i.test(s.name + ' ' + s.location)) add('WARN', 'DPA sub-processor to confirm', s.name); });
+  var terms = {};
+  (master.CommercialTerms || []).forEach(function (r) { terms[r.key] = r.value; });
+  if (!terms.default_hosting_region) add('WARN', 'DPA hosting region', 'CommercialTerms.default_hosting_region is empty');
+  if (!terms.optculture_logo_file_id) add('WARN', 'Logo', 'CommercialTerms.optculture_logo_file_id is empty');
+  add(props.BACKUP_TRIGGER ? 'OK' : 'WARN', 'Daily backup', props.BACKUP_TRIGGER ? '' : 'run installTriggers()');
+  return out;
+}

@@ -47,6 +47,7 @@ function generateForDeal_(dealId, user) {
       results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], docUrl: r.docUrl, pdfUrl: r.pdfUrl, warnings: r.warnings });
     } catch (e) {
       results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], error: String(e.message || e) });
+      notifyFailure_('Generating ' + DOC_LABEL[t] + ' for deal ' + dealId, e);
     }
   });
 

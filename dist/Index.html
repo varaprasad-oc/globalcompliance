@@ -242,6 +242,8 @@
           <div id="tplResult"></div>
           <h3>Other tools</h3>
           <p><button class="secondary" id="btnResync">Re-apply document sharing</button> <span class="muted">Use after changing a rep’s manager.</span></p>
+          <p><button class="secondary" id="btnGoLive">Run go-live check</button> <span class="muted">Lists blockers and data gaps before launch.</span></p>
+          <div id="goLive"></div>
         </div>
       </div>
 
@@ -345,6 +347,15 @@
     $('admAdd').onclick = function () { admEdit(null); };
     $('tplCheck').onclick = function () { tplRun('apiAdminCheckTemplate'); };
     $('tplReg').onclick = function () { tplRun('apiAdminRegisterTemplate'); };
+    $('btnGoLive').onclick = function () {
+      $('goLive').innerHTML = '<p class="muted">Checking…</p>';
+      run('apiGoLiveCheck').then(function (r) {
+        var cls = { BLOCKER: 'err', WARN: 'warn', OK: 'ok' };
+        $('goLive').innerHTML = '<p><span class="badge ' + (r.summary.blockers ? 'err' : 'ok') + '">' + r.summary.blockers + ' blocker(s)</span> <span class="badge warn">' + r.summary.warnings + ' warning(s)</span></p>' +
+          '<table><tr><th>Status</th><th>Item</th><th>Detail</th></tr>' + r.findings.sort(function (a, b) { return ['BLOCKER', 'WARN', 'OK'].indexOf(a.level) - ['BLOCKER', 'WARN', 'OK'].indexOf(b.level); })
+            .map(function (f) { return '<tr><td><span class="badge ' + cls[f.level] + '">' + f.level + '</span></td><td>' + esc(f.item) + '</td><td>' + esc(f.detail) + '</td></tr>'; }).join('') + '</table>';
+      });
+    };
     $('btnResync').onclick = function () { run('apiResyncSharing').then(function (n) { toast('Sharing re-applied on ' + n + ' documents'); }); };
     $('btnAi').onclick = draftAi;
     $('btnGenerate').onclick = generate;
