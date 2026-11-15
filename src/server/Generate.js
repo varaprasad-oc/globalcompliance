@@ -44,7 +44,7 @@ function generateForDeal_(dealId, user) {
       appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: lang, version: deal.version,
         template_version: tpl.version, doc_file_id: r.docId, pdf_file_id: r.pdfId, created_by: user.email, created_at: new Date(),
         status: plan.mode === 'DRAFT' ? 'Draft' : 'Final' });
-      results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], docUrl: r.docUrl, pdfUrl: r.pdfUrl, warnings: r.warnings });
+      results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], docUrl: r.docUrl, pdfUrl: r.pdfUrl, pdfId: r.pdfId, warnings: r.warnings });
     } catch (e) {
       results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], error: String(e.message || e) });
       notifyFailure_('Generating ' + DOC_LABEL[t] + ' for deal ' + dealId, e);
@@ -65,10 +65,13 @@ function generateForDeal_(dealId, user) {
   writeRecord_('Deals', newRec, rec._row);
   audit_('DOCS_GENERATED', { mode: plan.mode, docs: results.map(function (r) { return r.docNo + (r.error ? ' ERROR' : ''); }) }, dealId);
 
-  try {
-    var mail = generationEmail(deal, results, plan.mode);
-    MailApp.sendEmail({ to: owner, subject: mail.subject, body: mail.body, name: CONFIG.APP_NAME });
-  } catch (e) { console.warn('email failed: ' + e); }
+  generationEmails(deal, results, plan.mode).forEach(function (mail) {
+    try {
+      var opts = { to: owner, subject: mail.subject, body: mail.body, name: CONFIG.APP_NAME };
+      if (mail.pdfIds.length) opts.attachments = mail.pdfIds.map(function (id) { return DriveApp.getFileById(id).getBlob(); });
+      MailApp.sendEmail(opts);
+    } catch (e) { console.warn('email failed: ' + e); notifyFailure_('Sending documents email for ' + dealId, e); }
+  });
 
   return { mode: plan.mode, message: plan.reason, results: results, deal: deal, summary: dealSummary(newRec) };
 }

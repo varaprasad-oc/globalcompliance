@@ -1344,6 +1344,34 @@ function generationEmail(deal, results, mode) {
   return { subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'OptCulture documents – ' + (c.shortName || c.legalName || deal.dealId), body: lines.join('\n') };
 }
 
+/**
+ * Emails after generation: (1) one email with all Google Doc links, (2) one email with all PDFs attached (final only).
+ * Returns [{subject, body, pdfIds: []}].
+ */
+function generationEmails(deal, results, mode) {
+  var c = deal.client || {}, name = c.shortName || c.legalName || deal.dealId;
+  var ok = results.filter(function (r) { return !r.error; }), failed = results.filter(function (r) { return r.error; });
+  var head = (c.legalName || deal.dealId) + ' – deal ' + deal.dealId + ', v' + (deal.version || 1);
+  var linkLines = ok.map(function (r) { return '• ' + r.label + ' ' + r.docNo + '\n  ' + r.docUrl; });
+  var failLines = failed.map(function (r) { return '• ' + r.label + ' ' + r.docNo + ' – FAILED: ' + r.error; });
+  var mails = [{
+    subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'Documents ready – ' + name,
+    body: 'Google Docs for ' + head + ':\n\n' + linkLines.join('\n') + (failLines.length ? '\n\nProblems:\n' + failLines.join('\n') : '') +
+      '\n\n' + (mode === 'DRAFT' ? 'These are DRAFTS pending Amith’s approval of the special pricing. Do not send them to the client. Final PDFs follow after approval.' :
+        'Edit only wording here if needed – change prices in the app and generate again. PDFs follow in a separate email.') + '\n\n— OptCulture Sales Docs',
+    pdfIds: []
+  }];
+  var pdfs = ok.filter(function (r) { return r.pdfId; });
+  if (mode !== 'DRAFT' && pdfs.length) {
+    mails.push({
+      subject: 'PDFs for review – ' + name,
+      body: 'Attached: ' + pdfs.map(function (r) { return r.label + ' ' + r.docNo; }).join(', ') + '\n\nFor ' + head + '. Review before sending to the client.\n\n— OptCulture Sales Docs',
+      pdfIds: pdfs.map(function (r) { return r.pdfId; })
+    });
+  }
+  return mails;
+}
+
 // ===================== AdminLogic.js =====================
 /**
  * Sprint 9: admin rules, price snapshots and language availability. Pure JS (Apps Script + Node tests).
@@ -1829,12 +1857,22 @@ function safeName_(s) {
   return String(s || '').replace(/[\\\/:*?"<>|#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
 }
 
-/** Share each file with the given users (rep, manager). Superadmins get access via Shared Drive membership. */
+/**
+ * Share each file with the given users (rep, manager) WITHOUT Google's "shared with you" emails (Drive API, advanced service).
+ * The app account itself is skipped (it already owns/manages the files). Superadmins see everything via the Shared Drive.
+ */
 function shareFiles_(fileIds, emails) {
+  var me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
   fileIds.forEach(function (id) {
-    var f = DriveApp.getFileById(id);
     emails.filter(Boolean).forEach(function (e) {
-      try { f.addEditor(e); } catch (err) { console.warn('share failed ' + e + ': ' + err); }
+      if (String(e).toLowerCase() === me) return;
+      try {
+        if (typeof Drive !== 'undefined' && Drive.Permissions) {
+          Drive.Permissions.create({ role: 'writer', type: 'user', emailAddress: e }, id, { sendNotificationEmail: false, supportsAllDrives: true });
+        } else {
+          DriveApp.getFileById(id).addEditor(e);  // fallback (sends Google's notification)
+        }
+      } catch (err) { console.warn('share failed ' + e + ': ' + err); }
     });
   });
 }
@@ -2204,7 +2242,7 @@ function generateForDeal_(dealId, user) {
       appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: lang, version: deal.version,
         template_version: tpl.version, doc_file_id: r.docId, pdf_file_id: r.pdfId, created_by: user.email, created_at: new Date(),
         status: plan.mode === 'DRAFT' ? 'Draft' : 'Final' });
-      results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], docUrl: r.docUrl, pdfUrl: r.pdfUrl, warnings: r.warnings });
+      results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], docUrl: r.docUrl, pdfUrl: r.pdfUrl, pdfId: r.pdfId, warnings: r.warnings });
     } catch (e) {
       results.push({ type: t, label: DOC_LABEL[t], docNo: deal.docNos[t], error: String(e.message || e) });
       notifyFailure_('Generating ' + DOC_LABEL[t] + ' for deal ' + dealId, e);
@@ -2225,10 +2263,13 @@ function generateForDeal_(dealId, user) {
   writeRecord_('Deals', newRec, rec._row);
   audit_('DOCS_GENERATED', { mode: plan.mode, docs: results.map(function (r) { return r.docNo + (r.error ? ' ERROR' : ''); }) }, dealId);
 
-  try {
-    var mail = generationEmail(deal, results, plan.mode);
-    MailApp.sendEmail({ to: owner, subject: mail.subject, body: mail.body, name: CONFIG.APP_NAME });
-  } catch (e) { console.warn('email failed: ' + e); }
+  generationEmails(deal, results, plan.mode).forEach(function (mail) {
+    try {
+      var opts = { to: owner, subject: mail.subject, body: mail.body, name: CONFIG.APP_NAME };
+      if (mail.pdfIds.length) opts.attachments = mail.pdfIds.map(function (id) { return DriveApp.getFileById(id).getBlob(); });
+      MailApp.sendEmail(opts);
+    } catch (e) { console.warn('email failed: ' + e); notifyFailure_('Sending documents email for ' + dealId, e); }
+  });
 
   return { mode: plan.mode, message: plan.reason, results: results, deal: deal, summary: dealSummary(newRec) };
 }

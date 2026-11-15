@@ -81,12 +81,22 @@ function safeName_(s) {
   return String(s || '').replace(/[\\\/:*?"<>|#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
 }
 
-/** Share each file with the given users (rep, manager). Superadmins get access via Shared Drive membership. */
+/**
+ * Share each file with the given users (rep, manager) WITHOUT Google's "shared with you" emails (Drive API, advanced service).
+ * The app account itself is skipped (it already owns/manages the files). Superadmins see everything via the Shared Drive.
+ */
 function shareFiles_(fileIds, emails) {
+  var me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
   fileIds.forEach(function (id) {
-    var f = DriveApp.getFileById(id);
     emails.filter(Boolean).forEach(function (e) {
-      try { f.addEditor(e); } catch (err) { console.warn('share failed ' + e + ': ' + err); }
+      if (String(e).toLowerCase() === me) return;
+      try {
+        if (typeof Drive !== 'undefined' && Drive.Permissions) {
+          Drive.Permissions.create({ role: 'writer', type: 'user', emailAddress: e }, id, { sendNotificationEmail: false, supportsAllDrives: true });
+        } else {
+          DriveApp.getFileById(id).addEditor(e);  // fallback (sends Google's notification)
+        }
+      } catch (err) { console.warn('share failed ' + e + ': ' + err); }
     });
   });
 }

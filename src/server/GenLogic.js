@@ -47,3 +47,31 @@ function generationEmail(deal, results, mode) {
   lines.push('— OptCulture Sales Docs');
   return { subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'OptCulture documents – ' + (c.shortName || c.legalName || deal.dealId), body: lines.join('\n') };
 }
+
+/**
+ * Emails after generation: (1) one email with all Google Doc links, (2) one email with all PDFs attached (final only).
+ * Returns [{subject, body, pdfIds: []}].
+ */
+function generationEmails(deal, results, mode) {
+  var c = deal.client || {}, name = c.shortName || c.legalName || deal.dealId;
+  var ok = results.filter(function (r) { return !r.error; }), failed = results.filter(function (r) { return r.error; });
+  var head = (c.legalName || deal.dealId) + ' – deal ' + deal.dealId + ', v' + (deal.version || 1);
+  var linkLines = ok.map(function (r) { return '• ' + r.label + ' ' + r.docNo + '\n  ' + r.docUrl; });
+  var failLines = failed.map(function (r) { return '• ' + r.label + ' ' + r.docNo + ' – FAILED: ' + r.error; });
+  var mails = [{
+    subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'Documents ready – ' + name,
+    body: 'Google Docs for ' + head + ':\n\n' + linkLines.join('\n') + (failLines.length ? '\n\nProblems:\n' + failLines.join('\n') : '') +
+      '\n\n' + (mode === 'DRAFT' ? 'These are DRAFTS pending Amith’s approval of the special pricing. Do not send them to the client. Final PDFs follow after approval.' :
+        'Edit only wording here if needed – change prices in the app and generate again. PDFs follow in a separate email.') + '\n\n— OptCulture Sales Docs',
+    pdfIds: []
+  }];
+  var pdfs = ok.filter(function (r) { return r.pdfId; });
+  if (mode !== 'DRAFT' && pdfs.length) {
+    mails.push({
+      subject: 'PDFs for review – ' + name,
+      body: 'Attached: ' + pdfs.map(function (r) { return r.label + ' ' + r.docNo; }).join(', ') + '\n\nFor ' + head + '. Review before sending to the client.\n\n— OptCulture Sales Docs',
+      pdfIds: pdfs.map(function (r) { return r.pdfId; })
+    });
+  }
+  return mails;
+}
