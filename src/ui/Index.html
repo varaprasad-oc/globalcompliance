@@ -133,7 +133,7 @@
               <h3>What’s included &amp; add-ons</h3>
               <p class="muted" style="margin-top:0">✔ = included in the package (fixed). Tick add-ons per package; columns of packages you haven’t selected are locked.</p>
               <div id="matrix" style="overflow-x:auto"></div>
-              <h3>Optional one-time services</h3>
+              <h3 style="display:flex;gap:14px;align-items:center">Optional one-time services <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink);font-size:13px;font-weight:normal;margin:0"><input type="checkbox" id="otAll" style="width:auto"> Select all</label></h3>
               <div id="onetime"></div>
               <h3>Platform messaging (negotiated price, optional)</h3>
               <div class="grid" id="comms"></div>
@@ -330,6 +330,7 @@
     $('pkgs').innerHTML = b.packages.map(function (p) { return '<label><input type="checkbox" data-arr="commercial.packages" value="' + esc(p) + '"> ' + esc(p) + '</label>'; }).join('');
     $('specials').innerHTML = b.packages.map(function (p) { return '<div data-pkgbox="' + esc(p) + '" class="hidden"><label>Special price / site / month – ' + esc(p) + '</label><input type="number" min="0" data-map="commercial.specialPrices" data-key="' + esc(p) + '" placeholder="Standard"></div>'; }).join('');
     buildMatrix(b);
+    setTimeout(wireSelectAll, 0);
     $('onetime').innerHTML = b.oneTimeItems.map(function (o) { return '<div class="checks"><label><input type="checkbox" data-ot="' + esc(o.id) + '"> ' + esc(o.label) + '</label>' + (o.unit === 'per hour' ? ' <input type="number" min="1" value="10" data-otqty="' + esc(o.id) + '" style="width:90px"> hours' : '') + '</div>'; }).join('');
     $('comms').innerHTML = LISTS.commsTiers.map(function (t) { return '<div><label>Up to ' + Number(t.messages).toLocaleString('en-US') + ' / month – negotiated price</label><input type="number" min="0" data-map="commercial.specialComms" data-key="' + esc(t.id) + '" placeholder="List price"></div>'; }).join('');
 
@@ -393,7 +394,9 @@
         return '<td style="text-align:center" data-col="' + esc(p) + '"><input type="checkbox" data-addon="' + esc(id) + '" data-pkg="' + esc(p) + '"></td>';
       }).join('') + '</tr>';
     }
-    rows += '<tr><td colspan="' + (pk.length + 1) + '" style="background:var(--soft);font-weight:bold">Add-ons (tick to add)</td></tr>';
+    rows += '<tr><td style="background:var(--soft);font-weight:bold">Add-ons (tick to add)</td>' + pk.map(function (p) {
+      return '<td style="background:var(--soft);text-align:center;font-size:12px" data-col="' + esc(p) + '"><label style="display:inline-flex;gap:4px;align-items:center;color:var(--ink);font-size:12px;margin:0"><input type="checkbox" data-addon-all="' + esc(p) + '" style="width:auto"> Select all</label></td>';
+    }).join('') + '</tr>';
     rows += addonFeatures.map(function (f) { return addonRow(f.feature, f.addonItemId, function (p) { return f.values[p] === 'Add-on'; }); }).join('');
     rows += otherAddons.map(function (a) { return addonRow(a.label, a.id, function (p) { return applies(p, a.packages); }); }).join('');
     $('matrix').innerHTML = '<table>' + head + rows + '</table>';
@@ -411,6 +414,25 @@
       var on = sel.indexOf(e.dataset.pkg) !== -1;
       e.disabled = !on; if (!on) e.checked = false;
     });
+    syncSelectAll();
+  }
+  function syncSelectAll() {
+    qa('#matrix input[data-addon-all]').forEach(function (a) {
+      var boxes = qa('#matrix input[data-addon][data-pkg="' + a.dataset.addonAll + '"]');
+      a.disabled = !boxes.length || boxes[0].disabled;
+      a.checked = !a.disabled && boxes.every(function (b) { return b.checked; });
+    });
+    var ot = qa('input[data-ot]');
+    if ($('otAll')) $('otAll').checked = ot.length > 0 && ot.every(function (b) { return b.checked; });
+  }
+  function wireSelectAll() {
+    qa('#matrix input[data-addon-all]').forEach(function (a) {
+      a.addEventListener('click', function () {
+        qa('#matrix input[data-addon][data-pkg="' + a.dataset.addonAll + '"]').forEach(function (b) { if (!b.disabled) b.checked = a.checked; });
+        changed();
+      });
+    });
+    $('otAll').addEventListener('click', function () { qa('input[data-ot]').forEach(function (b) { b.checked = $('otAll').checked; }); changed(); });
   }
 
   function refreshOrderPackages() {

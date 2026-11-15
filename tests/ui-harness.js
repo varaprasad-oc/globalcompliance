@@ -78,6 +78,16 @@ const api = {
   check('Special price boxes only for ticked packages', (await p.isVisible('[data-pkgbox="Loyalty"]')) && (await p.isVisible('[data-pkgbox="Advanced"]')) && !(await p.isVisible('[data-pkgbox="Engagement"]')));
   check('Engagement add-on column locked', await p.isDisabled('#matrix input[data-addon="MANAGED_SERVICES"][data-pkg="Engagement"]'));
   check('Included features are fixed ticks', (await p.$$eval('#matrix input[disabled][checked]', (x) => x.length)) > 20);
+  check('Select all locked for unselected package', await p.isDisabled('#matrix input[data-addon-all="Engagement"]'));
+  await p.click('#matrix input[data-addon-all="Advanced"]'); await p.waitForTimeout(200);
+  check('Select all ticks every Advanced add-on', await p.$$eval('#matrix input[data-addon][data-pkg="Advanced"]', (b) => b.every((x) => x.checked)));
+  check('Select all leaves Loyalty untouched', await p.$$eval('#matrix input[data-addon][data-pkg="Loyalty"]', (b) => b.every((x) => !x.checked)));
+  await p.click('#matrix input[data-addon-all="Advanced"]'); await p.waitForTimeout(200);
+  check('Select all again clears Advanced add-ons', await p.$$eval('#matrix input[data-addon][data-pkg="Advanced"]', (b) => b.every((x) => !x.checked)));
+  await p.click('#otAll'); await p.waitForTimeout(200);
+  check('One-time Select all ticks all services', await p.$$eval('input[data-ot]', (b) => b.every((x) => x.checked)));
+  await p.click('#otAll'); await p.waitForTimeout(200);
+  check('One-time Select all clears', await p.$$eval('input[data-ot]', (b) => b.every((x) => !x.checked)));
   await p.fill('input[data-map="commercial.specialPrices"][data-key="Loyalty"]', '70');
   await p.check('#matrix input[data-addon="GIFT_CARDS"][data-pkg="Loyalty"]');
   await p.waitForTimeout(900);
