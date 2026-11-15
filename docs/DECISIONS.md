@@ -90,3 +90,20 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## Launch without AI (2026-11-15)
 - Go-live without Gemini. The AI button is hidden while Script Property GCP_PROJECT_ID is empty; reps type the narrative. Enabling later = connect Vertex AI (docs/DEPLOY.md §E), no code change.
+
+## Go-live decisions (2026-11-15)
+| # | Topic | Decision |
+|---|---|---|
+| 1 | Legal review | **Amith reviews internally** the ToS, DPA and SLA, commenting in the Google Docs; Claude applies the changes and re-registers them as non-draft. |
+| 2 | Signatories | **Different per entity**: entered in Admin → Entities (signatory_name, signatory_title). |
+| 3 | Congineer | Varaprasad asks Congineer for reg. no., address and signatory; documents show "To be provided" until then. |
+| 4 | DPA hosting | Varaprasad asks the tech team; stays "To be confirmed" (go-live check amber). |
+| 5 | Shared Drive | Amith turns on "Only people in OptCulture can access". Clients get PDFs by email. |
+| 6 | GitHub | Make private. The session proxy can't change repo settings, so **Varaprasad does it** (Settings → Danger Zone → Change visibility). |
+| 7 | App owner | Stays under varaprasad@ for launch; move to docs-admin@ after the pilot. |
+| 8 | Table header colour | Keep #7B3FE4. |
+| 9 | Arabic | After launch. |
+| 10 | Test files | Keep until UAT ends, then delete before go-live. |
+| 11 | Go-live | **In 1 week (target 2026-11-22)**: short UAT, pilot overlapping launch. |
+| 12 | Pilot | Varaprasad names 2 reps (emails pending), added as Reps in Users. |
+| — | AI | Launch without AI (see above). |

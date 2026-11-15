@@ -1,17 +1,17 @@
-# Go-live plan (Sprint 10)
+# Go-live plan (Sprint 10) – target 2026-11-22
 
 ## A. Blockers (must be done)
 | # | Item | Owner | Status |
 |---|---|---|---|
 | 1 | Web app v10 deployed; `installTriggers()` run; `goLiveCheck()` shows 0 blockers | Varaprasad | ☐ |
-| 2 | Gemini connected (`aiHealthCheck` OK), or decision to launch without AI | Varaprasad | ☐ |
-| 3 | Legal review of ToS + DPA (+ SLA) done; templates re-registered without "draft" | Legal / Amith | ☐ |
+| 2 | ~~Gemini~~ Decision: launch **without AI** | Varaprasad | ☑ |
+| 3 | Amith's internal review of ToS + DPA (+ SLA) done; templates re-registered without "draft" | Amith | ☐ |
 | 4 | Entities: signatory name/title + address for every entity; Congineer reg. no. + address | OC | ☐ |
 | 5 | DPA: hosting region, security measures (Annex 2), sub-processors (no "TBC") | OC Tech | ☐ |
 | 6 | Amith sign-off G1 (Master Sheet) and G2 (pricing, answers in DECISIONS.md) | Amith | ☐ |
 | 7 | UAT scenarios 1–17 passed (docs/UAT.md) | Varaprasad + 1 rep | ☐ |
 | 8 | Shared Drive: "Only people in OptCulture can access" ON; reps are NOT members | Amith | ☐ |
-| 9 | GitHub repository set to **private** | Varaprasad | ☐ |
+| 9 | GitHub repository set to **private** (then deploy via the logged-in GitHub "Raw" view, not raw.githubusercontent links) | Varaprasad | ☐ |
 
 ## B. Recommended before or soon after launch
 - Create `docs-admin@optculture.com`, transfer the Apps Script project + deployment, add it to the Shared Drive and to Master Sheet protections.
@@ -19,7 +19,7 @@
 - Arabic templates (professional translation) – optional at launch.
 - Delete test data: SAMPLE/SELFTEST/UAT deals and files.
 
-## C. Pilot (1 week)
+## C. Pilot (overlaps launch week)
 Two reps generate real deals through the app. Daily 10-minute check-in; fixes ship as new deployment versions (same URL).
 
 ## D. Training (45 minutes)
