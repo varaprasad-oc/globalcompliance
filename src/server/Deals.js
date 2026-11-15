@@ -31,6 +31,33 @@ function newClientId_() {
   try { return nextDocNo('CLIENT', true); } catch (e) { return newId_('C'); }
 }
 
+/** Server-owned: the client's signed MSA (Clients tab) on the deal, so the contract stage knows Agreement vs Order Form only. */
+function attachClientMsa_(deal) {
+  delete deal.msa;
+  var name = String(((deal.client || {}).legalName) || '').toLowerCase();
+  var c = readRecords_('Clients').filter(function (r) {
+    return (deal.clientId && r.client_id === deal.clientId) || (name && String(r.legal_name).toLowerCase() === name);
+  })[0];
+  if (c && c.msa_no) {
+    deal.msa = { no: String(c.msa_no), dpaNo: String(c.dpa_no || ''), dealId: String(c.msa_deal_id || ''),
+      date: c.msa_date instanceof Date ? c.msa_date.toISOString().slice(0, 10) : String(c.msa_date || '') };
+  }
+  return deal;
+}
+
+/** When an Agreement deal is Won, its MSA/DPA numbers become the client's: later deals get a standalone Order Form. */
+function recordClientMsa_(deal) {
+  if (contractMode(deal) !== 'AGREEMENT' || !(deal.docNos || {}).TOS) return;
+  var name = String(((deal.client || {}).legalName) || '').toLowerCase();
+  var c = readRecords_('Clients').filter(function (r) {
+    return (deal.clientId && r.client_id === deal.clientId) || (name && String(r.legal_name).toLowerCase() === name);
+  })[0];
+  if (!c) return;
+  c.msa_no = deal.docNos.TOS; c.dpa_no = deal.docNos.DPA || ''; c.msa_deal_id = deal.dealId; c.msa_date = new Date().toISOString().slice(0, 10);
+  writeRecord_('Clients', c, c._row);
+  audit_('CLIENT_MSA_RECORDED', { client: c.client_id, msa: c.msa_no }, deal.dealId);
+}
+
 function findDeal_(dealId) {
   return readRecords_('Deals').filter(function (r) { return r.deal_id === dealId; })[0] || null;
 }
@@ -47,7 +74,9 @@ function upsertClient_(deal, userEmail) {
     reg_type: c.regType || '', reg_no: c.regNo || '', website: c.website || '', brands: c.brands || '', pos: c.pos || '',
     ecom_platform: c.ecomPlatform || '', business_contact: JSON.stringify(c.businessContact || {}),
     billing_contact: JSON.stringify(c.billingContact || {}),
-    owner_email: existing ? existing.owner_email : userEmail, created_at: existing ? existing.created_at : new Date()
+    owner_email: existing ? existing.owner_email : userEmail, created_at: existing ? existing.created_at : new Date(),
+    msa_no: existing ? existing.msa_no || '' : '', dpa_no: existing ? existing.dpa_no || '' : '',
+    msa_deal_id: existing ? existing.msa_deal_id || '' : '', msa_date: existing ? existing.msa_date || '' : ''
   };
   writeRecord_('Clients', rec, existing ? existing._row : null);
   return rec.client_id;
@@ -83,6 +112,7 @@ function apiEvaluateDeal(deal) {
   var snap = stored && canAccessDeal(user, stored.created_by, getMaster().Users) && !deal.refreshPrices ? JSON.parse(stored.input_json).pricingSnapshot : null;
   var m = withSnapshot(getMaster(), snap);
   applyCountryDefaults(m, deal);
+  attachClientMsa_(deal);
   return { deal: deal, evaluation: evaluateDeal(m, deal) };
 }
 
@@ -100,6 +130,7 @@ function apiSaveDeal(deal) {
     applyCountryDefaults(m, deal);
     if (!deal.dealId) { try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); } }  // short id D-2026-0001 (falls back if Numbering has no DEAL row)
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
+    attachClientMsa_(deal);
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var rec = dealRecord(deal, ev, user.email, new Date().toISOString(), existing);
     assertCellSizes(rec);
@@ -124,7 +155,7 @@ function apiGetDeal(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
   if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
-  var deal = JSON.parse(rec.input_json);
+  var deal = attachClientMsa_(JSON.parse(rec.input_json));
   deal.status = rec.status;
   audit_('DEAL_VIEWED', {}, dealId);
   return { deal: deal, evaluation: evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal), summary: dealSummary(rec) };
@@ -150,7 +181,7 @@ function apiConvertToContract(dealId) {
     if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
     var stored = JSON.parse(rec.input_json);
     if (!canConvertToContract(stored, rec.status)) throw new Error('Generate the proposal first (status must be "Proposal generated" or "Sent").');
-    var deal = convertToContract(stored, evaluateDeal(withSnapshot(m, stored.pricingSnapshot), stored).quote);
+    var deal = attachClientMsa_(convertToContract(stored, evaluateDeal(withSnapshot(m, stored.pricingSnapshot), stored).quote));
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), rec);
     newRec.status = deal.status;

@@ -28,7 +28,7 @@ const api = {
     if (plan.mode === 'DRAFT' && rec.approval_status !== 'Pending') { nr.approval_status = 'Pending'; store.approvals.push({ approvalId: 'A-1', dealId: id, reasons: ev.approvalReasons }); }
     store.deals[id] = nr;
     return { mode: plan.mode, message: plan.reason, deal: d, results: plan.docTypes.map((t) => ({ type: t, label: t, docNo: d.docNos[t], docUrl: 'https://docs.google.com/x', pdfUrl: plan.mode === 'FINAL' ? 'https://drive.google.com/y' : '', warnings: [] })) }; },
-  apiDealDocuments: () => [],
+  apiDealDocuments: () => [{ docNo: 'OC-P-2026-0001', type: 'PROPOSAL', label: 'Proposal', version: 1, status: 'Final', docUrl: 'x', pdfUrl: 'y', createdAt: '2026-11-15T09:30:00.000Z' }],
   apiConvertToContract: (id) => { const r = store.deals[id]; const st = JSON.parse(r.input_json); if (!ctx.canConvertToContract(st, r.status)) throw new Error('not allowed');
     const d = ctx.convertToContract(st, ctx.evaluateDeal(ctx.withSnapshot(M, st.pricingSnapshot), st).quote); const ev = ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d); const nr = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), r); nr.status = d.status; store.deals[id] = nr;
     return { deal: d, evaluation: ev, summary: ctx.dealSummary(nr) }; },
@@ -172,15 +172,19 @@ const api = {
   check('Review lists changes since proposal', (await p.textContent('#review')).includes('Stores: 46 → 50'));
   await p.click('#steps div[data-step="2"]'); await p.fill('[data-f="commercial.stores"]', '46'); await p.waitForTimeout(300);
   await p.click('#steps div[data-step="3"]');
-  check('Order Form terms + document choices in Stage 2 step 3', (await p.isVisible('#orderPackage')) && (await p.isDisabled('[data-f="docs.ORDER_FORM"]')) && !(await p.isVisible('[data-f="proposal.title"]')));
+  check('Order Form terms + document choices in Stage 2 step 3', (await p.isVisible('#orderPackage')) && (await p.textContent('#contractPack')).includes('One Agreement document') && (await p.textContent('#contractPack')).includes('Annexure A') && !(await p.isVisible('[data-f="proposal.title"]')));
+  await p.fill('[data-f="commercial.msaRef"]', 'MSA-OLD-9'); await p.waitForTimeout(1000);
+  check('Existing MSA reference → Order Form only, citing it', (await p.textContent('#contractPack')).includes('Order Form only') && (await p.textContent('#contractPack')).includes('MSA-OLD-9') && (await p.textContent('#btnGenerate')).trim() === 'Generate Order Form');
+  await p.fill('[data-f="commercial.msaRef"]', ''); await p.waitForTimeout(1000);
   check('Order Form package list follows packages', (await p.$$eval('#orderPackage option', (o) => o.map((x) => x.value))).join() === 'Loyalty,Advanced');
   await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(700);
   check('Approved pricing shown as approved; hint says final', (await p.textContent('#review')).includes('approved by Amith') && (await p.textContent('#genHint')).includes('final'));
   check('Stage 2 summary shows totals', (await p.textContent('#side')).includes('First year'));
   check('Stage 2 summary lists one-time lines separately', (await p.textContent('#side')).includes('Set-up and Training') && (await p.textContent('#side')).includes('Installation per store (× 46)') && (await p.textContent('#side')).includes('Installation per e-commerce site'));
-  check('Generate button says Order Form, ToS & DPA', (await p.textContent('#btnGenerate')).includes('Order Form, ToS & DPA') && !(await p.isDisabled('#btnGenerate')));
+  check('Generate button says Agreement (MSA + Order Form + DPA)', (await p.textContent('#btnGenerate')).includes('Agreement (MSA + Order Form + DPA)') && !(await p.isDisabled('#btnGenerate')));
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
   const g2 = await p.textContent('#genResult');
+  check('Generated documents table has a Date column', (await p.textContent('#docList')).includes('Date') && (await p.textContent('#docList')).includes('15 Nov 2026'));
   check('Contract documents final (approval carried over)', g2.includes('Documents created') && g2.includes('OC-Q-2026-0001') && g2.includes('OC-DPA-2026-0001') && !g2.includes('OC-P-2026'));
   check('Status Contract generated', store.deals['D-TEST-1'].status === 'Contract generated');
   await p.screenshot({ path: path.join(out, 'stage2-generated.png'), fullPage: true });

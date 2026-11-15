@@ -253,7 +253,8 @@ var SEED = {
   Clients: {
     kind: 'record',
     headers: ['client_id', 'legal_name', 'short_name', 'country', 'address', 'reg_type', 'reg_no', 'website', 'brands',
-      'pos', 'ecom_platform', 'business_contact', 'billing_contact', 'owner_email', 'created_at']
+      'pos', 'ecom_platform', 'business_contact', 'billing_contact', 'owner_email', 'created_at',
+      'msa_no', 'dpa_no', 'msa_deal_id', 'msa_date']
   },
   Deals: {
     kind: 'record',

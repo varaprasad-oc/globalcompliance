@@ -127,3 +127,9 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 ## One-time special prices (2026-11-15)
 - Reps may set special unit prices for set-up, per-store and per-e-commerce installation (per package) and for optional services. Below standard → superadmin approval (same flow as licence special prices). Above standard → allowed.
 - One-time fees are always shown line by line (no consolidated figure except the final total).
+
+## Contract pack: hybrid Agreement (2026-11-15, Varaprasad)
+- **First contract for a client** → ONE Agreement document: MSA / Terms of Service (+ Schedule 2 SLA), **Annexure A** Quotation & Order Form, **Annexure B** DPA. Number = the MSA (OC-TOS) number; annexures keep their OC-Q / OC-DPA numbers. All three numbers are reserved together, so the Order Form always cites the MSA number.
+- **Existing client** (deal marked **Won** with an Agreement → MSA saved on the Clients tab: msa_no, dpa_no, msa_deal_id, msa_date) → standalone Quotation & Order Form citing that MSA/DPA.
+- MSA signed outside the app: type it in "Existing MSA reference" (or fill msa_no in the Clients tab) → Order Form only.
+- Rep can tick "Issue a new MSA anyway" (new entity / expired MSA).

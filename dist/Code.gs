@@ -345,7 +345,8 @@ var SEED = {
   Clients: {
     kind: 'record',
     headers: ['client_id', 'legal_name', 'short_name', 'country', 'address', 'reg_type', 'reg_no', 'website', 'brands',
-      'pos', 'ecom_platform', 'business_contact', 'billing_contact', 'owner_email', 'created_at']
+      'pos', 'ecom_platform', 'business_contact', 'billing_contact', 'owner_email', 'created_at',
+      'msa_no', 'dpa_no', 'msa_deal_id', 'msa_date']
   },
   Deals: {
     kind: 'record',
@@ -729,7 +730,8 @@ function buildDocData(docType, master, deal, quote, ctx) {
     LegalEmail: _v(terms.legal_email)
   };
   var rel = ctx.related || {};
-  var flags = { IsPartner: isPartner, IsOptCultureEntity: !isPartner, HasMsa: !!com.msaRef, HasPO: !!com.poNumber,
+  var msaRef = _v(com.msaRef || rel.TOS);  // the Agreement's own number, or the client's existing MSA
+  var flags = { IsPartner: isPartner, IsOptCultureEntity: !isPartner, HasMsa: !!msaRef, HasPO: !!com.poNumber,
     HasProposalNo: !!rel.PROPOSAL, HasOrderFormNo: !!rel.ORDER_FORM, HasTosNo: !!rel.TOS, HasDpaNo: !!rel.DPA };
   var lists = {}, tables = {}, texts = {}, images = {};
   if (entity.logo_file_id) images.EntityLogo = entity.logo_file_id;
@@ -831,7 +833,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
     fields.BillingCycle = _v(com.billingCycle || 'Annual');
     fields.PaymentMethod = _v(com.paymentMethod || 'Bank Transfer');
     fields.PONumber = _v(com.poNumber || 'Not applicable');
-    fields.MsaRef = _v(com.msaRef);
+    fields.MsaRef = msaRef;
     fields.SpecialTerms = _v(com.specialTerms || 'None.');
     fields.TotalRecurringMonthly = m(op.recurringMonthly);
     fields.TotalRecurringAnnual = m(op.recurringAnnual);
@@ -1014,7 +1016,37 @@ function applyCountryDefaults(master, deal) {
   return deal;
 }
 
+/**
+ * Hybrid contract pack (decision #22):
+ *  - AGREEMENT: first contract for a client → one document: MSA/ToS (+SLA) with Annexure A Order Form and Annexure B DPA.
+ *  - ORDER_ONLY: the client already has an MSA (recorded on the client when an Agreement deal was Won, or typed in
+ *    "MSA reference") → standalone Order Form citing that MSA. deal.newMsa forces a fresh Agreement.
+ * deal.msa = { no, dpaNo, dealId, date } is filled by the server from the Clients tab.
+ */
+function existingMsa(deal) {
+  var msa = deal.msa || {}, ref = String((deal.commercial || {}).msaRef || '').trim();
+  if (msa.no && msa.dealId !== deal.dealId) return { no: msa.no, dpaNo: msa.dpaNo || '', dealId: msa.dealId || '', date: msa.date || '', source: 'client' };
+  if (ref && ref !== (deal.docNos || {}).TOS) return { no: ref, dpaNo: '', dealId: '', date: '', source: 'manual' };
+  return null;
+}
+
+function contractMode(deal) {
+  if (deal.stage !== 'CONTRACT') return null;
+  return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'AGREEMENT';
+}
+
+/** Numbers the documents should cite: the deal's own numbers, or the client's existing MSA/DPA for a standalone Order Form. */
+function relatedNumbers(deal) {
+  var rel = JSON.parse(JSON.stringify(deal.docNos || {}));
+  if (contractMode(deal) === 'ORDER_ONLY') {
+    var msa = existingMsa(deal);
+    rel.TOS = msa.no; rel.DPA = msa.dpaNo || '';
+  }
+  return rel;
+}
+
 function selectedDocs(deal) {
+  if (deal.stage === 'CONTRACT') return contractMode(deal) === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['TOS', 'ORDER_FORM', 'DPA'];
   var d = deal.docs || {};
   var allowed = deal.stage ? STAGE_DOCS[deal.stage] : DOC_TYPES;
   return DOC_TYPES.filter(function (t) { return d[t] && allowed.indexOf(t) !== -1; });
@@ -1049,7 +1081,8 @@ function evaluateDeal(master, deal) {
     readyToGenerate: errors.length === 0 && Object.keys(missing).length === 0,
     needsApproval: quote.ok ? quote.needsApproval : false,
     approvalReasons: quote.ok ? quote.approvalReasons : [],
-    changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : []
+    changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : [],
+    contract: deal.stage === 'CONTRACT' ? { mode: contractMode(deal), msa: existingMsa(deal) } : null
   };
 }
 
@@ -1334,6 +1367,7 @@ function planGeneration(deal, evaluation, approvalStatus) {
     ok: true,
     mode: draft ? 'DRAFT' : 'FINAL',
     docTypes: docTypes,
+    combine: contractMode(deal) === 'AGREEMENT',  // merge ToS + Order Form + DPA into one Agreement document
     status: draft ? DEAL_STATUS.PENDING : (deal.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_GENERATED : deal.stage === 'PROPOSAL' ? DEAL_STATUS.PROPOSAL_GENERATED : DEAL_STATUS.GENERATED),
     reason: draft ? 'Special pricing needs Amith’s approval: DRAFT documents (no PDF) are created now; final PDFs are generated after approval.' : ''
   };
@@ -1670,6 +1704,33 @@ function newClientId_() {
   try { return nextDocNo('CLIENT', true); } catch (e) { return newId_('C'); }
 }
 
+/** Server-owned: the client's signed MSA (Clients tab) on the deal, so the contract stage knows Agreement vs Order Form only. */
+function attachClientMsa_(deal) {
+  delete deal.msa;
+  var name = String(((deal.client || {}).legalName) || '').toLowerCase();
+  var c = readRecords_('Clients').filter(function (r) {
+    return (deal.clientId && r.client_id === deal.clientId) || (name && String(r.legal_name).toLowerCase() === name);
+  })[0];
+  if (c && c.msa_no) {
+    deal.msa = { no: String(c.msa_no), dpaNo: String(c.dpa_no || ''), dealId: String(c.msa_deal_id || ''),
+      date: c.msa_date instanceof Date ? c.msa_date.toISOString().slice(0, 10) : String(c.msa_date || '') };
+  }
+  return deal;
+}
+
+/** When an Agreement deal is Won, its MSA/DPA numbers become the client's: later deals get a standalone Order Form. */
+function recordClientMsa_(deal) {
+  if (contractMode(deal) !== 'AGREEMENT' || !(deal.docNos || {}).TOS) return;
+  var name = String(((deal.client || {}).legalName) || '').toLowerCase();
+  var c = readRecords_('Clients').filter(function (r) {
+    return (deal.clientId && r.client_id === deal.clientId) || (name && String(r.legal_name).toLowerCase() === name);
+  })[0];
+  if (!c) return;
+  c.msa_no = deal.docNos.TOS; c.dpa_no = deal.docNos.DPA || ''; c.msa_deal_id = deal.dealId; c.msa_date = new Date().toISOString().slice(0, 10);
+  writeRecord_('Clients', c, c._row);
+  audit_('CLIENT_MSA_RECORDED', { client: c.client_id, msa: c.msa_no }, deal.dealId);
+}
+
 function findDeal_(dealId) {
   return readRecords_('Deals').filter(function (r) { return r.deal_id === dealId; })[0] || null;
 }
@@ -1686,7 +1747,9 @@ function upsertClient_(deal, userEmail) {
     reg_type: c.regType || '', reg_no: c.regNo || '', website: c.website || '', brands: c.brands || '', pos: c.pos || '',
     ecom_platform: c.ecomPlatform || '', business_contact: JSON.stringify(c.businessContact || {}),
     billing_contact: JSON.stringify(c.billingContact || {}),
-    owner_email: existing ? existing.owner_email : userEmail, created_at: existing ? existing.created_at : new Date()
+    owner_email: existing ? existing.owner_email : userEmail, created_at: existing ? existing.created_at : new Date(),
+    msa_no: existing ? existing.msa_no || '' : '', dpa_no: existing ? existing.dpa_no || '' : '',
+    msa_deal_id: existing ? existing.msa_deal_id || '' : '', msa_date: existing ? existing.msa_date || '' : ''
   };
   writeRecord_('Clients', rec, existing ? existing._row : null);
   return rec.client_id;
@@ -1722,6 +1785,7 @@ function apiEvaluateDeal(deal) {
   var snap = stored && canAccessDeal(user, stored.created_by, getMaster().Users) && !deal.refreshPrices ? JSON.parse(stored.input_json).pricingSnapshot : null;
   var m = withSnapshot(getMaster(), snap);
   applyCountryDefaults(m, deal);
+  attachClientMsa_(deal);
   return { deal: deal, evaluation: evaluateDeal(m, deal) };
 }
 
@@ -1739,6 +1803,7 @@ function apiSaveDeal(deal) {
     applyCountryDefaults(m, deal);
     if (!deal.dealId) { try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); } }  // short id D-2026-0001 (falls back if Numbering has no DEAL row)
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
+    attachClientMsa_(deal);
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var rec = dealRecord(deal, ev, user.email, new Date().toISOString(), existing);
     assertCellSizes(rec);
@@ -1763,7 +1828,7 @@ function apiGetDeal(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
   if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
-  var deal = JSON.parse(rec.input_json);
+  var deal = attachClientMsa_(JSON.parse(rec.input_json));
   deal.status = rec.status;
   audit_('DEAL_VIEWED', {}, dealId);
   return { deal: deal, evaluation: evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal), summary: dealSummary(rec) };
@@ -1789,7 +1854,7 @@ function apiConvertToContract(dealId) {
     if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
     var stored = JSON.parse(rec.input_json);
     if (!canConvertToContract(stored, rec.status)) throw new Error('Generate the proposal first (status must be "Proposal generated" or "Sent").');
-    var deal = convertToContract(stored, evaluateDeal(withSnapshot(m, stored.pricingSnapshot), stored).quote);
+    var deal = attachClientMsa_(convertToContract(stored, evaluateDeal(withSnapshot(m, stored.pricingSnapshot), stored).quote));
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), rec);
     newRec.status = deal.status;
@@ -1811,7 +1876,7 @@ function apiConvertToContract(dealId) {
  */
 
 var DOC_FOLDER_KEY = { PROPOSAL: 'PROPOSALS', ORDER_FORM: 'ORDER_FORMS', TOS: 'LEGAL', DPA: 'LEGAL' };
-var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'Terms of Service', DPA: 'DPA' };
+var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'Terms of Service', DPA: 'DPA', AGREEMENT: 'Agreement' };
 var TABLE_STYLE = { headerBg: '#7B3FE4', headerFg: '#ffffff', border: '#c9d2dc', font: 'Arial', size: 10 };
 
 /**
@@ -1856,10 +1921,50 @@ function generateDocument(docType, data, opts) {
   doc.saveAndClose();
 
   var result = { docId: copy.getId(), docUrl: copy.getUrl(), pdfId: '', pdfUrl: '', name: name, warnings: warnings };
+  if (opts.partOnly) return result;  // a part of the combined Agreement: merged, then deleted
   if (!opts.draft) {
     var pdf = folder.createFile(copy.getAs(MimeType.PDF)).setName(name + '.pdf');
     result.pdfId = pdf.getId();
     result.pdfUrl = pdf.getUrl();
+  }
+  shareFiles_([result.docId, result.pdfId].filter(String), opts.shareWith || []);
+  return result;
+}
+
+/**
+ * Combined Agreement: the generated ToS/MSA doc + "Annexure A" (Order Form) + "Annexure B" (DPA), copied element by element.
+ * parts = [{ title, docId }]. The part documents are moved to the trash afterwards. Returns the same shape as generateDocument.
+ */
+function mergeAgreement_(main, parts, opts) {
+  var doc = DocumentApp.openById(main.docId), body = doc.getBody(), E = DocumentApp.ElementType;
+  var note = body.appendParagraph('The following Annexures form part of this Agreement: ' + parts.map(function (p) { return p.title; }).join('; ') +
+    '. In case of conflict, the order of precedence set out in this Agreement applies.');
+  note.setHeading(DocumentApp.ParagraphHeading.NORMAL).editAsText().setItalic(true).setBold(false);
+  parts.forEach(function (p) {
+    body.appendPageBreak();
+    var h = body.appendParagraph(p.title);
+    h.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    var src = DocumentApp.openById(p.docId).getBody();
+    for (var i = 0; i < src.getNumChildren(); i++) {
+      var el = src.getChild(i).copy(), t = el.getType();
+      if (t === E.PARAGRAPH) body.appendParagraph(el.asParagraph());
+      else if (t === E.TABLE) body.appendTable(el.asTable());
+      else if (t === E.LIST_ITEM) body.appendListItem(el.asListItem());
+      else if (t === E.PAGE_BREAK) body.appendPageBreak(el.asPageBreak());
+      // table of contents etc. are skipped
+    }
+    try { DriveApp.getFileById(p.docId).setTrashed(true); } catch (e) { console.warn(e); }
+  });
+  styleAllTableHeaders_(body, opts.headerBg || TABLE_STYLE.headerBg);
+  if (opts.rtl) applyRtl_(body);
+  doc.saveAndClose();
+  var file = DriveApp.getFileById(main.docId);
+  if (opts.name) file.setName(opts.name);
+  var result = { docId: main.docId, docUrl: file.getUrl(), pdfId: '', pdfUrl: '', name: file.getName(), warnings: main.warnings || [] };
+  if (!opts.draft) {
+    var folder = file.getParents().next();
+    var pdf = folder.createFile(file.getAs(MimeType.PDF)).setName(file.getName() + '.pdf');
+    result.pdfId = pdf.getId(); result.pdfUrl = pdf.getUrl();
   }
   shareFiles_([result.docId, result.pdfId].filter(String), opts.shareWith || []);
   return result;
@@ -2271,14 +2376,18 @@ function generateForDeal_(dealId, user) {
   var shareWith = [owner, ownerUser.manager_email].filter(Boolean);
   var ownerProfile = { name: ownerUser.name || user.name, email: owner, phone: ownerUser.phone || '' };
 
-  archivePreviousVersions_(dealId, deal.version, plan.docTypes);
+  archivePreviousVersions_(dealId, deal.version, plan.combine ? plan.docTypes.concat(['AGREEMENT']) : plan.docTypes);
 
   var results = [];
-  plan.docTypes.forEach(function (t) {
+  var related = relatedNumbers(deal);
+  var clientName = deal.client.shortName || deal.client.legalName;
+  if (plan.combine) {
+    results.push(generateAgreement_(deal, pm, ev, plan, related, ownerProfile, shareWith, user));
+  } else plan.docTypes.forEach(function (t) {
     var lang = docLanguage_(deal, t, pm);
-    var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: deal.docNos, language: lang });
+    var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: related, language: lang });
     try {
-      var r = generateDocument(t, data, { clientName: deal.client.shortName || deal.client.legalName, version: deal.version, draft: plan.mode === 'DRAFT',
+      var r = generateDocument(t, data, { clientName: clientName, version: deal.version, draft: plan.mode === 'DRAFT',
         language: lang, shareWith: shareWith });
       var tpl = getActiveTemplate_(t, lang);
       appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: lang, version: deal.version,
@@ -2315,6 +2424,38 @@ function generateForDeal_(dealId, user) {
   });
 
   return { mode: plan.mode, message: plan.reason, results: results, deal: deal, summary: dealSummary(newRec) };
+}
+
+/**
+ * First contract for a client: ONE Agreement document = MSA/ToS (+SLA) + Annexure A Order Form + Annexure B DPA.
+ * Number of the Agreement = the ToS/MSA number; the annexures keep their own Order Form / DPA numbers (all reserved together).
+ */
+function generateAgreement_(deal, pm, ev, plan, related, ownerProfile, shareWith, user) {
+  var dealId = deal.dealId, draft = plan.mode === 'DRAFT', clientName = deal.client.shortName || deal.client.legalName;
+  var lang = docLanguage_(deal, 'TOS', pm), made = {};
+  var no = deal.docNos.TOS;
+  try {
+    ['TOS', 'ORDER_FORM', 'DPA'].forEach(function (t) {
+      var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: related, language: docLanguage_(deal, t, pm) });
+      made[t] = generateDocument(t, data, { clientName: clientName, version: deal.version, draft: draft, language: docLanguage_(deal, t, pm), partOnly: true });
+    });
+    var name = [no, safeName_(clientName), 'Agreement', 'v' + (deal.version || 1)].join('_') + (draft ? '_DRAFT' : '');
+    var r = mergeAgreement_(made.TOS, [
+      { title: 'Annexure A — Quotation & Order Form No. ' + deal.docNos.ORDER_FORM, docId: made.ORDER_FORM.docId },
+      { title: 'Annexure B — Data Processing Agreement No. ' + deal.docNos.DPA, docId: made.DPA.docId }
+    ], { name: name, draft: draft, shareWith: shareWith, rtl: lang === 'AR' });
+    var tpl = getActiveTemplate_('TOS', lang);
+    appendRecord_('Documents', { doc_no: no, deal_id: dealId, doc_type: 'AGREEMENT', language: lang, version: deal.version,
+      template_version: tpl.version, doc_file_id: r.docId, pdf_file_id: r.pdfId, created_by: user.email, created_at: new Date(),
+      status: draft ? 'Draft' : 'Final' });
+    var warnings = [].concat(made.TOS.warnings || [], made.ORDER_FORM.warnings || [], made.DPA.warnings || []);
+    return { type: 'AGREEMENT', label: 'Agreement (MSA + Order Form ' + deal.docNos.ORDER_FORM + ' + DPA ' + deal.docNos.DPA + ')', docNo: no,
+      docUrl: r.docUrl, pdfUrl: r.pdfUrl, pdfId: r.pdfId, warnings: warnings };
+  } catch (e) {
+    Object.keys(made).forEach(function (t) { try { DriveApp.getFileById(made[t].docId).setTrashed(true); } catch (x) { /* already gone */ } });
+    notifyFailure_('Generating Agreement for deal ' + dealId, e);
+    return { type: 'AGREEMENT', label: 'Agreement', docNo: no, error: String(e.message || e) };
+  }
 }
 
 /** Move files of earlier versions of this deal to _Archive and mark them Superseded. */
@@ -2443,6 +2584,7 @@ function apiSetDealStatus(dealId, status) {
   var deal = JSON.parse(rec.input_json);
   deal.status = status; rec.status = status; rec.input_json = JSON.stringify(deal); rec.updated_at = new Date().toISOString();
   writeRecord_('Deals', rec, rec._row);
+  if (status === 'Won') { try { recordClientMsa_(deal); } catch (e) { notifyFailure_('Recording client MSA for ' + dealId, e); } }
   audit_('STATUS_' + status.toUpperCase(), {}, dealId);
   return dealSummary(rec);
 }

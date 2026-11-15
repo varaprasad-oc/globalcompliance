@@ -194,15 +194,12 @@
                   <div><label>Payment method</label><select data-f="commercial.paymentMethod"><option>Bank Transfer</option><option>Card</option><option>Cheque</option></select></div>
                   <div><label>Auto-renewal</label><select data-f="commercial.autoRenew" data-bool="1"><option value="true">Yes</option><option value="false">No</option></select></div>
                   <div><label>PO number</label><input data-f="commercial.poNumber"></div>
-                  <div><label>MSA reference (if any)</label><input data-f="commercial.msaRef"></div>
+                  <div><label>Existing MSA reference (if signed outside this app)</label><input data-f="commercial.msaRef" placeholder="Leave empty – filled automatically"></div>
                   <div class="wide"><label>Special commercial terms</label><textarea data-f="commercial.specialTerms" placeholder="Leave empty for “None.”"></textarea></div>
                 </div>
-                <h3>Documents generated together</h3>
-                <div class="checks">
-                  <label><input type="checkbox" data-f="docs.ORDER_FORM" checked disabled> Quotation &amp; Order Form</label>
-                  <label><input type="checkbox" data-f="docs.TOS" checked> Terms of Service / MSA (+SLA)</label>
-                  <label><input type="checkbox" data-f="docs.DPA" checked> DPA (PDPL)</label>
-                </div>
+                <h3>What will be generated</h3>
+                <div id="contractPack" class="card" style="margin:0 0 10px;padding:12px 14px">—</div>
+                <label id="newMsaBox" class="hidden" style="display:inline-flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" data-f="newMsa" style="width:auto"> Issue a new MSA anyway (e.g. new entity or the old MSA expired)</label>
                 <h3>DPA details</h3>
                 <div class="grid">
                   <div><label>Hosting region</label><input data-f="dpa.hostingRegion" placeholder="Default from Master Sheet"></div>
@@ -313,7 +310,7 @@
 
 <script>
   var APPROVAL = null, BOOT = null, LISTS = null, DEAL = null, STEP = 1, EVAL_TIMER = null, LAST = null;
-  var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'Terms of Service', DPA: 'DPA' };
+  var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'Terms of Service', DPA: 'DPA', AGREEMENT: 'Agreement (MSA + Order Form + DPA)' };
   function $(id) { return document.getElementById(id); }
   function qa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -394,7 +391,7 @@
     $('fRange').onchange = function () { $('fCustom').classList.toggle('hidden', $('fRange').value !== 'custom'); PAGE = 1; renderList(); };
     $('fFrom').onchange = $('fTo').onchange = $('fStale').onchange = function () { PAGE = 1; renderList(); };
     $('dPeriod').onchange = loadDash;
-    qa('[data-f^="docs."]').concat([$('language')]).forEach(function (el) { el.addEventListener('change', langHint); });
+    [$('language')].forEach(function (el) { el.addEventListener('change', langHint); });
     $('admTab').onchange = function () { admLoad($('admTab').value); };
     $('admAdd').onclick = function () { admEdit(null); };
     $('tplCheck').onclick = function () { tplRun('apiAdminCheckTemplate'); };
@@ -497,7 +494,7 @@
     });
     d.commercial.termMonths = Number(d.commercial.termMonths || 12);
     d.stage = stageOf(DEAL);
-    d.docs = d.stage === 'PROPOSAL' ? { PROPOSAL: true } : { ORDER_FORM: true, TOS: !!(d.docs || {}).TOS, DPA: !!(d.docs || {}).DPA };
+    d.docs = d.stage === 'PROPOSAL' ? { PROPOSAL: true } : { ORDER_FORM: true, TOS: true, DPA: true };
     d.commercial.packages = selectedPackages();
     var byPkg = {}, all = [];
     d.commercial.packages.forEach(function (p) { byPkg[p] = []; });
@@ -593,7 +590,7 @@
     [/contracting entity|partner/i, 1, '#entity'], [/invalid email/i, 1, '[data-f="client.businessContact.email"],[data-f="client.billingContact.email"]'],
     [/package must be/i, 3, '#orderPackage'], [/subscription term/i, 3, '[data-f="commercial.termMonths"]'],
     [/at least one package|unknown package/i, 2, '#pkgs input'], [/store or e-commerce/i, 2, '[data-f="commercial.stores"]'],
-    [/market/i, 2, '#market'], [/currency/i, 2, '#currency'], [/special/i, 2, '#specials input, #otSpecials input'], [/document/i, 3, '[data-f="docs.TOS"]']
+    [/market/i, 2, '#market'], [/currency/i, 2, '#currency'], [/special/i, 2, '#specials input, #otSpecials input'], [/document/i, 3, '#contractPack']
   ];
   function fixFor(text) { for (var i = 0; i < FIX_MAP.length; i++) if (FIX_MAP[i][0].test(text)) return FIX_MAP[i]; return null; }
   function renderBlockers(ev) {
@@ -674,7 +671,23 @@
     });
   }
 
+  /** Hybrid contract pack: first contract = one Agreement (MSA + annexures); existing MSA = standalone Order Form. */
+  function renderContractPack(ev) {
+    var c = ev && ev.contract;
+    if (!c) return;
+    var msa = c.msa;
+    $('newMsaBox').classList.toggle('hidden', !msa);
+    $('btnGenerate').textContent = c.mode === 'AGREEMENT' ? 'Generate Agreement (MSA + Order Form + DPA)' : 'Generate Order Form';
+    $('contractPack').innerHTML = c.mode === 'AGREEMENT'
+      ? '<b>One Agreement document</b> – Master Services Agreement / Terms of Service (with SLA)<br>&nbsp;&nbsp;• Annexure A – Quotation &amp; Order Form<br>&nbsp;&nbsp;• Annexure B – Data Processing Agreement (PDPL)' +
+        '<p class="muted" style="margin:6px 0 0">The Order Form cites the Agreement’s MSA number. When this deal is marked <b>Won</b>, the MSA is saved on the client, so later deals produce only an Order Form.</p>'
+      : '<b>Quotation &amp; Order Form only</b> – under the client’s existing MSA <b>' + esc(msa.no) + '</b>' +
+        (msa.dealId ? ' (signed with deal ' + esc(msa.dealId) + (msa.date ? ', ' + esc(msa.date) : '') + ')' : ' (entered in “MSA reference”)') +
+        (msa.dpaNo ? ' and DPA <b>' + esc(msa.dpaNo) + '</b>' : '') + '.';
+  }
+
   function renderSide(ev, d) {
+    renderContractPack(ev);
     renderOtSpecials(ev.quote && (d.commercial.packages || []).length ? ev.quote : null, d);
     var h = '', com = d.commercial || {};
     var sites = Number(com.stores || 0) + Number(com.ecomSites || 0);
@@ -933,7 +946,7 @@
     PROPOSAL: { banner: '<b>Stage 1 of 2 – Proposal.</b> Enter the client, pricing and proposal text, then generate the proposal. When the client accepts, click <b>Convert to Order Form</b>.',
       steps: ['1 · Client', '2 · Commercials', '3 · Proposal', '4 · Review'], gen: 'Generate proposal' },
     CONTRACT: { banner: '<b>Stage 2 of 2 – Order Form.</b> Add contract details and Order Form terms; the Order Form, Terms of Service / MSA and DPA are generated together.',
-      steps: ['1 · Contract details', '2 · Commercials', '3 · Order Form & documents', '4 · Review'], gen: 'Generate Order Form, ToS & DPA' }
+      steps: ['1 · Contract details', '2 · Commercials', '3 · Order Form & documents', '4 · Review'], gen: 'Generate Agreement (MSA + Order Form + DPA)' }
   };
   function stageOf(d) { return (d && d.stage) || 'PROPOSAL'; }
   function applyStage(stage) {
@@ -966,7 +979,7 @@
     if (!LISTS || !LISTS.languages) return;
     var lang = $('language').value, names = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'ToS', DPA: 'DPA' };
     if (lang === 'EN') { $('langHint').textContent = ''; return; }
-    var sel = stageOf(DEAL) === 'PROPOSAL' ? ['PROPOSAL'] : ['ORDER_FORM', 'TOS', 'DPA'].filter(function (t) { var c = document.querySelector('[data-f="docs.' + t + '"]'); return c && c.checked; });
+    var sel = stageOf(DEAL) === 'PROPOSAL' ? ['PROPOSAL'] : (LAST && LAST.contract && LAST.contract.mode === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['TOS', 'ORDER_FORM', 'DPA']);
     var yes = sel.filter(function (t) { return (LISTS.languages[t] || []).indexOf(lang) !== -1; }), no = sel.filter(function (t) { return yes.indexOf(t) === -1; });
     $('langHint').innerHTML = (yes.length ? 'In ' + (lang === 'AR' ? 'Arabic' : 'bilingual') + ': ' + yes.map(function (t) { return names[t]; }).join(', ') + '. ' : '') +
       (no.length ? '<span class="badge warn">No ' + (lang === 'AR' ? 'Arabic' : 'bilingual') + ' template yet for ' + no.map(function (t) { return names[t]; }).join(', ') + ' – these will be generated in English.</span>' : '');
@@ -1065,8 +1078,9 @@
     $('docList').innerHTML = '';
     run('apiDealDocuments', dealId).then(function (docs) {
       if (!docs.length) return;
-      $('docList').innerHTML = '<h3>Generated documents</h3><table><tr><th>Document</th><th>No.</th><th>Version</th><th>Status</th><th>Links</th></tr>' + docs.map(function (d) {
-        return '<tr><td>' + esc(d.label) + '</td><td>' + esc(d.docNo) + '</td><td>v' + d.version + '</td><td>' + esc(d.status) + '</td><td>' +
+      $('docList').innerHTML = '<h3>Generated documents</h3><table><tr><th>Document</th><th>No.</th><th>Version</th><th>Date</th><th>Status</th><th>Links</th></tr>' + docs.slice().sort(function (a, b) { return String(b.createdAt) > String(a.createdAt) ? 1 : -1; }).map(function (d) {
+        var dt = new Date(d.createdAt), when = isNaN(dt) ? esc(String(d.createdAt).slice(0, 10)) : dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' <span class="muted">' + dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</span>';
+        return '<tr><td>' + esc(d.label) + '</td><td>' + esc(d.docNo) + '</td><td>v' + d.version + '</td><td>' + when + '</td><td>' + esc(d.status) + '</td><td>' +
           (d.docUrl ? '<a href="' + esc(d.docUrl) + '" target="_blank">Doc</a>' : '') + (d.pdfUrl ? ' · <a href="' + esc(d.pdfUrl) + '" target="_blank">PDF</a>' : '') + '</td></tr>';
       }).join('') + '</table>';
     });

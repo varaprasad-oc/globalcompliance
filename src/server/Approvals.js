@@ -77,6 +77,7 @@ function apiSetDealStatus(dealId, status) {
   var deal = JSON.parse(rec.input_json);
   deal.status = status; rec.status = status; rec.input_json = JSON.stringify(deal); rec.updated_at = new Date().toISOString();
   writeRecord_('Deals', rec, rec._row);
+  if (status === 'Won') { try { recordClientMsa_(deal); } catch (e) { notifyFailure_('Recording client MSA for ' + dealId, e); } }
   audit_('STATUS_' + status.toUpperCase(), {}, dealId);
   return dealSummary(rec);
 }

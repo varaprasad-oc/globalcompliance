@@ -7,7 +7,7 @@
  */
 
 var DOC_FOLDER_KEY = { PROPOSAL: 'PROPOSALS', ORDER_FORM: 'ORDER_FORMS', TOS: 'LEGAL', DPA: 'LEGAL' };
-var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'Terms of Service', DPA: 'DPA' };
+var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'Terms of Service', DPA: 'DPA', AGREEMENT: 'Agreement' };
 var TABLE_STYLE = { headerBg: '#7B3FE4', headerFg: '#ffffff', border: '#c9d2dc', font: 'Arial', size: 10 };
 
 /**
@@ -52,10 +52,50 @@ function generateDocument(docType, data, opts) {
   doc.saveAndClose();
 
   var result = { docId: copy.getId(), docUrl: copy.getUrl(), pdfId: '', pdfUrl: '', name: name, warnings: warnings };
+  if (opts.partOnly) return result;  // a part of the combined Agreement: merged, then deleted
   if (!opts.draft) {
     var pdf = folder.createFile(copy.getAs(MimeType.PDF)).setName(name + '.pdf');
     result.pdfId = pdf.getId();
     result.pdfUrl = pdf.getUrl();
+  }
+  shareFiles_([result.docId, result.pdfId].filter(String), opts.shareWith || []);
+  return result;
+}
+
+/**
+ * Combined Agreement: the generated ToS/MSA doc + "Annexure A" (Order Form) + "Annexure B" (DPA), copied element by element.
+ * parts = [{ title, docId }]. The part documents are moved to the trash afterwards. Returns the same shape as generateDocument.
+ */
+function mergeAgreement_(main, parts, opts) {
+  var doc = DocumentApp.openById(main.docId), body = doc.getBody(), E = DocumentApp.ElementType;
+  var note = body.appendParagraph('The following Annexures form part of this Agreement: ' + parts.map(function (p) { return p.title; }).join('; ') +
+    '. In case of conflict, the order of precedence set out in this Agreement applies.');
+  note.setHeading(DocumentApp.ParagraphHeading.NORMAL).editAsText().setItalic(true).setBold(false);
+  parts.forEach(function (p) {
+    body.appendPageBreak();
+    var h = body.appendParagraph(p.title);
+    h.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    var src = DocumentApp.openById(p.docId).getBody();
+    for (var i = 0; i < src.getNumChildren(); i++) {
+      var el = src.getChild(i).copy(), t = el.getType();
+      if (t === E.PARAGRAPH) body.appendParagraph(el.asParagraph());
+      else if (t === E.TABLE) body.appendTable(el.asTable());
+      else if (t === E.LIST_ITEM) body.appendListItem(el.asListItem());
+      else if (t === E.PAGE_BREAK) body.appendPageBreak(el.asPageBreak());
+      // table of contents etc. are skipped
+    }
+    try { DriveApp.getFileById(p.docId).setTrashed(true); } catch (e) { console.warn(e); }
+  });
+  styleAllTableHeaders_(body, opts.headerBg || TABLE_STYLE.headerBg);
+  if (opts.rtl) applyRtl_(body);
+  doc.saveAndClose();
+  var file = DriveApp.getFileById(main.docId);
+  if (opts.name) file.setName(opts.name);
+  var result = { docId: main.docId, docUrl: file.getUrl(), pdfId: '', pdfUrl: '', name: file.getName(), warnings: main.warnings || [] };
+  if (!opts.draft) {
+    var folder = file.getParents().next();
+    var pdf = folder.createFile(file.getAs(MimeType.PDF)).setName(file.getName() + '.pdf');
+    result.pdfId = pdf.getId(); result.pdfUrl = pdf.getUrl();
   }
   shareFiles_([result.docId, result.pdfId].filter(String), opts.shareWith || []);
   return result;

@@ -38,3 +38,12 @@
 - New clients get C-0001, C-0002 … from a new Numbering row `CLIENT | C | - | 0` ("-" = never resets, no year). Falls back to the old timestamp id only if that row is missing.
 - Deal screen title now shows: Client · D-2026-0001 · C-0001 · v1.
 - Live sheet: CLIENT row added (last_no 1); the existing test client renamed C-261115-075620-597 → C-0001 in Clients and Deals.
+
+## 23. MSA reference on the quote / Order Form as annexure of the MSA (hybrid)
+- See DECISIONS "Contract pack: hybrid Agreement". Stage 2 step 3 shows "What will be generated" instead of the ToS/DPA tick boxes; Generate button reads "Generate Agreement (MSA + Order Form + DPA)" or "Generate Order Form".
+- Engine: parts are generated, then the Order Form and DPA bodies are copied into the MSA after page breaks as Annexure A / B; one Doc + one PDF; part files are trashed.
+- Live sheet: Clients columns msa_no, dpa_no, msa_deal_id, msa_date added.
+- Tests: 3 new unit tests (Agreement numbers, Order-only citing the client MSA, manual reference); harness checks for the pack box and button.
+
+## 24. Date column in "Generated documents"
+- Date + time next to Version; list sorted newest first.

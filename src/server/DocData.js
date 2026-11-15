@@ -88,7 +88,8 @@ function buildDocData(docType, master, deal, quote, ctx) {
     LegalEmail: _v(terms.legal_email)
   };
   var rel = ctx.related || {};
-  var flags = { IsPartner: isPartner, IsOptCultureEntity: !isPartner, HasMsa: !!com.msaRef, HasPO: !!com.poNumber,
+  var msaRef = _v(com.msaRef || rel.TOS);  // the Agreement's own number, or the client's existing MSA
+  var flags = { IsPartner: isPartner, IsOptCultureEntity: !isPartner, HasMsa: !!msaRef, HasPO: !!com.poNumber,
     HasProposalNo: !!rel.PROPOSAL, HasOrderFormNo: !!rel.ORDER_FORM, HasTosNo: !!rel.TOS, HasDpaNo: !!rel.DPA };
   var lists = {}, tables = {}, texts = {}, images = {};
   if (entity.logo_file_id) images.EntityLogo = entity.logo_file_id;
@@ -190,7 +191,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
     fields.BillingCycle = _v(com.billingCycle || 'Annual');
     fields.PaymentMethod = _v(com.paymentMethod || 'Bank Transfer');
     fields.PONumber = _v(com.poNumber || 'Not applicable');
-    fields.MsaRef = _v(com.msaRef);
+    fields.MsaRef = msaRef;
     fields.SpecialTerms = _v(com.specialTerms || 'None.');
     fields.TotalRecurringMonthly = m(op.recurringMonthly);
     fields.TotalRecurringAnnual = m(op.recurringAnnual);

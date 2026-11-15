@@ -94,7 +94,37 @@ function applyCountryDefaults(master, deal) {
   return deal;
 }
 
+/**
+ * Hybrid contract pack (decision #22):
+ *  - AGREEMENT: first contract for a client → one document: MSA/ToS (+SLA) with Annexure A Order Form and Annexure B DPA.
+ *  - ORDER_ONLY: the client already has an MSA (recorded on the client when an Agreement deal was Won, or typed in
+ *    "MSA reference") → standalone Order Form citing that MSA. deal.newMsa forces a fresh Agreement.
+ * deal.msa = { no, dpaNo, dealId, date } is filled by the server from the Clients tab.
+ */
+function existingMsa(deal) {
+  var msa = deal.msa || {}, ref = String((deal.commercial || {}).msaRef || '').trim();
+  if (msa.no && msa.dealId !== deal.dealId) return { no: msa.no, dpaNo: msa.dpaNo || '', dealId: msa.dealId || '', date: msa.date || '', source: 'client' };
+  if (ref && ref !== (deal.docNos || {}).TOS) return { no: ref, dpaNo: '', dealId: '', date: '', source: 'manual' };
+  return null;
+}
+
+function contractMode(deal) {
+  if (deal.stage !== 'CONTRACT') return null;
+  return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'AGREEMENT';
+}
+
+/** Numbers the documents should cite: the deal's own numbers, or the client's existing MSA/DPA for a standalone Order Form. */
+function relatedNumbers(deal) {
+  var rel = JSON.parse(JSON.stringify(deal.docNos || {}));
+  if (contractMode(deal) === 'ORDER_ONLY') {
+    var msa = existingMsa(deal);
+    rel.TOS = msa.no; rel.DPA = msa.dpaNo || '';
+  }
+  return rel;
+}
+
 function selectedDocs(deal) {
+  if (deal.stage === 'CONTRACT') return contractMode(deal) === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['TOS', 'ORDER_FORM', 'DPA'];
   var d = deal.docs || {};
   var allowed = deal.stage ? STAGE_DOCS[deal.stage] : DOC_TYPES;
   return DOC_TYPES.filter(function (t) { return d[t] && allowed.indexOf(t) !== -1; });
@@ -129,7 +159,8 @@ function evaluateDeal(master, deal) {
     readyToGenerate: errors.length === 0 && Object.keys(missing).length === 0,
     needsApproval: quote.ok ? quote.needsApproval : false,
     approvalReasons: quote.ok ? quote.approvalReasons : [],
-    changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : []
+    changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : [],
+    contract: deal.stage === 'CONTRACT' ? { mode: contractMode(deal), msa: existingMsa(deal) } : null
   };
 }
 

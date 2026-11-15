@@ -29,7 +29,7 @@ test('Converted deal generates Order Form + ToS + DPA, keeps numbers and version
   eq([c.stage, c.status, c.docs, c.commercial.orderPackage, c.docNos.PROPOSAL, c.version], ['CONTRACT', 'Contract draft', { ORDER_FORM: true, TOS: true, DPA: true }, 'Loyalty', 'OC-P-2026-0001', 1]);
   c.commercial.specialPrices = {};
   const plan = C().planGeneration(c, C().evaluateDeal(global.M, c), 'Not required');
-  eq([plan.docTypes, plan.status], [['ORDER_FORM', 'TOS', 'DPA'], 'Contract generated']);
+  eq([plan.docTypes, plan.status], [['TOS', 'ORDER_FORM', 'DPA'], 'Contract generated']);
 });
 
 test('Saving a contract draft keeps stage and version; Order Form cannot be unticked', () => {
@@ -77,4 +77,31 @@ test('Proposal baseline is server-owned', () => {
   const stored = C().convertToContract(Object.assign(base(), { stage: 'PROPOSAL' }), C().buildQuote(global.M, base().commercial));
   const incoming = JSON.parse(JSON.stringify(stored)); incoming.proposalBaseline = { prices: {}, commercial: {} };
   eq(C().protectDealFields(incoming, stored, 'Contract draft', {}).proposalBaseline.prices.Loyalty, 70);
+});
+
+test('Hybrid: first contract = one Agreement (ToS + Order Form + DPA, all numbers reserved together)', () => {
+  const d = base(); d.stage = 'CONTRACT'; d.commercial.specialPrices = {}; d.commercial.msaRef = '';
+  eq(C().contractMode(d), 'AGREEMENT');
+  const plan = C().planGeneration(d, C().evaluateDeal(global.M, d), 'Not required');
+  eq([plan.docTypes, plan.combine], [['TOS', 'ORDER_FORM', 'DPA'], true]);
+  eq(C().docNumbersNeeded(d, plan.docTypes), ['TOS', 'ORDER_FORM', 'DPA']);
+  d.docNos = { TOS: 'OC-TOS-2026-0007', ORDER_FORM: 'OC-Q-2026-0009', DPA: 'OC-DPA-2026-0003' };
+  const data = C().buildDocData('ORDER_FORM', global.M, d, C().evaluateDeal(global.M, d).quote, { docNo: d.docNos.ORDER_FORM, related: C().relatedNumbers(d) });
+  eq([data.fields.MsaRef, data.flags.HasMsa, data.fields.TosNo], ['OC-TOS-2026-0007', true, 'OC-TOS-2026-0007'], 'Order Form cites the MSA number even if generated first');
+});
+
+test('Hybrid: client with a signed MSA from another deal = standalone Order Form citing it; override issues a new Agreement', () => {
+  const d = base(); d.stage = 'CONTRACT'; d.commercial.specialPrices = {}; d.commercial.msaRef = '';
+  d.msa = { no: 'OC-TOS-2026-0002', dpaNo: 'OC-DPA-2026-0002', dealId: 'D-OLD' };
+  eq(C().contractMode(d), 'ORDER_ONLY');
+  const plan = C().planGeneration(d, C().evaluateDeal(global.M, d), 'Not required');
+  eq([plan.docTypes, plan.combine], [['ORDER_FORM'], false]);
+  eq(C().relatedNumbers(d), { TOS: 'OC-TOS-2026-0002', DPA: 'OC-DPA-2026-0002' });
+  d.newMsa = true; eq(C().contractMode(d), 'AGREEMENT');
+  delete d.newMsa; d.msa.dealId = 'D-1'; eq(C().contractMode(d), 'AGREEMENT', 'the deal that created the MSA keeps producing the Agreement on revisions');
+});
+
+test('Hybrid: MSA typed in "MSA reference" (signed outside the app) = Order Form only', () => {
+  const d = base(); d.stage = 'CONTRACT'; d.commercial.msaRef = 'MSA-LEGACY-1';
+  eq([C().contractMode(d), C().relatedNumbers(d).TOS], ['ORDER_ONLY', 'MSA-LEGACY-1']);
 });
