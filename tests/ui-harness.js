@@ -97,6 +97,13 @@ const api = {
   await p.click('#otAll'); await p.waitForTimeout(200);
   check('One-time Select all clears', await p.$$eval('input[data-ot]', (b) => b.every((x) => !x.checked)));
   await p.fill('input[data-map="commercial.specialPrices"][data-key="Loyalty"]', '70');
+  await p.waitForTimeout(1000);
+  check('Step 2 order: pricing basis → one-time fees → optional services → packages → subscription price → messaging', await p.evaluate(() => {
+    const ids = ['market', 'otSpecials', 'onetime', 'pkgs', 'matrix', 'specials', 'comms'].map((i) => document.getElementById(i));
+    return ids.every((el, k) => k === 0 || (ids[k - 1].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
+  }));
+  check('Subscription price table shows standard USD 75 and Needs approval for 70', (await p.textContent('[data-sp-std="Loyalty"]')).includes('USD 75') && (await p.textContent('[data-sp-badge="Loyalty"]')).includes('Needs approval'));
+  await (await p.$('#view-deal .step[data-step="2"]')).screenshot({ path: path.join(out, 'step2.png') });
   await p.check('#matrix input[data-addon="GIFT_CARDS"][data-pkg="Loyalty"]');
   await p.waitForTimeout(900);
   check('Live summary shows approval badge', (await p.textContent('#side')).includes('Needs Amith'));

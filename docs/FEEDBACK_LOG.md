@@ -54,3 +54,7 @@
 ## 26. Processing screen while documents are generated
 - Full-screen overlay with spinner, elapsed seconds and the steps (save → create → combine → PDF → share/email); then a success dialog with the document links and "Back to My Deals" (automatic after 10 s; "Stay on this deal" or opening a link cancels it). Errors show in the same dialog.
 - Also used for Convert to Order Form and Amith's "Approve & generate" (returns to Approvals).
+
+## 27. Step 2 order + subscription special price as a table
+- Order (Varaprasad's choice): Pricing basis → One-time fees (current & special) → Optional one-time services → Packages to quote → What's included & add-ons → **Subscription price – current & special** (table: Package | Standard / site / month | Special price | "Needs approval" badge, rows only for ticked packages) → Platform messaging.
+- Harness checks the section order, the standard price (USD 75) and the approval badge.

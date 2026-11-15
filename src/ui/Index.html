@@ -156,16 +156,17 @@
                 <div><label>Physical stores</label><input data-f="commercial.stores" type="number" min="0"></div>
                 <div><label>E-commerce sites</label><input data-f="commercial.ecomSites" type="number" min="0" value="0"></div>
               </div>
+              <h3>One-time fees – current price &amp; special price (optional)</h3>
+              <div id="otSpecials" class="muted">Enter stores and tick packages (below) to see one-time fees.</div>
+              <h3 style="display:flex;gap:14px;align-items:center">Optional one-time services <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink);font-size:13px;font-weight:normal;margin:0"><input type="checkbox" id="otAll" style="width:auto"> Select all</label></h3>
+              <div id="onetime"></div>
               <h3>Packages to quote</h3>
               <div class="checks" id="pkgs"></div>
-              <div class="grid" id="specials"></div>
               <h3>What’s included &amp; add-ons</h3>
               <p class="muted" style="margin-top:0">✔ = included in the package (fixed). Tick add-ons per package; columns of packages you haven’t selected are locked.</p>
               <div id="matrix" style="overflow-x:auto"></div>
-              <h3 style="display:flex;gap:14px;align-items:center">Optional one-time services <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink);font-size:13px;font-weight:normal;margin:0"><input type="checkbox" id="otAll" style="width:auto"> Select all</label></h3>
-              <div id="onetime"></div>
-              <h3>One-time fees – current price &amp; special price (optional)</h3>
-              <div id="otSpecials" class="muted">Enter stores and choose packages to see one-time fees.</div>
+              <h3>Subscription price – current price &amp; special price (optional)</h3>
+              <div id="specials"></div>
               <h3>Platform messaging (negotiated price, optional)</h3>
               <div class="grid" id="comms"></div>
               <div id="priceFreeze" class="hidden" style="margin:10px 0"><span class="badge warn" id="priceFreezeText"></span> <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" data-f="refreshPrices" style="width:auto"> Use today’s price list on next save</label></div>
@@ -420,7 +421,9 @@
     $('entity').innerHTML = '<option value="">— select —</option>' + LISTS.entities.map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.name + (e.type === 'Partner' ? ' (partner – ' + e.country + ')' : ' (' + e.country + ')')) + '</option>'; }).join('');
     $('clientList').innerHTML = LISTS.clients.map(function (c) { return '<option value="' + esc(c.legalName) + '">'; }).join('');
     $('pkgs').innerHTML = b.packages.map(function (p) { return '<label><input type="checkbox" data-arr="commercial.packages" value="' + esc(p) + '"> ' + esc(p) + '</label>'; }).join('');
-    $('specials').innerHTML = b.packages.map(function (p) { return '<div data-pkgbox="' + esc(p) + '" class="hidden"><label>Special price / site / month – ' + esc(p) + '</label><input type="number" min="0" data-map="commercial.specialPrices" data-key="' + esc(p) + '" placeholder="Standard"></div>'; }).join('');
+    $('specials').innerHTML = '<p class="muted" id="spEmpty" style="margin:0">Tick a package above to enter its special price.</p><table id="spTable" class="hidden"><tr><th>Package</th><th>Standard / site / month</th><th>Special price / site / month</th><th></th></tr>' +
+      b.packages.map(function (p) { return '<tr data-pkgbox="' + esc(p) + '" class="hidden"><td>' + esc(p) + '</td><td data-sp-std="' + esc(p) + '" class="muted">—</td>' +
+        '<td><input type="number" min="0" data-map="commercial.specialPrices" data-key="' + esc(p) + '" placeholder="Special price" style="max-width:180px"></td><td data-sp-badge="' + esc(p) + '"></td></tr>'; }).join('') + '</table>';
     buildMatrix(b);
     setTimeout(wireSelectAll, 0);
     $('onetime').innerHTML = '<p class="muted" data-stage="PROPOSAL" style="margin-top:0">Ticked services are listed in the proposal with their rate-card price only (no quantities or totals).</p>' +
@@ -505,6 +508,7 @@
       d.classList.toggle('hidden', !on);
       if (!on) d.querySelector('input').value = '';
     });
+    $('spTable').classList.toggle('hidden', !sel.length); $('spEmpty').classList.toggle('hidden', !!sel.length);
     qa('#matrix [data-col]').forEach(function (c) { c.style.opacity = sel.indexOf(c.dataset.col) !== -1 ? '1' : '.35'; });
     qa('#matrix input[data-addon]').forEach(function (e) {
       var on = sel.indexOf(e.dataset.pkg) !== -1;
@@ -682,7 +686,7 @@
   var OTS_KEY = '';
   function renderOtSpecials(q, d) {
     var box = $('otSpecials');
-    if (!q) { box.innerHTML = '<span class="muted">Enter stores and choose packages to see one-time fees.</span>'; OTS_KEY = ''; return; }
+    if (!q) { box.innerHTML = '<span class="muted">Enter stores and tick packages (below) to see one-time fees.</span>'; OTS_KEY = ''; return; }
     var com = d.commercial || {}, cur = q.currency;
     var spOT = com.specialOneTime || {}, spOpt = com.specialOptional || {};
     var ids = [];
@@ -747,6 +751,14 @@
 
   function renderSide(ev, d) {
     renderContractPack(ev);
+    var qq = ev.quote, cur0 = qq ? qq.currency : '';
+    qa('[data-sp-std]').forEach(function (td) {
+      var pk = qq && qq.packages.filter(function (x) { return x.package === td.dataset.spStd; })[0];
+      td.textContent = pk ? money(cur0, pk.standardPricePerSite) : '—';
+      var sp = (((d.commercial || {}).specialPrices) || {})[td.dataset.spStd];
+      var bd = document.querySelector('[data-sp-badge="' + td.dataset.spStd + '"]');
+      if (bd) bd.innerHTML = pk && sp !== '' && sp !== undefined && sp !== null && Number(sp) < pk.standardPricePerSite ? '<span class="badge warn">Needs approval</span>' : '';
+    });
     renderOtSpecials(ev.quote && (d.commercial.packages || []).length ? ev.quote : null, d);
     var h = '', com = d.commercial || {};
     var sites = Number(com.stores || 0) + Number(com.ecomSites || 0);
