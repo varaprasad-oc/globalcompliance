@@ -123,3 +123,7 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## Currency per country (2026-11-15)
 - **INR** for India, **ZAR** for South Africa, **USD** for every other country (incl. UAE, KSA, Egypt, GCC). Fixed by country, not editable by reps; enforced on the server. Countries without a row default to USD.
+
+## One-time special prices (2026-11-15)
+- Reps may set special unit prices for set-up, per-store and per-e-commerce installation (per package) and for optional services. Below standard → superadmin approval (same flow as licence special prices). Above standard → allowed.
+- One-time fees are always shown line by line (no consolidated figure except the final total).

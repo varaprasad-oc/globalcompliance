@@ -128,3 +128,24 @@ test('Feature matrix links add-on features to price items', () => {
   eq(fm.find((f) => f.feature === 'Gift Cards').addonItemId, 'GIFT_CARDS');
   eq(fm.find((f) => f.feature === 'E-receipts').addonItemId, '');
 });
+
+test('One-time special prices per package and for optional services; discounts need approval', () => {
+  const r = q({ stores: 5, ecomSites: 1, packages: ['Loyalty'], specialOneTime: { Loyalty: { SETUP: 1500, STORE_INSTALL: 100 } },
+    oneTimeItems: [{ id: 'MIGRATION_100K', qty: 1 }, { id: 'CUSTOM_INT_HOUR', qty: 10 }], specialOptional: { CUSTOM_INT_HOUR: 150 } });
+  const p = pkg(r, 'Loyalty');
+  const set = line(p.oneTime, 'SETUP'), ins = line(p.oneTime, 'STORE_INSTALL'), eco = line(p.oneTime, 'ECOM_INSTALL');
+  eq([set.standardUnitPrice, set.unitPrice, set.total], [1800, 1500, 1500]);
+  eq([ins.standardUnitPrice, ins.unitPrice, ins.total], [150, 100, 500], '5 stores × 100');
+  eq([eco.specialUnitPrice, eco.total], [null, 1000], 'no special → standard');
+  eq(p.oneTimeTotal, 1500 + 500 + 1000);
+  const ci = line(r.optionalOneTime, 'CUSTOM_INT_HOUR');
+  eq([ci.standardUnitPrice, ci.unitPrice, ci.total], [125, 150, 1500], 'above standard is allowed');
+  eq(r.needsApproval, true);
+  eq(r.approvalReasons, ['Loyalty: Set-up and Training: special USD 1,500 vs standard USD 1,800', 'Loyalty: Installation per store: special USD 100 vs standard USD 150 (× 5)']);
+});
+
+test('One-time special price validation', () => {
+  const r = C().buildQuote(M, { market: 'Developed', currency: 'USD', stores: 1, ecomSites: 0, packages: ['Loyalty'], specialOneTime: { Loyalty: { SETUP: -5 } }, specialOptional: { AI_SETUP: 'abc' } });
+  eq(r.ok, false);
+  eq(r.errors.length, 2);
+});

@@ -151,6 +151,8 @@
               <div id="matrix" style="overflow-x:auto"></div>
               <h3 style="display:flex;gap:14px;align-items:center">Optional one-time services <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink);font-size:13px;font-weight:normal;margin:0"><input type="checkbox" id="otAll" style="width:auto"> Select all</label></h3>
               <div id="onetime"></div>
+              <h3>One-time fees – current price &amp; special price (optional)</h3>
+              <div id="otSpecials" class="muted">Enter stores and choose packages to see one-time fees.</div>
               <h3>Platform messaging (negotiated price, optional)</h3>
               <div class="grid" id="comms"></div>
               <div id="priceFreeze" class="hidden" style="margin:10px 0"><span class="badge warn" id="priceFreezeText"></span> <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" data-f="refreshPrices" style="width:auto"> Use today’s price list on next save</label></div>
@@ -490,12 +492,18 @@
     ['specialPrices', 'specialComms'].forEach(function (k) {
       var m = {}; qa('input[data-map="commercial.' + k + '"]').forEach(function (e) { if (e.value !== '') m[e.dataset.key] = Number(e.value); }); d.commercial[k] = m;
     });
+    if (qa('[data-ots-id]').length || qa('[data-osp]').length) {
+      var sot = {}, sop = {};
+      qa('[data-ots-id]').forEach(function (e) { if (e.value !== '') { sot[e.dataset.otsPkg] = sot[e.dataset.otsPkg] || {}; sot[e.dataset.otsPkg][e.dataset.otsId] = Number(e.value); } });
+      qa('[data-osp]').forEach(function (e) { if (e.value !== '') sop[e.dataset.osp] = Number(e.value); });
+      d.commercial.specialOneTime = sot; d.commercial.specialOptional = sop;
+    }
     d.commercial.oneTimeItems = qa('input[data-ot]:checked').map(function (e) { var q = document.querySelector('[data-otqty="' + e.dataset.ot + '"]'); return { id: e.dataset.ot, qty: q ? Number(q.value || 1) : 1 }; });
     return d;
   }
 
   function fill(d) {
-    DEAL = d;
+    DEAL = d; OTS_KEY = '';
     qa('[data-f]').forEach(function (el) {
       var v = getPath(d, el.dataset.f);
       if (el.type === 'checkbox') el.checked = !!v;
@@ -525,7 +533,7 @@
   }
 
   function newDeal() {
-    APPROVAL = null;
+    APPROVAL = null; OTS_KEY = '';
     fill({ client: { businessContact: {}, billingContact: {} }, commercial: { stores: '', ecomSites: 0, packages: [], termMonths: 12, billingCycle: 'Annual', paymentMethod: 'Bank Transfer', autoRenew: true },
       stage: 'PROPOSAL', docs: { PROPOSAL: true }, language: 'EN', proposal: { showConsulting: true }, narrative: {}, dpa: {} });
     $('clientPick').value = ''; $('genResult').innerHTML = ''; $('docList').innerHTML = ''; go(1); $('side').innerHTML = '<span class="muted">Fill in the client and commercials…</span>';
@@ -550,7 +558,73 @@
     if (!d.client.country) return;
     return run('apiEvaluateDeal', d).then(function (r) { LAST = r.evaluation; renderSide(r.evaluation, d); if (forReview || STEP === 4) renderReview(r.evaluation, r.deal); });
   }
+  /** One row per one-time line (set-up, per store, per e-commerce site, each optional service) – never a single consolidated figure. */
+  function oneTimeRowsFor(q) {
+    var ids = [], rows = [];
+    q.packages.forEach(function (p) { p.oneTime.forEach(function (l) { if (ids.indexOf(l.id) === -1) ids.push(l.id); }); });
+    ids.forEach(function (id) {
+      var label = '';
+      q.packages.forEach(function (p) { var l = p.oneTime.filter(function (o) { return o.id === id; })[0]; if (l) label = l.label + (l.qty > 1 ? ' (× ' + l.qty + ')' : ''); });
+      rows.push([label, function (p) { var l = p.oneTime.filter(function (o) { return o.id === id; })[0]; return l ? money(q.currency, l.total) + (l.specialUnitPrice !== null && l.specialUnitPrice !== undefined ? ' *' : '') : '—'; }]);
+    });
+    q.optionalOneTime.forEach(function (l) {
+      rows.push([l.label + (l.qty > 1 ? ' (× ' + l.qty + ')' : ''), function () { return l.text ? esc(l.text) : money(q.currency, l.total) + (l.specialUnitPrice !== null && l.specialUnitPrice !== undefined ? ' *' : ''); }]);
+    });
+    return rows;
+  }
+  var OTS_KEY = '';
+  function renderOtSpecials(q, d) {
+    var box = $('otSpecials');
+    if (!q) { box.innerHTML = '<span class="muted">Enter stores and choose packages to see one-time fees.</span>'; OTS_KEY = ''; return; }
+    var com = d.commercial || {}, cur = q.currency;
+    var spOT = com.specialOneTime || {}, spOpt = com.specialOptional || {};
+    var ids = [];
+    q.packages.forEach(function (p) { p.oneTime.forEach(function (l) { if (ids.indexOf(l.id) === -1) ids.push(l.id); }); });
+    var key = q.packages.map(function (p) { return p.package; }).join(',') + '|' + ids.join(',') + '|' + q.optionalOneTime.map(function (l) { return l.id; }).join(',') + '|' + cur;
+    function badge(std, sp) { return sp !== null && sp !== undefined && sp !== '' && Number(sp) < std ? '<span class="badge warn">Needs approval</span>' : ''; }
+    if (key !== OTS_KEY) {
+      OTS_KEY = key;
+      var h = '<table><tr><th>One-time fee</th>' + q.packages.map(function (p) { return '<th>' + esc(p.package) + '</th>'; }).join('') + '</tr>';
+      ids.forEach(function (id) {
+        var label = '';
+        var cells = q.packages.map(function (p) {
+          var l = p.oneTime.filter(function (o) { return o.id === id; })[0];
+          if (!l) return '<td class="muted">—</td>';
+          label = l.label;
+          var v = (spOT[p.package] || {})[id];
+          return '<td><div class="muted" style="font-size:12px">Standard: <span data-ots-std="' + esc(p.package + '|' + id) + '">' + money(cur, l.standardUnitPrice) + '</span>' + (l.qty > 1 ? ' × ' + l.qty : '') + '</div>' +
+            '<input type="number" min="0" placeholder="Special price" data-ots-pkg="' + esc(p.package) + '" data-ots-id="' + esc(id) + '" value="' + (v === undefined ? '' : esc(v)) + '" style="margin-top:3px"> <span data-ots-badge="' + esc(p.package + '|' + id) + '"></span></td>';
+        }).join('');
+        h += '<tr><td>' + esc(label) + '</td>' + cells + '</tr>';
+      });
+      h += '</table>';
+      if (q.optionalOneTime.length) {
+        h += '<table style="margin-top:10px"><tr><th>Optional service</th><th>Standard</th><th>Special price</th></tr>' + q.optionalOneTime.map(function (l) {
+          if (l.text) return '<tr><td>' + esc(l.label) + '</td><td colspan="2" class="muted">' + esc(l.text) + '</td></tr>';
+          var v = spOpt[l.id];
+          return '<tr><td>' + esc(l.label) + '</td><td><span data-osp-std="' + esc(l.id) + '">' + money(cur, l.standardUnitPrice) + '</span>' + (l.unit === 'per hour' ? ' / hour' : '') + '</td>' +
+            '<td><input type="number" min="0" placeholder="Special price" data-osp="' + esc(l.id) + '" value="' + (v === undefined ? '' : esc(v)) + '" style="max-width:180px"> <span data-osp-badge="' + esc(l.id) + '"></span></td></tr>';
+        }).join('') + '</table>';
+      }
+      box.className = '';
+      box.innerHTML = h;
+      qa('#otSpecials input').forEach(function (el) { el.addEventListener('input', changed); el.addEventListener('change', changed); });
+    }
+    // refresh standard prices + badges without rebuilding (keeps typing focus)
+    q.packages.forEach(function (p) { p.oneTime.forEach(function (l) {
+      var k = p.package + '|' + l.id, std = document.querySelector('[data-ots-std="' + k + '"]'), b = document.querySelector('[data-ots-badge="' + k + '"]');
+      if (std) std.textContent = money(cur, l.standardUnitPrice);
+      if (b) b.innerHTML = badge(l.standardUnitPrice, l.specialUnitPrice);
+    }); });
+    q.optionalOneTime.forEach(function (l) {
+      var std = document.querySelector('[data-osp-std="' + l.id + '"]'), b = document.querySelector('[data-osp-badge="' + l.id + '"]');
+      if (std) std.textContent = money(cur, l.standardUnitPrice);
+      if (b) b.innerHTML = badge(l.standardUnitPrice, l.specialUnitPrice);
+    });
+  }
+
   function renderSide(ev, d) {
+    renderOtSpecials(ev.quote && (d.commercial.packages || []).length ? ev.quote : null, d);
     var h = '', com = d.commercial || {};
     var sites = Number(com.stores || 0) + Number(com.ecomSites || 0);
     if (!(com.packages || []).length || sites < 1) {
@@ -568,7 +642,8 @@
       var sideRows = stageOf(d) === 'PROPOSAL'
         ? [['/ site / month', function (p) { return '<b>' + money(q.currency, p.finalPricePerSite) + '</b>'; }], ['Set-up', function (p) { return unitOf(p, 'SETUP'); }], ['Install / store', function (p) { return unitOf(p, 'STORE_INSTALL'); }]]
         : [['/ site / month', function (p) { return money(q.currency, p.finalPricePerSite); }], ['Recurring / yr', function (p) { return money(q.currency, p.recurringAnnual); }],
-          ['One-time', function (p) { return money(q.currency, p.oneTimeTotal + (q.optionalOneTimeTotal || 0)); }], ['First year', function (p) { return '<b>' + money(q.currency, p.firstYearTotal + (q.optionalOneTimeTotal || 0)) + '</b>'; }]];
+          ].concat(oneTimeRowsFor(q)).concat([['One-time total', function (p) { return money(q.currency, p.oneTimeTotal + (q.optionalOneTimeTotal || 0)); }],
+          ['First year', function (p) { return '<b>' + money(q.currency, p.firstYearTotal + (q.optionalOneTimeTotal || 0)) + '</b>'; }]]);
       sideRows.forEach(function (r) { h += '<tr><td>' + r[0] + '</td>' + q.packages.map(function (p) { return '<td class="num">' + r[1](p) + '</td>'; }).join('') + '</tr>'; });
       h += '</table>' + (stageOf(d) === 'PROPOSAL' ? '<p class="muted">Totals are calculated at the Order Form stage.</p>' : '');
       if (stageOf(d) === 'CONTRACT' && (ev.changesSinceProposal || []).length) h += '<p><span class="badge warn">' + ev.changesSinceProposal.length + ' change(s) since proposal</span></p>';
@@ -602,9 +677,10 @@
       } else {
         row('Licence / year (' + q.sites + (q.sites === 1 ? ' site)' : ' sites)'), function (p) { return money(q.currency, p.licenceAnnual); });
         row('Add-ons / month', function (p) { return money(q.currency, p.addOnsMonthly); });
-        row('One-time fees (incl. optional services)', function (p) { return money(q.currency, p.oneTimeTotal + (q.optionalOneTimeTotal || 0)); });
+        oneTimeRowsFor(q).forEach(function (r) { row(esc(r[0]), r[1]); });
+        row('One-time total', function (p) { return money(q.currency, p.oneTimeTotal + (q.optionalOneTimeTotal || 0)); });
         row('<b>First-year total</b>', function (p) { return '<b>' + money(q.currency, p.firstYearTotal + (q.optionalOneTimeTotal || 0)) + '</b>'; });
-        h += '</table>';
+        h += '</table><p class="muted" style="font-size:12px">* special price</p>';
         if (q.optionalOneTime.length) h += '<p class="muted">Optional services: ' + q.optionalOneTime.map(function (l) { return esc(l.label) + ' ' + (l.text || (l.qty > 1 ? l.qty + ' × ' + money(q.currency, l.unitPrice) + ' = ' : '') + money(q.currency, l.total)); }).join('; ') + '</p>';
       }
     }
@@ -965,8 +1041,8 @@
       row('Add-ons / month', function (p) { return money(c, p.addOnsMonthly) + (p.addOns.filter(function (a) { return a.text; }).length ? '<br><span class="muted">+ custom quote: ' + p.addOns.filter(function (a) { return a.text; }).map(function (a) { return esc(a.label); }).join(', ') + '</span>' : ''); });
       row('Add-ons / year', function (p) { return money(c, p.addOnsMonthly * 12); });
       row('<b>Recurring / year</b>', function (p) { return money(c, p.recurringAnnual); }, true);
-      row('Set-up + installation (one-time)', function (p) { return money(c, p.oneTimeTotal); });
-      if (q.optionalOneTime.length) row('Optional services (one-time)', function () { return money(c, opt); });
+      oneTimeRowsFor(q).forEach(function (r) { row(esc(r[0]), r[1]); });
+      row('One-time total', function (p) { return money(c, p.oneTimeTotal + opt); });
       row('First-year total', function (p) { return money(c, p.firstYearTotal + opt); }, true);
       row('Overage / 1,000 receipts', function (p) { return money(c, p.overagePer1000); });
       h += '</table>';

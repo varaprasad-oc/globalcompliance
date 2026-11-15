@@ -15,7 +15,9 @@
  *   addOns: ['GIFT_CARDS'],                      // optional ADDON item_ids (all quoted packages)
  *   addOnsByPackage: { Loyalty: ['GIFT_CARDS'] },  // optional, per package – overrides addOns for that package
  *   oneTimeItems: [{ id: 'MIGRATION_100K', qty: 1 }],  // optional ONE_TIME items (STORE_INSTALL is automatic)
- *   specialComms: { COMMS_100K: 200 }             // optional negotiated platform-comms price per tier, in quote currency
+ *   specialComms: { COMMS_100K: 200 },            // optional negotiated platform-comms price per tier, in quote currency
+ *   specialOneTime: { Loyalty: { SETUP: 1000, STORE_INSTALL: 100, ECOM_INSTALL: 500 } },  // optional unit prices per package
+ *   specialOptional: { MIGRATION_100K: 800 }      // optional unit prices for optional one-time services
  * }
  */
 
@@ -70,6 +72,11 @@ function validateQuoteInput(master, input) {
     var v = input.specialPrices[p];
     if (v !== '' && v !== null && v !== undefined && !(Number(v) > 0)) errs.push('Special price for ' + p + ' must be a positive number');
   });
+  var neg = function (v) { return v !== '' && v !== null && v !== undefined && (isNaN(Number(v)) || Number(v) < 0); };
+  Object.keys(input.specialOneTime || {}).forEach(function (p) {
+    Object.keys(input.specialOneTime[p] || {}).forEach(function (k) { if (neg(input.specialOneTime[p][k])) errs.push('Special one-time price (' + p + ' ' + k + ') must be 0 or more'); });
+  });
+  Object.keys(input.specialOptional || {}).forEach(function (k) { if (neg(input.specialOptional[k])) errs.push('Special price for ' + k + ' must be 0 or more'); });
   return errs;
 }
 
@@ -113,6 +120,20 @@ function buildQuote(master, input) {
   }
 
   var approvalReasons = [];
+  /** Special unit price for a one-time line: keeps the standard price, recalculates the total, flags discounts for approval. */
+  function applyOneTimeSpecial(l, sp, prefix) {
+    l.standardUnitPrice = l.unitPrice;
+    l.specialUnitPrice = null;
+    if (sp === '' || sp === null || sp === undefined || l.unitPrice === null) return;
+    sp = Number(sp);
+    l.specialUnitPrice = sp;
+    l.unitPrice = sp;
+    l.total = sp * (l.qty || 1);
+    if (sp < l.standardUnitPrice) {
+      approvalReasons.push(prefix + l.label + ': special ' + formatMoney(input.currency, sp) + ' vs standard ' + formatMoney(input.currency, l.standardUnitPrice) +
+        (l.qty > 1 ? ' (× ' + l.qty + ')' : ''));
+    }
+  }
   var storeInstall = items.filter(function (i) { return i.item_id === 'STORE_INSTALL'; })[0];
 
   var packages = input.packages.map(function (name) {
@@ -136,6 +157,8 @@ function buildQuote(master, input) {
       oneTime.push({ id: 'ECOM_INSTALL', label: 'Installation per e-commerce site', unit: 'per site', qty: ecomSites,
         unitPrice: e, total: e * ecomSites, text: '' });
     }
+    var spOT = (input.specialOneTime || {})[name] || {};
+    oneTime.forEach(function (l) { applyOneTimeSpecial(l, spOT[l.id], name + ': '); });
     var oneTimeTotal = oneTime.reduce(function (s, l) { return s + (l.total || 0); }, 0);
 
     var addOns = items.filter(function (i) {
@@ -171,7 +194,10 @@ function buildQuote(master, input) {
 
   var optionalOneTime = (input.oneTimeItems || []).map(function (sel) {
     var it = items.filter(function (i) { return i.item_id === sel.id && i.category === 'ONE_TIME'; })[0];
-    return it ? itemLine(it, Number(sel.qty) || 1) : null;
+    if (!it) return null;
+    var l = itemLine(it, Number(sel.qty) || 1);
+    applyOneTimeSpecial(l, (input.specialOptional || {})[sel.id], '');
+    return l;
   }).filter(Boolean);
 
   // Platform comms: volume tiers, FX only. Special price below list -> approval; below floor is flagged.

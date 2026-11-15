@@ -98,6 +98,12 @@ const api = {
   await p.check('#matrix input[data-addon="GIFT_CARDS"][data-pkg="Loyalty"]');
   await p.waitForTimeout(900);
   check('Live summary shows approval badge', (await p.textContent('#side')).includes('Needs Amith'));
+  check('One-time table shows standard prices', (await p.textContent('#otSpecials')).includes('Standard: USD'));
+  await p.fill('[data-ots-pkg="Loyalty"][data-ots-id="SETUP"]', '500'); await p.waitForTimeout(900);
+  check('One-time special below standard shows Needs approval', (await p.textContent('[data-ots-badge="Loyalty|SETUP"]')).includes('Needs approval'));
+  await (await p.$('#otSpecials')).screenshot({ path: path.join(out, 'onetime-specials.png') });
+  await p.fill('[data-ots-pkg="Loyalty"][data-ots-id="SETUP"]', ''); await p.waitForTimeout(900);
+  check('Clearing the special removes the badge', (await p.textContent('[data-ots-badge="Loyalty|SETUP"]')) === '');
   check('Order Form terms not shown in Stage 1', !(await p.isVisible('#orderPackage')));
   check('Stage 1 summary: unit prices only, no totals', (await p.textContent('#side')).includes('Totals are calculated at the Order Form stage') && !(await p.textContent('#side')).includes('First year'));
   check('Stage 1: no hours box for optional services', !(await p.isVisible('[data-otqty="CUSTOM_INT_HOUR"]')));
@@ -157,6 +163,7 @@ const api = {
   await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(700);
   check('Approved pricing shown as approved; hint says final', (await p.textContent('#review')).includes('approved by Amith') && (await p.textContent('#genHint')).includes('final'));
   check('Stage 2 summary shows totals', (await p.textContent('#side')).includes('First year'));
+  check('Stage 2 summary lists one-time lines separately', (await p.textContent('#side')).includes('Set-up and Training') && (await p.textContent('#side')).includes('Installation per store (× 46)') && (await p.textContent('#side')).includes('Installation per e-commerce site'));
   check('Generate button says Order Form, ToS & DPA', (await p.textContent('#btnGenerate')).includes('Order Form, ToS & DPA') && !(await p.isDisabled('#btnGenerate')));
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
   const g2 = await p.textContent('#genResult');
@@ -199,6 +206,7 @@ const api = {
   await p.check('[data-caddon="GIFT_CARDS"][data-cpk="Loyalty"]'); await p.check('[data-cot="MIGRATION_100K"]');
   await p.click('#calcBtn'); await p.waitForTimeout(500);
   const cr = await p.textContent('#calcResult');
+  check('Calculator lists one-time lines separately', cr.includes('Set-up and Training') && cr.includes('Installation per store') && cr.includes('Data migration'));
   check('Calculator shows add-ons, optional services and first-year total', cr.includes('Add-ons / year') && cr.includes('Optional services') && cr.includes('First-year total') && !cr.includes('Engagement'));
   await p.screenshot({ path: path.join(out, 'calculator.png'), fullPage: true });
   check('No page errors', errors.length === 0); if (errors.length) console.log(errors);
