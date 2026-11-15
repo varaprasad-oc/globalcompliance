@@ -190,6 +190,14 @@ const api = {
   check('Template check reports unknown tags', (await p.textContent('#tplResult')).includes('Typo'));
   await p.click('#btnGoLive'); await p.waitForTimeout(300);
   check('Go-live check lists blockers', (await p.textContent('#goLive')).includes('blocker'));
+  await p.click('nav a[data-view="calc"]'); await p.waitForTimeout(300);
+  await p.uncheck('[data-cpkg="Engagement"]');
+  check('Calculator: add-ons locked for unticked package', await p.isDisabled('[data-caddon="MANAGED_SERVICES"][data-cpk="Engagement"]'));
+  await p.check('[data-caddon="GIFT_CARDS"][data-cpk="Loyalty"]'); await p.check('[data-cot="MIGRATION_100K"]');
+  await p.click('#calcBtn'); await p.waitForTimeout(500);
+  const cr = await p.textContent('#calcResult');
+  check('Calculator shows add-ons, optional services and first-year total', cr.includes('Add-ons / year') && cr.includes('Optional services') && cr.includes('First-year total') && !cr.includes('Engagement'));
+  await p.screenshot({ path: path.join(out, 'calculator.png'), fullPage: true });
   check('No page errors', errors.length === 0); if (errors.length) console.log(errors);
   await b.close();
 })();

@@ -274,6 +274,12 @@
             <div><label>Physical stores</label><input id="cStores" type="number" min="0" value="5"></div>
             <div><label>E-commerce sites</label><input id="cEcom" type="number" min="0" value="1"></div>
           </div>
+          <h3>Packages to compare</h3>
+          <div class="checks" id="cPkgs"></div>
+          <h3>Add-ons</h3>
+          <div id="cAddons" style="overflow-x:auto"></div>
+          <h3 style="display:flex;gap:14px;align-items:center">Optional one-time services <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink);font-size:13px;font-weight:normal;margin:0"><input type="checkbox" id="cOtAll" style="width:auto"> Select all</label></h3>
+          <div id="cOnetime"></div>
           <p><button id="calcBtn">Calculate</button></p>
           <div id="calcResult"></div>
         </div>
@@ -331,6 +337,7 @@
     $('country').innerHTML = '<option value="">— select —</option>' + opts(LISTS.countries, 'country', 'country');
     $('market').innerHTML = opts(b.markets); $('currency').innerHTML = opts(b.currencies);
     $('cMarket').innerHTML = opts(b.markets); $('cCurrency').innerHTML = opts(b.currencies);
+    buildCalcInputs(b);
     $('entity').innerHTML = '<option value="">— select —</option>' + LISTS.entities.map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.name + (e.type === 'Partner' ? ' (partner – ' + e.country + ')' : ' (' + e.country + ')')) + '</option>'; }).join('');
     $('clientList').innerHTML = LISTS.clients.map(function (c) { return '<option value="' + esc(c.legalName) + '">'; }).join('');
     $('pkgs').innerHTML = b.packages.map(function (p) { return '<label><input type="checkbox" data-arr="commercial.packages" value="' + esc(p) + '"> ' + esc(p) + '</label>'; }).join('');
@@ -879,14 +886,54 @@
   }
 
   // ---------- calculator ----------
+  function buildCalcInputs(b) {
+    var pk = b.packages;
+    $('cPkgs').innerHTML = pk.map(function (p) { return '<label><input type="checkbox" data-cpkg="' + esc(p) + '" checked> ' + esc(p) + '</label>'; }).join('');
+    $('cAddons').innerHTML = '<table><tr><th>Add-on</th>' + pk.map(function (p) { return '<th style="text-align:center" data-ccol="' + esc(p) + '">' + esc(p) + '</th>'; }).join('') + '</tr>' +
+      '<tr><td style="background:var(--soft)"><b>Select all</b></td>' + pk.map(function (p) { return '<td style="background:var(--soft);text-align:center" data-ccol="' + esc(p) + '"><input type="checkbox" data-call="' + esc(p) + '" style="width:auto"></td>'; }).join('') + '</tr>' +
+      b.addOns.map(function (a) {
+        return '<tr><td>' + esc(a.label) + '</td>' + pk.map(function (p) {
+          return '<td style="text-align:center" data-ccol="' + esc(p) + '">' + (applies(p, a.packages) ? '<input type="checkbox" data-caddon="' + esc(a.id) + '" data-cpk="' + esc(p) + '" style="width:auto">' : '<span class="muted">—</span>') + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</table>';
+    $('cOnetime').innerHTML = b.oneTimeItems.map(function (o) { return '<div class="checks"><label><input type="checkbox" data-cot="' + esc(o.id) + '"> ' + esc(o.label) + '</label>' + (o.unit === 'per hour' ? ' <input type="number" min="1" value="10" data-cotqty="' + esc(o.id) + '" style="width:90px"> hours' : '') + '</div>'; }).join('');
+    function sync() {
+      var sel = qa('[data-cpkg]:checked').map(function (e) { return e.dataset.cpkg; });
+      qa('[data-ccol]').forEach(function (c) { c.style.opacity = sel.indexOf(c.dataset.ccol) !== -1 ? '1' : '.35'; });
+      qa('[data-caddon]').forEach(function (e) { var on = sel.indexOf(e.dataset.cpk) !== -1; e.disabled = !on; if (!on) e.checked = false; });
+      qa('[data-call]').forEach(function (a) { var bx = qa('[data-caddon][data-cpk="' + a.dataset.call + '"]'); a.disabled = sel.indexOf(a.dataset.call) === -1; a.checked = !a.disabled && bx.length && bx.every(function (x) { return x.checked; }); });
+      var ot = qa('[data-cot]'); $('cOtAll').checked = ot.length && ot.every(function (x) { return x.checked; });
+    }
+    qa('#view-calc input').forEach(function (e) { e.addEventListener('change', sync); });
+    qa('[data-call]').forEach(function (a) { a.addEventListener('click', function () { qa('[data-caddon][data-cpk="' + a.dataset.call + '"]').forEach(function (x) { if (!x.disabled) x.checked = a.checked; }); }); });
+    $('cOtAll').addEventListener('click', function () { qa('[data-cot]').forEach(function (x) { x.checked = $('cOtAll').checked; }); });
+    sync();
+  }
+
   function calc() {
-    var input = { market: $('cMarket').value, currency: $('cCurrency').value, stores: Number($('cStores').value), ecomSites: Number($('cEcom').value), packages: BOOT.lists.packages };
+    var pk = qa('[data-cpkg]:checked').map(function (e) { return e.dataset.cpkg; });
+    var byPkg = {};
+    pk.forEach(function (p) { byPkg[p] = qa('[data-caddon][data-cpk="' + p + '"]:checked').map(function (e) { return e.dataset.caddon; }); });
+    var ot = qa('[data-cot]:checked').map(function (e) { var q = document.querySelector('[data-cotqty="' + e.dataset.cot + '"]'); return { id: e.dataset.cot, qty: q ? Number(q.value || 1) : 1 }; });
+    var input = { market: $('cMarket').value, currency: $('cCurrency').value, stores: Number($('cStores').value), ecomSites: Number($('cEcom').value), packages: pk, addOnsByPackage: byPkg, oneTimeItems: ot };
     run('apiPreviewQuote', input).then(function (q) {
       if (!q.ok) { $('calcResult').innerHTML = '<p class="error">' + q.errors.map(esc).join('<br>') + '</p>'; return; }
-      var c = q.currency, h = '<p>' + q.sites + ' sites · combined discount ' + pct(q.discounts.combinedPct) + '</p><table><tr><th></th>' + q.packages.map(function (p) { return '<th class="num">' + esc(p.package) + '</th>'; }).join('') + '</tr>';
-      [['Price / site / month', 'standardPricePerSite'], ['Licence / year', 'licenceAnnual'], ['One-time', 'oneTimeTotal'], ['First year', 'firstYearTotal'], ['Overage / 1,000 receipts', 'overagePer1000']]
-        .forEach(function (r) { h += '<tr><td>' + r[0] + '</td>' + q.packages.map(function (p) { return '<td class="num">' + money(c, p[r[1]]) + '</td>'; }).join('') + '</tr>'; });
-      h += '</table><h3>Usage & communication</h3><table>' + q.usage.map(function (l) { return '<tr><td>' + esc(l.label) + '</td><td class="num">' + (l.text ? esc(l.text) : money(c, l.unitPrice) + ' ' + esc(l.unit)) + '</td></tr>'; }).join('') + '</table>';
+      var c = q.currency, opt = q.optionalOneTimeTotal || 0;
+      var h = '<p>' + q.sites + (q.sites === 1 ? ' site' : ' sites') + ' · market ' + pct(q.discounts.marketPct) + ' · volume (' + esc(q.discounts.slabLabel) + ') ' + pct(q.discounts.slabPct) + ' · combined ' + pct(q.discounts.combinedPct) + '</p>';
+      h += '<table><tr><th></th>' + q.packages.map(function (p) { return '<th class="num">' + esc(p.package) + '</th>'; }).join('') + '</tr>';
+      function row(l, f, bold) { h += '<tr><td>' + (bold ? '<b>' + l + '</b>' : l) + '</td>' + q.packages.map(function (p) { var v = f(p); return '<td class="num">' + (bold ? '<b>' + v + '</b>' : v) + '</td>'; }).join('') + '</tr>'; }
+      row('Price / site / month', function (p) { return money(c, p.finalPricePerSite); });
+      row('Licence / year (' + q.sites + (q.sites === 1 ? ' site)' : ' sites)'), function (p) { return money(c, p.licenceAnnual); });
+      row('Add-ons / month', function (p) { return money(c, p.addOnsMonthly) + (p.addOns.filter(function (a) { return a.text; }).length ? '<br><span class="muted">+ custom quote: ' + p.addOns.filter(function (a) { return a.text; }).map(function (a) { return esc(a.label); }).join(', ') + '</span>' : ''); });
+      row('Add-ons / year', function (p) { return money(c, p.addOnsMonthly * 12); });
+      row('<b>Recurring / year</b>', function (p) { return money(c, p.recurringAnnual); }, true);
+      row('Set-up + installation (one-time)', function (p) { return money(c, p.oneTimeTotal); });
+      if (q.optionalOneTime.length) row('Optional services (one-time)', function () { return money(c, opt); });
+      row('First-year total', function (p) { return money(c, p.firstYearTotal + opt); }, true);
+      row('Overage / 1,000 receipts', function (p) { return money(c, p.overagePer1000); });
+      h += '</table>';
+      if (q.optionalOneTime.length) h += '<h3>Optional services</h3><table>' + q.optionalOneTime.map(function (l) { return '<tr><td>' + esc(l.label) + '</td><td class="num">' + (l.text ? esc(l.text) : (l.qty > 1 ? l.qty + ' × ' + money(c, l.unitPrice) + ' = ' : '') + money(c, l.total)) + '</td></tr>'; }).join('') + '</table>';
+      h += '<h3>Usage &amp; communication</h3><table>' + q.usage.map(function (l) { return '<tr><td>' + esc(l.label) + '</td><td class="num">' + (l.text ? esc(l.text) : money(c, l.unitPrice) + ' ' + esc(l.unit)) + '</td></tr>'; }).join('') + '</table>';
       $('calcResult').innerHTML = h;
     });
   }
