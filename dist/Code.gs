@@ -900,7 +900,28 @@ function checkTemplateTokens(text, data) {
  * }
  */
 
-var DEAL_STATUS = { DRAFT: 'Draft', PENDING: 'Pending approval', APPROVED: 'Approved', REJECTED: 'Rejected', GENERATED: 'Generated', WON: 'Won', LOST: 'Lost' };
+var DEAL_STATUS = { DRAFT: 'Draft', PENDING: 'Pending approval', APPROVED: 'Approved', REJECTED: 'Rejected', GENERATED: 'Generated',
+  PROPOSAL_GENERATED: 'Proposal generated', CONTRACT_DRAFT: 'Contract draft', CONTRACT_GENERATED: 'Contract generated', SENT: 'Sent', WON: 'Won', LOST: 'Lost' };
+
+/** Two-stage flow: PROPOSAL (proposal only) → CONTRACT (Order Form + ToS/MSA + DPA). */
+var STAGE_DOCS = { PROPOSAL: ['PROPOSAL'], CONTRACT: ['ORDER_FORM', 'TOS', 'DPA'] };
+var GENERATED_STATUSES = ['Generated', 'Proposal generated', 'Contract generated', 'Sent', 'Won', 'Lost'];
+
+/** A proposal that has been generated (and possibly sent) can be converted to the contract stage. */
+function canConvertToContract(deal, status) {
+  return (deal.stage || 'PROPOSAL') === 'PROPOSAL' && ['Proposal generated', 'Sent'].indexOf(status) !== -1;
+}
+
+/** Deal moved to stage 2: contract documents selected, Order Form package defaulted. */
+function convertToContract(deal) {
+  var d = JSON.parse(JSON.stringify(deal));
+  d.stage = 'CONTRACT';
+  d.status = DEAL_STATUS.CONTRACT_DRAFT;
+  d.docs = { ORDER_FORM: true, TOS: true, DPA: true };
+  d.commercial = d.commercial || {};
+  if (!d.commercial.orderPackage || (d.commercial.packages || []).indexOf(d.commercial.orderPackage) === -1) d.commercial.orderPackage = (d.commercial.packages || [])[0];
+  return d;
+}
 
 /** Fill market / currency / contracting entity from the Countries tab when the rep has not chosen them. */
 function applyCountryDefaults(master, deal) {
@@ -915,7 +936,8 @@ function applyCountryDefaults(master, deal) {
 
 function selectedDocs(deal) {
   var d = deal.docs || {};
-  return DOC_TYPES.filter(function (t) { return d[t]; });
+  var allowed = deal.stage ? STAGE_DOCS[deal.stage] : DOC_TYPES;
+  return DOC_TYPES.filter(function (t) { return d[t] && allowed.indexOf(t) !== -1; });
 }
 
 /** Full check of a deal: quote, blocking errors, missing fields per selected document, approval need. */
@@ -1010,6 +1032,7 @@ function dealSummary(rec) {
     currency: rec.currency, status: rec.status, needsApproval: isTrue(rec.needs_approval), approvalStatus: rec.approval_status,
     createdBy: rec.created_by, updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
+    stage: d.stage || '',
     orderPackage: op ? op.package : '',
     value: value,
     valueUsd: q && q.fxRate ? Math.round(value / q.fxRate) : 0,
@@ -1021,7 +1044,7 @@ function dealSummary(rec) {
 /** Owner may move a generated deal along the sales pipeline. */
 var PIPELINE_STATUSES = ['Sent', 'Won', 'Lost'];
 function canSetStatus(currentStatus, newStatus) {
-  return PIPELINE_STATUSES.indexOf(newStatus) !== -1 && ['Generated', 'Sent', 'Won', 'Lost'].indexOf(currentStatus) !== -1;
+  return PIPELINE_STATUSES.indexOf(newStatus) !== -1 && GENERATED_STATUSES.indexOf(currentStatus) !== -1;
 }
 
 /** Dashboard numbers from deal summaries (amounts in USD for comparability). */
@@ -1058,6 +1081,7 @@ function cloneDeal(deal, newId) {
   c.status = DEAL_STATUS.DRAFT;
   c.client = c.client || {};
   delete c.docNos; delete c.pricingSnapshot; delete c.approvalNote; delete c.aiDraft;  // a clone gets new numbers and today's prices
+  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true };
   return c;
 }
 
@@ -1072,15 +1096,24 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   if (!stored) {
     d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT;
     delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId;
+    d.stage = 'PROPOSAL'; d.docs = { PROPOSAL: true };
     return d;
   }
   d.dealId = stored.dealId;
   d.docNos = stored.docNos;
   d.clientId = stored.clientId;
   d.pricingSnapshot = refresh || !stored.pricingSnapshot ? freshSnapshot : stored.pricingSnapshot;
-  var revised = ['Generated', 'Sent', 'Won', 'Lost'].indexOf(existingStatus) !== -1;
+  d.stage = stored.stage;
+  if (d.stage) {
+    var docs = {};
+    STAGE_DOCS[d.stage].forEach(function (t) { docs[t] = d.stage === 'CONTRACT' && t === 'ORDER_FORM' ? true : !!(d.docs || {})[t]; });
+    if (d.stage === 'PROPOSAL') docs.PROPOSAL = true;
+    d.docs = docs;
+  }
+  var revised = GENERATED_STATUSES.indexOf(existingStatus) !== -1;
   d.version = Number(stored.version || 1) + (revised ? 1 : 0);
-  d.status = revised || existingStatus === DEAL_STATUS.REJECTED ? DEAL_STATUS.DRAFT : (existingStatus || DEAL_STATUS.DRAFT);
+  var draftStatus = d.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_DRAFT : DEAL_STATUS.DRAFT;
+  d.status = revised || existingStatus === DEAL_STATUS.REJECTED ? draftStatus : (existingStatus || draftStatus);
   return d;
 }
 
@@ -1169,13 +1202,14 @@ function planGeneration(deal, evaluation, approvalStatus) {
     return { ok: false, reason: 'Missing information: ' + missing.map(function (t) { return t + ' (' + evaluation.missing[t].join(', ') + ')'; }).join('; ') };
   }
   var docTypes = selectedDocs(deal);
+  if (!docTypes.length) return { ok: false, reason: 'No documents selected for this stage.' };
   var approved = approvalStatus === 'Approved';
   var draft = evaluation.needsApproval && !approved;
   return {
     ok: true,
     mode: draft ? 'DRAFT' : 'FINAL',
     docTypes: docTypes,
-    status: draft ? DEAL_STATUS.PENDING : DEAL_STATUS.GENERATED,
+    status: draft ? DEAL_STATUS.PENDING : (deal.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_GENERATED : deal.stage === 'PROPOSAL' ? DEAL_STATUS.PROPOSAL_GENERATED : DEAL_STATUS.GENERATED),
     reason: draft ? 'Special pricing needs Amith’s approval: DRAFT documents (no PDF) are created now; final PDFs are generated after approval.' : ''
   };
 }
@@ -1576,6 +1610,29 @@ function apiCloneDeal(dealId) {
   var res = apiSaveDeal(copy);
   audit_('DEAL_CLONED', { from: dealId }, res.deal.dealId);
   return res;
+}
+
+/** Stage 1 → 2: proposal accepted, prepare Order Form + ToS/MSA + DPA (no new version, same document numbers). */
+function apiConvertToContract(dealId) {
+  var user = requireUser_();
+  var m = getMaster();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var rec = findDeal_(dealId);
+    if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
+    var stored = JSON.parse(rec.input_json);
+    if (!canConvertToContract(stored, rec.status)) throw new Error('Generate the proposal first (status must be "Proposal generated" or "Sent").');
+    var deal = convertToContract(stored);
+    var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
+    var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), rec);
+    newRec.status = deal.status;
+    writeRecord_('Deals', newRec, rec._row);
+    audit_('CONVERTED_TO_CONTRACT', {}, dealId);
+    return { deal: deal, evaluation: ev, summary: dealSummary(newRec) };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ===================== DocEngine.js =====================
@@ -2022,7 +2079,7 @@ function generateForDeal_(dealId, user) {
   var shareWith = [owner, ownerUser.manager_email].filter(Boolean);
   var ownerProfile = { name: ownerUser.name || user.name, email: owner, phone: ownerUser.phone || '' };
 
-  archivePreviousVersions_(dealId, deal.version);
+  archivePreviousVersions_(dealId, deal.version, plan.docTypes);
 
   var results = [];
   plan.docTypes.forEach(function (t) {
@@ -2065,12 +2122,13 @@ function generateForDeal_(dealId, user) {
 }
 
 /** Move files of earlier versions of this deal to _Archive and mark them Superseded. */
-function archivePreviousVersions_(dealId, currentVersion) {
+function archivePreviousVersions_(dealId, currentVersion, docTypes) {
   var archiveId = getProp_('FOLDER_ARCHIVE');
   if (!archiveId) return;
   var archive = DriveApp.getFolderById(archiveId);
   readRecords_('Documents').forEach(function (d) {
     if (d.deal_id !== dealId || Number(d.version) >= Number(currentVersion) || d.status === 'Superseded') return;
+    if (docTypes && docTypes.indexOf(d.doc_type) === -1) return;  // e.g. keep the proposal when contract v2 is generated
     [d.doc_file_id, d.pdf_file_id].filter(String).forEach(function (id) { try { DriveApp.getFileById(id).moveTo(archive); } catch (e) { console.warn(e); } });
     d.status = 'Superseded';
     writeRecord_('Documents', d, d._row);

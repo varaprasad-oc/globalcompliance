@@ -31,7 +31,7 @@ function generateForDeal_(dealId, user) {
   var shareWith = [owner, ownerUser.manager_email].filter(Boolean);
   var ownerProfile = { name: ownerUser.name || user.name, email: owner, phone: ownerUser.phone || '' };
 
-  archivePreviousVersions_(dealId, deal.version);
+  archivePreviousVersions_(dealId, deal.version, plan.docTypes);
 
   var results = [];
   plan.docTypes.forEach(function (t) {
@@ -74,12 +74,13 @@ function generateForDeal_(dealId, user) {
 }
 
 /** Move files of earlier versions of this deal to _Archive and mark them Superseded. */
-function archivePreviousVersions_(dealId, currentVersion) {
+function archivePreviousVersions_(dealId, currentVersion, docTypes) {
   var archiveId = getProp_('FOLDER_ARCHIVE');
   if (!archiveId) return;
   var archive = DriveApp.getFolderById(archiveId);
   readRecords_('Documents').forEach(function (d) {
     if (d.deal_id !== dealId || Number(d.version) >= Number(currentVersion) || d.status === 'Superseded') return;
+    if (docTypes && docTypes.indexOf(d.doc_type) === -1) return;  // e.g. keep the proposal when contract v2 is generated
     [d.doc_file_id, d.pdf_file_id].filter(String).forEach(function (id) { try { DriveApp.getFileById(id).moveTo(archive); } catch (e) { console.warn(e); } });
     d.status = 'Superseded';
     writeRecord_('Documents', d, d._row);

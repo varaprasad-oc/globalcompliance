@@ -110,3 +110,9 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## Add-ons per package (2026-11-15)
 - Add-ons are chosen per package in a features table (included features fixed). AI add-ons (Recommendations, Reporting, Grouping & Clustering, Predictive Segmentation, Assisted Campaigns) are priced "Custom quote" and don't add to totals. Features.addon_item_id links a feature to its PriceItems row.
+
+## Two-stage deal flow (2026-11-15)
+- Stage 1 **Proposal** → generates the Proposal only (contract details not required).
+- **Convert to Order Form** once the proposal is generated or marked Sent.
+- Stage 2 **Order Form**: contract details + Order Form terms → Order Form + Terms of Service (MSA) + DPA generated together. "MSA" = our Terms of Service document.
+- Statuses: Draft → (Pending approval) → Proposal generated → (Sent) → Contract draft → (Pending approval) → Contract generated → Sent → Won/Lost.

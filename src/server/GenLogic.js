@@ -16,13 +16,14 @@ function planGeneration(deal, evaluation, approvalStatus) {
     return { ok: false, reason: 'Missing information: ' + missing.map(function (t) { return t + ' (' + evaluation.missing[t].join(', ') + ')'; }).join('; ') };
   }
   var docTypes = selectedDocs(deal);
+  if (!docTypes.length) return { ok: false, reason: 'No documents selected for this stage.' };
   var approved = approvalStatus === 'Approved';
   var draft = evaluation.needsApproval && !approved;
   return {
     ok: true,
     mode: draft ? 'DRAFT' : 'FINAL',
     docTypes: docTypes,
-    status: draft ? DEAL_STATUS.PENDING : DEAL_STATUS.GENERATED,
+    status: draft ? DEAL_STATUS.PENDING : (deal.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_GENERATED : deal.stage === 'PROPOSAL' ? DEAL_STATUS.PROPOSAL_GENERATED : DEAL_STATUS.GENERATED),
     reason: draft ? 'Special pricing needs Amith’s approval: DRAFT documents (no PDF) are created now; final PDFs are generated after approval.' : ''
   };
 }

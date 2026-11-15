@@ -132,3 +132,26 @@ function apiCloneDeal(dealId) {
   audit_('DEAL_CLONED', { from: dealId }, res.deal.dealId);
   return res;
 }
+
+/** Stage 1 → 2: proposal accepted, prepare Order Form + ToS/MSA + DPA (no new version, same document numbers). */
+function apiConvertToContract(dealId) {
+  var user = requireUser_();
+  var m = getMaster();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var rec = findDeal_(dealId);
+    if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
+    var stored = JSON.parse(rec.input_json);
+    if (!canConvertToContract(stored, rec.status)) throw new Error('Generate the proposal first (status must be "Proposal generated" or "Sent").');
+    var deal = convertToContract(stored);
+    var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
+    var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), rec);
+    newRec.status = deal.status;
+    writeRecord_('Deals', newRec, rec._row);
+    audit_('CONVERTED_TO_CONTRACT', {}, dealId);
+    return { deal: deal, evaluation: ev, summary: dealSummary(newRec) };
+  } finally {
+    lock.releaseLock();
+  }
+}
