@@ -138,3 +138,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - New master tab **Partners** (partner_id, name, type, country, contact, commission_pct, active, notes), edited by the Superadmin in Admin → Partners.
 - Rep picks an optional **Referral partner** on the deal (step 1). **Internal only: never printed in any document.**
 - Superadmin dashboard: **Partner performance** (deals, open, won, lost, win rate, pipeline USD, won USD) for the selected period.
+
+## Pilot reps (2026-11-15)
+- Nihaar Akula (nihaar@optculture.com) and Muskan Agarwal (muskan.agarwal@optculture.com): role Rep, manager Varaprasad, region MEA. Added to the live Users tab.
