@@ -116,3 +116,7 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - **Convert to Order Form** once the proposal is generated or marked Sent.
 - Stage 2 **Order Form**: contract details + Order Form terms → Order Form + Terms of Service (MSA) + DPA generated together. "MSA" = our Terms of Service document.
 - Statuses: Draft → (Pending approval) → Proposal generated → (Sent) → Contract draft → (Pending approval) → Contract generated → Sent → Won/Lost.
+
+## Proposal = price reference, Order Form = totals (2026-11-15)
+- Proposal (stage 1) shows unit/rate-card prices only; optional one-time services are listed with their rate-card price, not calculated.
+- Totals (recurring per year, one-time, first-year value) appear only in stage 2 and on the Quotation & Order Form.

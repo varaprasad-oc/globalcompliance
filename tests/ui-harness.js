@@ -93,6 +93,8 @@ const api = {
   await p.waitForTimeout(900);
   check('Live summary shows approval badge', (await p.textContent('#side')).includes('Needs Amith'));
   check('Order Form terms not shown in Stage 1', !(await p.isVisible('#orderPackage')));
+  check('Stage 1 summary: unit prices only, no totals', (await p.textContent('#side')).includes('Totals are calculated at the Order Form stage') && !(await p.textContent('#side')).includes('First year'));
+  check('Stage 1: no hours box for optional services', !(await p.isVisible('[data-otqty="CUSTOM_INT_HOUR"]')));
   await p.click('#btnNext');
   check('Step 3 is the Proposal step', (await p.textContent('#steps div[data-step="3"]')).includes('Proposal') && (await p.isVisible('[data-f="proposal.title"]')));
   await p.fill('[data-f="narrative.notes"]', 'Franchisee for SKECHERS, ANTA, ECCO; 46 stores; one program.');
@@ -141,6 +143,7 @@ const api = {
   check('Order Form package list follows packages', (await p.$$eval('#orderPackage option', (o) => o.map((x) => x.value))).join() === 'Loyalty,Advanced');
   await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(700);
   check('Approved pricing shown as approved; hint says final', (await p.textContent('#review')).includes('approved by Amith') && (await p.textContent('#genHint')).includes('final'));
+  check('Stage 2 summary shows totals', (await p.textContent('#side')).includes('First year'));
   check('Generate button says Order Form, ToS & DPA', (await p.textContent('#btnGenerate')).includes('Order Form, ToS & DPA') && !(await p.isDisabled('#btnGenerate')));
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
   const g2 = await p.textContent('#genResult');

@@ -19,7 +19,10 @@ test('Proposal: core fields, flags, modules, tables', () => {
   eq(d.tables.PriceSummary.rows[1][1], 'USD 70');
   eq(d.lists.Journeys[0].title, 'Cross-channel activation');
   eq(d.lists.Modules.some((x) => x.title === 'Affiliates/Referrals'), true, 'Advanced-only module included when Advanced selected');
-  eq(d.tables.OneTimeFees.rows[d.tables.OneTimeFees.rows.length - 1][0], 'Total one-time fees');
+  eq(d.tables.OneTimeFees.rows.some((r) => /Total/.test(r[0])), false, 'proposal shows no totals');
+  eq(d.tables.OneTimeFees.rows.find((r) => r[0] === 'Installation per store')[1], 'USD 90 per store', 'unit price, not qty x price');
+  eq(d.tables.PriceSummary.rows.some((r) => /Total licence/.test(r[0])), false);
+  eq(d.lists.OptionalOneTime[0].amount, 'USD 585', 'rate-card price only');
 });
 
 test('Proposal without special price omits the special-price row', () => {

@@ -331,7 +331,8 @@
     $('specials').innerHTML = b.packages.map(function (p) { return '<div data-pkgbox="' + esc(p) + '" class="hidden"><label>Special price / site / month – ' + esc(p) + '</label><input type="number" min="0" data-map="commercial.specialPrices" data-key="' + esc(p) + '" placeholder="Standard"></div>'; }).join('');
     buildMatrix(b);
     setTimeout(wireSelectAll, 0);
-    $('onetime').innerHTML = b.oneTimeItems.map(function (o) { return '<div class="checks"><label><input type="checkbox" data-ot="' + esc(o.id) + '"> ' + esc(o.label) + '</label>' + (o.unit === 'per hour' ? ' <input type="number" min="1" value="10" data-otqty="' + esc(o.id) + '" style="width:90px"> hours' : '') + '</div>'; }).join('');
+    $('onetime').innerHTML = '<p class="muted" data-stage="PROPOSAL" style="margin-top:0">Ticked services are listed in the proposal with their rate-card price only (no quantities or totals).</p>' +
+      b.oneTimeItems.map(function (o) { return '<div class="checks"><label><input type="checkbox" data-ot="' + esc(o.id) + '"> ' + esc(o.label) + '</label>' + (o.unit === 'per hour' ? ' <span data-stage="CONTRACT"><input type="number" min="1" value="10" data-otqty="' + esc(o.id) + '" style="width:90px"> hours</span>' : '') + '</div>'; }).join('');
     $('comms').innerHTML = LISTS.commsTiers.map(function (t) { return '<div><label>Up to ' + Number(t.messages).toLocaleString('en-US') + ' / month – negotiated price</label><input type="number" min="0" data-map="commercial.specialComms" data-key="' + esc(t.id) + '" placeholder="List price"></div>'; }).join('');
 
     $('country').onchange = function () {
@@ -540,10 +541,13 @@
     if (q) {
       h += '<p>' + q.sites + (q.sites === 1 ? ' site · ' : ' sites · ') + esc(q.market) + ' ' + pct(q.discounts.marketPct) + ' · ' + esc(q.discounts.slabLabel) + ' ' + pct(q.discounts.slabPct) + '</p>';
       h += '<table><tr><th></th>' + q.packages.map(function (p) { return '<th class="num">' + esc(p.package) + '</th>'; }).join('') + '</tr>';
-      [['/ site / month', function (p) { return money(q.currency, p.finalPricePerSite); }], ['Recurring / yr', function (p) { return money(q.currency, p.recurringAnnual); }],
-        ['One-time', function (p) { return money(q.currency, p.oneTimeTotal); }], ['First year', function (p) { return '<b>' + money(q.currency, p.firstYearTotal) + '</b>'; }]]
-        .forEach(function (r) { h += '<tr><td>' + r[0] + '</td>' + q.packages.map(function (p) { return '<td class="num">' + r[1](p) + '</td>'; }).join('') + '</tr>'; });
-      h += '</table>';
+      var unitOf = function (p, id) { var l = p.oneTime.filter(function (o) { return o.id === id; })[0]; return l ? money(q.currency, l.unitPrice) : '—'; };
+      var sideRows = stageOf(d) === 'PROPOSAL'
+        ? [['/ site / month', function (p) { return '<b>' + money(q.currency, p.finalPricePerSite) + '</b>'; }], ['Set-up', function (p) { return unitOf(p, 'SETUP'); }], ['Install / store', function (p) { return unitOf(p, 'STORE_INSTALL'); }]]
+        : [['/ site / month', function (p) { return money(q.currency, p.finalPricePerSite); }], ['Recurring / yr', function (p) { return money(q.currency, p.recurringAnnual); }],
+          ['One-time', function (p) { return money(q.currency, p.oneTimeTotal + (q.optionalOneTimeTotal || 0)); }], ['First year', function (p) { return '<b>' + money(q.currency, p.firstYearTotal + (q.optionalOneTimeTotal || 0)) + '</b>'; }]];
+      sideRows.forEach(function (r) { h += '<tr><td>' + r[0] + '</td>' + q.packages.map(function (p) { return '<td class="num">' + r[1](p) + '</td>'; }).join('') + '</tr>'; });
+      h += '</table>' + (stageOf(d) === 'PROPOSAL' ? '<p class="muted">Totals are calculated at the Order Form stage.</p>' : '');
       h += '<p>' + (!ev.needsApproval ? '<span class="badge ok">Standard pricing</span>' : APPROVAL === 'Approved' ? '<span class="badge ok">Special pricing approved by Amith</span>' : APPROVAL === 'Pending' ? '<span class="badge warn">Waiting for Amith’s approval</span>' : '<span class="badge warn">Needs Amith’s approval</span>') + '</p>';
     }
     var miss = Object.keys(ev.missing || {});
@@ -563,12 +567,22 @@
       function row(l, f) { h += '<tr><td>' + l + '</td>' + q.packages.map(function (p) { return '<td class="num">' + f(p) + '</td>'; }).join('') + '</tr>'; }
       row('Standard / site / month', function (p) { return money(q.currency, p.standardPricePerSite); });
       row('Final / site / month', function (p) { return '<b>' + money(q.currency, p.finalPricePerSite) + '</b>'; });
-      row('Licence / year (' + q.sites + ' sites)', function (p) { return money(q.currency, p.licenceAnnual); });
-      row('Add-ons / month', function (p) { return money(q.currency, p.addOnsMonthly); });
-      row('One-time fees', function (p) { return money(q.currency, p.oneTimeTotal); });
-      row('<b>First-year total</b>', function (p) { return '<b>' + money(q.currency, p.firstYearTotal) + '</b>'; });
-      h += '</table>';
-      if (q.optionalOneTime.length) h += '<p class="muted">Optional one-time: ' + q.optionalOneTime.map(function (l) { return esc(l.label) + ' ' + (l.text || money(q.currency, l.total)); }).join('; ') + '</p>';
+      var unit = function (p, id) { var l = p.oneTime.filter(function (o) { return o.id === id; })[0]; return l ? money(q.currency, l.unitPrice) : '—'; };
+      if (stageOf(d) === 'PROPOSAL') {
+        row('Set-up and training', function (p) { return unit(p, 'SETUP'); });
+        row('Installation / store', function (p) { return unit(p, 'STORE_INSTALL'); });
+        if (q.ecomSites) row('Installation / e-commerce site', function (p) { return unit(p, 'ECOM_INSTALL'); });
+        row('Add-ons / month', function (p) { return money(q.currency, p.addOnsMonthly); });
+        h += '</table><p class="muted">The proposal shows unit prices only. Totals are calculated at the Order Form stage.</p>';
+        if (q.optionalOneTime.length) h += '<p class="muted">Optional services listed at rate-card price: ' + q.optionalOneTime.map(function (l) { return esc(l.label) + ' – ' + (l.text || money(q.currency, l.unitPrice) + (l.unit === 'per hour' ? ' per hour' : '')); }).join('; ') + '</p>';
+      } else {
+        row('Licence / year (' + q.sites + (q.sites === 1 ? ' site)' : ' sites)'), function (p) { return money(q.currency, p.licenceAnnual); });
+        row('Add-ons / month', function (p) { return money(q.currency, p.addOnsMonthly); });
+        row('One-time fees (incl. optional services)', function (p) { return money(q.currency, p.oneTimeTotal + (q.optionalOneTimeTotal || 0)); });
+        row('<b>First-year total</b>', function (p) { return '<b>' + money(q.currency, p.firstYearTotal + (q.optionalOneTimeTotal || 0)) + '</b>'; });
+        h += '</table>';
+        if (q.optionalOneTime.length) h += '<p class="muted">Optional services: ' + q.optionalOneTime.map(function (l) { return esc(l.label) + ' ' + (l.text || (l.qty > 1 ? l.qty + ' × ' + money(q.currency, l.unitPrice) + ' = ' : '') + money(q.currency, l.total)); }).join('; ') + '</p>';
+      }
     }
     if (ev.needsApproval) h += '<h3>' + (APPROVAL === 'Approved' ? 'Special pricing – approved by Amith' : APPROVAL === 'Pending' ? 'Special pricing – waiting for Amith' : 'Approval required') + '</h3><ul class="tight">' + ev.approvalReasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' + (APPROVAL === 'Approved' ? '<p class="muted">Changing these prices will need approval again.</p>' : '');
     if (ev.errors.length) h += '<h3>Fix before generating</h3><ul class="tight error">' + ev.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>';

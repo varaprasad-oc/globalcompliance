@@ -135,7 +135,6 @@ function buildDocData(docType, master, deal, quote, ctx) {
     ];
     if (flags.HasSpecialPrice) priceRows.push(['Licence fee / site / month (special price)'].concat(quote.packages.map(function (x) { return x.specialPricePerSite === null ? m(x.standardPricePerSite) : m(x.specialPricePerSite); })));
     priceRows.push(['Billed annually – per site'].concat(quote.packages.map(function (x) { return m(x.annualPerSite) + ' / year'; })));
-    priceRows.push(['Total licence – ' + quote.sites + (quote.sites === 1 ? ' site' : ' sites') + ' / year'].concat(quote.packages.map(function (x) { return m(x.licenceAnnual); })));
     priceRows.push(['Receipts included / site / month'].concat(quote.packages.map(function (x) { return x.receiptsIncludedPerSite.toLocaleString('en-US'); })));
     priceRows.push(['Per additional 1,000 receipts'].concat(quote.packages.map(function (x) { return m(x.overagePer1000); })));
     tables.PriceSummary = { headers: ['Recurring charges'].concat(pkgNames), rows: priceRows };
@@ -150,10 +149,10 @@ function buildDocData(docType, master, deal, quote, ctx) {
           var l = x.oneTime.filter(function (o) { return o.id === id; })[0];
           if (!l) return '';
           label = l.label;
-          return l.qty > 1 ? m(l.unitPrice) + ' × ' + l.qty + ' = ' + m(l.total) : m(l.total);
+          return m(l.unitPrice) + (l.unit === 'per store' ? ' per store' : l.unit === 'per site' ? ' per e-commerce site' : '');
         });
         return [label].concat(cells);
-      }).concat([['Total one-time fees'].concat(quote.packages.map(function (x) { return m(x.oneTimeTotal); }))])
+      })
     };
 
     var addOnIds = [];
@@ -172,7 +171,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
       })
     };
 
-    lists.OptionalOneTime = quote.optionalOneTime.map(function (l) { return { label: l.label, amount: l.text || (m(l.unitPrice) + (l.unit === 'per hour' ? ' per hour' : '')) }; });
+    lists.OptionalOneTime = quote.optionalOneTime.map(function (l) { return { label: l.label, amount: l.text || (m(l.unitPrice) + (l.unit === 'per hour' ? ' per hour' : '')) }; });  // rate-card price only, never qty × price
     flags.HasOptionalOneTime = lists.OptionalOneTime.length > 0;
     lists.Usage = quote.usage.map(function (l) { return { label: l.label, price: l.text || (m(l.unitPrice) + ' ' + l.unit) }; });
     lists.Consulting = quote.consulting.map(function (l) { return { label: l.label, price: m(l.unitPrice) + ' ' + l.unit }; });

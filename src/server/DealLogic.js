@@ -139,7 +139,7 @@ function dealSummary(rec) {
     var name = (d.commercial || {}).orderPackage || (q.packages[0] || {}).package;
     op = q.packages.filter(function (p) { return p.package === name; })[0] || q.packages[0];
   }
-  var value = op ? op.firstYearTotal + (q.optionalOneTimeTotal || 0) : 0;
+  var value = op ? op.firstYearTotal + (d.stage === 'PROPOSAL' ? 0 : (q.optionalOneTimeTotal || 0)) : 0;
   return {
     dealId: rec.deal_id, clientName: rec.client_name, country: rec.country, packages: rec.packages,
     currency: rec.currency, status: rec.status, needsApproval: isTrue(rec.needs_approval), approvalStatus: rec.approval_status,
