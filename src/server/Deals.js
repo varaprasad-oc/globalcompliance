@@ -144,7 +144,7 @@ function apiConvertToContract(dealId) {
     if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
     var stored = JSON.parse(rec.input_json);
     if (!canConvertToContract(stored, rec.status)) throw new Error('Generate the proposal first (status must be "Proposal generated" or "Sent").');
-    var deal = convertToContract(stored);
+    var deal = convertToContract(stored, evaluateDeal(withSnapshot(m, stored.pricingSnapshot), stored).quote);
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), rec);
     newRec.status = deal.status;

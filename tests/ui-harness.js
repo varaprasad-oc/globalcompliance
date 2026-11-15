@@ -30,7 +30,7 @@ const api = {
     return { mode: plan.mode, message: plan.reason, deal: d, results: plan.docTypes.map((t) => ({ type: t, label: t, docNo: d.docNos[t], docUrl: 'https://docs.google.com/x', pdfUrl: plan.mode === 'FINAL' ? 'https://drive.google.com/y' : '', warnings: [] })) }; },
   apiDealDocuments: () => [],
   apiConvertToContract: (id) => { const r = store.deals[id]; const st = JSON.parse(r.input_json); if (!ctx.canConvertToContract(st, r.status)) throw new Error('not allowed');
-    const d = ctx.convertToContract(st); const ev = ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d); const nr = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), r); nr.status = d.status; store.deals[id] = nr;
+    const d = ctx.convertToContract(st, ctx.evaluateDeal(ctx.withSnapshot(M, st.pricingSnapshot), st).quote); const ev = ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d); const nr = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), r); nr.status = d.status; store.deals[id] = nr;
     return { deal: d, evaluation: ev, summary: ctx.dealSummary(nr) }; },
   apiListApprovals: () => store.approvals.filter((a) => !a.decision).map((a) => { const r = store.deals[a.dealId]; const q = JSON.parse(r.quote_json); const d = JSON.parse(r.input_json);
     return { approvalId: a.approvalId, dealId: a.dealId, version: 1, requestedAt: '2026-11-14', requestedBy: 'Varaprasad SN', reasons: a.reasons, note: d.approvalNote || '', client: d.client.legalName,
@@ -138,6 +138,10 @@ const api = {
   await p.fill('[data-f="client.address"]', 'Cairo, Egypt');
   await p.fill('[data-f="client.businessContact.email"]', 'buyer@frg.example');
   await p.fill('[data-f="client.billingContact.email"]', 'finance@frg.example');
+  await p.click('#steps div[data-step="2"]'); await p.fill('[data-f="commercial.stores"]', '50');
+  await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(800);
+  check('Review lists changes since proposal', (await p.textContent('#review')).includes('Stores: 46 → 50'));
+  await p.click('#steps div[data-step="2"]'); await p.fill('[data-f="commercial.stores"]', '46'); await p.waitForTimeout(300);
   await p.click('#steps div[data-step="3"]');
   check('Order Form terms + document choices in Stage 2 step 3', (await p.isVisible('#orderPackage')) && (await p.isDisabled('[data-f="docs.ORDER_FORM"]')) && !(await p.isVisible('[data-f="proposal.title"]')));
   check('Order Form package list follows packages', (await p.$$eval('#orderPackage option', (o) => o.map((x) => x.value))).join() === 'Loyalty,Advanced');

@@ -548,6 +548,7 @@
           ['One-time', function (p) { return money(q.currency, p.oneTimeTotal + (q.optionalOneTimeTotal || 0)); }], ['First year', function (p) { return '<b>' + money(q.currency, p.firstYearTotal + (q.optionalOneTimeTotal || 0)) + '</b>'; }]];
       sideRows.forEach(function (r) { h += '<tr><td>' + r[0] + '</td>' + q.packages.map(function (p) { return '<td class="num">' + r[1](p) + '</td>'; }).join('') + '</tr>'; });
       h += '</table>' + (stageOf(d) === 'PROPOSAL' ? '<p class="muted">Totals are calculated at the Order Form stage.</p>' : '');
+      if (stageOf(d) === 'CONTRACT' && (ev.changesSinceProposal || []).length) h += '<p><span class="badge warn">' + ev.changesSinceProposal.length + ' change(s) since proposal</span></p>';
       h += '<p>' + (!ev.needsApproval ? '<span class="badge ok">Standard pricing</span>' : APPROVAL === 'Approved' ? '<span class="badge ok">Special pricing approved by Amith</span>' : APPROVAL === 'Pending' ? '<span class="badge warn">Waiting for Amith’s approval</span>' : '<span class="badge warn">Needs Amith’s approval</span>') + '</p>';
     }
     var miss = Object.keys(ev.missing || {});
@@ -583,6 +584,11 @@
         h += '</table>';
         if (q.optionalOneTime.length) h += '<p class="muted">Optional services: ' + q.optionalOneTime.map(function (l) { return esc(l.label) + ' ' + (l.text || (l.qty > 1 ? l.qty + ' × ' + money(q.currency, l.unitPrice) + ' = ' : '') + money(q.currency, l.total)); }).join('; ') + '</p>';
       }
+    }
+    if (stageOf(d) === 'CONTRACT' && d.proposalBaseline) {
+      var ch = ev.changesSinceProposal || [];
+      h += '<h3>Changed since proposal' + (d.proposalBaseline && d.proposalBaseline.docNo ? ' ' + esc(d.proposalBaseline.docNo) : '') + '</h3>' +
+        (ch.length ? '<ul class="tight">' + ch.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<p class="muted">No changes – the Order Form matches the proposal.</p>');
     }
     if (ev.needsApproval) h += '<h3>' + (APPROVAL === 'Approved' ? 'Special pricing – approved by Amith' : APPROVAL === 'Pending' ? 'Special pricing – waiting for Amith' : 'Approval required') + '</h3><ul class="tight">' + ev.approvalReasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' + (APPROVAL === 'Approved' ? '<p class="muted">Changing these prices will need approval again.</p>' : '');
     if (ev.errors.length) h += '<h3>Fix before generating</h3><ul class="tight error">' + ev.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>';
@@ -664,6 +670,7 @@
         return '<div class="card"><div class="bar"><b>' + esc(a.client) + '</b><span class="muted">' + esc(a.country) + ' · ' + esc(a.dealId) + ' v' + a.version + ' · by ' + esc(a.requestedBy) + ' · ' + esc(String(a.requestedAt).slice(0, 10)) + '</span></div>' +
           '<ul class="tight">' + a.reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' +
           (a.note ? '<p><b>Rep note:</b> ' + esc(a.note) + '</p>' : '') +
+          (a.changes && a.changes.length ? '<p><b>Changed since proposal:</b></p><ul class="tight">' + a.changes.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
           '<table><tr><th>Package</th><th class="num">List</th><th class="num">Standard</th><th class="num">Proposed</th><th class="num">Special disc.</th><th class="num">Total disc. vs list</th><th class="num">First year</th></tr>' +
           a.packages.map(function (p) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + money(c, p.list) + '</td><td class="num">' + money(c, p.standard) + '</td><td class="num"><b>' + money(c, p.final) + '</b></td><td class="num">' + pct(p.specialDiscountPct) + '</td><td class="num">' + pct(p.effectiveDiscountPct) + '</td><td class="num">' + money(c, p.firstYear) + '</td></tr>'; }).join('') + '</table>' +
           (a.comms.length ? '<p class="muted">Messaging: ' + a.comms.map(function (m) { return esc(Number(m.messages).toLocaleString('en-US')) + '/month ' + money(c, m.specialPrice) + ' (list ' + money(c, m.listPrice) + ', floor ' + money(c, m.floorPrice) + ')'; }).join('; ') + '</p>' : '') +

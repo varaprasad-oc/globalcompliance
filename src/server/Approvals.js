@@ -19,6 +19,7 @@ function apiListApprovals() {
       packages: q ? q.packages.map(function (p) { return { name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite,
         specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal }; }) : [],
       comms: q ? (q.comms || []).filter(function (c) { return c.specialPrice !== null; }) : [],
+      changes: q ? changesSinceProposal(getMaster(), d.proposalBaseline, d, q) : [],
       documents: apiDealDocuments(a.deal_id).filter(function (x) { return Number(x.version) === Number(a.version); })
     };
   }).filter(Boolean);

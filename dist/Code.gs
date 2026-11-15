@@ -914,9 +914,56 @@ function canConvertToContract(deal, status) {
   return (deal.stage || 'PROPOSAL') === 'PROPOSAL' && ['Proposal generated', 'Sent'].indexOf(status) !== -1;
 }
 
-/** Deal moved to stage 2: contract documents selected, Order Form package defaulted. */
-function convertToContract(deal) {
+/** What the proposal said (kept at conversion so stage-2 changes can be shown). */
+function proposalBaseline(deal, quote) {
+  var com = JSON.parse(JSON.stringify(deal.commercial || {}));
+  var prices = {}, comms = {};
+  ((quote && quote.packages) || []).forEach(function (p) { prices[p.package] = p.finalPricePerSite; });
+  ((quote && quote.comms) || []).forEach(function (c) { comms[c.id] = c.unitPrice; });
+  return { takenAt: new Date().toISOString(), docNo: (deal.docNos || {}).PROPOSAL || '', commercial: com, prices: prices, comms: comms, currency: quote ? quote.currency : com.currency };
+}
+
+/** Human-readable differences between the proposal baseline and the current deal. */
+function changesSinceProposal(master, base, deal, quote) {
+  if (!base) return [];
+  var out = [], b = base.commercial || {}, c = deal.commercial || {};
+  var label = {};
+  (master.PriceItems || []).forEach(function (i) { label[i.item_id] = i.label; });
+  (master.CommsTiers || []).forEach(function (t) { label[t.tier_id] = 'Messaging up to ' + Number(t.messages).toLocaleString('en-US') + ' / month'; });
+  var cur = (quote && quote.currency) || c.currency;
+  function money(v) { return v === null || v === undefined || v === '' ? '—' : formatMoney(cur, v); }
+  [['market', 'Market'], ['currency', 'Currency'], ['stores', 'Stores'], ['ecomSites', 'E-commerce sites']].forEach(function (f) {
+    if (String(b[f[0]] == null ? '' : b[f[0]]) !== String(c[f[0]] == null ? '' : c[f[0]])) out.push(f[1] + ': ' + (b[f[0]] === '' || b[f[0]] == null ? '—' : b[f[0]]) + ' → ' + (c[f[0]] === '' || c[f[0]] == null ? '—' : c[f[0]]));
+  });
+  var bp = b.packages || [], cp = c.packages || [];
+  cp.filter(function (p) { return bp.indexOf(p) === -1; }).forEach(function (p) { out.push('Package added: ' + p); });
+  bp.filter(function (p) { return cp.indexOf(p) === -1; }).forEach(function (p) { out.push('Package removed: ' + p); });
+  ((quote && quote.packages) || []).forEach(function (p) {
+    var before = (base.prices || {})[p.package];
+    if (before !== undefined && before !== p.finalPricePerSite) out.push(p.package + ' price / site / month: ' + money(before) + ' → ' + money(p.finalPricePerSite));
+  });
+  function addOnsOf(com, pkg) { return (com.addOnsByPackage && com.addOnsByPackage[pkg]) ? com.addOnsByPackage[pkg] : (com.addOns || []); }
+  cp.filter(function (p) { return bp.indexOf(p) !== -1; }).forEach(function (p) {
+    var was = addOnsOf(b, p), now = addOnsOf(c, p);
+    now.filter(function (x) { return was.indexOf(x) === -1; }).forEach(function (x) { out.push((label[x] || x) + ' added to ' + p); });
+    was.filter(function (x) { return now.indexOf(x) === -1; }).forEach(function (x) { out.push((label[x] || x) + ' removed from ' + p); });
+  });
+  var bo = {}, co = {};
+  (b.oneTimeItems || []).forEach(function (i) { bo[i.id] = i.qty || 1; });
+  (c.oneTimeItems || []).forEach(function (i) { co[i.id] = i.qty || 1; });
+  Object.keys(co).forEach(function (id) { if (!(id in bo)) out.push('Optional service added: ' + (label[id] || id)); });
+  Object.keys(bo).forEach(function (id) { if (!(id in co)) out.push('Optional service removed: ' + (label[id] || id)); });
+  ((quote && quote.comms) || []).forEach(function (t) {
+    var before = (base.comms || {})[t.id];
+    if (before !== undefined && before !== t.unitPrice) out.push(label[t.id] + ': ' + money(before) + ' → ' + money(t.unitPrice));
+  });
+  return out;
+}
+
+/** Deal moved to stage 2: contract documents selected, Order Form package defaulted, proposal baseline kept. */
+function convertToContract(deal, quote) {
   var d = JSON.parse(JSON.stringify(deal));
+  d.proposalBaseline = proposalBaseline(deal, quote);
   d.stage = 'CONTRACT';
   d.status = DEAL_STATUS.CONTRACT_DRAFT;
   d.docs = { ORDER_FORM: true, TOS: true, DPA: true };
@@ -970,7 +1017,8 @@ function evaluateDeal(master, deal) {
     missing: missing,
     readyToGenerate: errors.length === 0 && Object.keys(missing).length === 0,
     needsApproval: quote.ok ? quote.needsApproval : false,
-    approvalReasons: quote.ok ? quote.approvalReasons : []
+    approvalReasons: quote.ok ? quote.approvalReasons : [],
+    changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : []
   };
 }
 
@@ -1083,7 +1131,7 @@ function cloneDeal(deal, newId) {
   c.status = DEAL_STATUS.DRAFT;
   c.client = c.client || {};
   delete c.docNos; delete c.pricingSnapshot; delete c.approvalNote; delete c.aiDraft;  // a clone gets new numbers and today's prices
-  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true };
+  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true }; delete c.proposalBaseline;
   return c;
 }
 
@@ -1097,12 +1145,13 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   delete d.refreshPrices;
   if (!stored) {
     d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT;
-    delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId;
+    delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId; delete d.proposalBaseline;
     d.stage = 'PROPOSAL'; d.docs = { PROPOSAL: true };
     return d;
   }
   d.dealId = stored.dealId;
   d.docNos = stored.docNos;
+  d.proposalBaseline = stored.proposalBaseline;
   d.clientId = stored.clientId;
   d.pricingSnapshot = refresh || !stored.pricingSnapshot ? freshSnapshot : stored.pricingSnapshot;
   d.stage = stored.stage;
@@ -1625,7 +1674,7 @@ function apiConvertToContract(dealId) {
     if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
     var stored = JSON.parse(rec.input_json);
     if (!canConvertToContract(stored, rec.status)) throw new Error('Generate the proposal first (status must be "Proposal generated" or "Sent").');
-    var deal = convertToContract(stored);
+    var deal = convertToContract(stored, evaluateDeal(withSnapshot(m, stored.pricingSnapshot), stored).quote);
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), rec);
     newRec.status = deal.status;
@@ -2193,6 +2242,7 @@ function apiListApprovals() {
       packages: q ? q.packages.map(function (p) { return { name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite,
         specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal }; }) : [],
       comms: q ? (q.comms || []).filter(function (c) { return c.specialPrice !== null; }) : [],
+      changes: q ? changesSinceProposal(getMaster(), d.proposalBaseline, d, q) : [],
       documents: apiDealDocuments(a.deal_id).filter(function (x) { return Number(x.version) === Number(a.version); })
     };
   }).filter(Boolean);

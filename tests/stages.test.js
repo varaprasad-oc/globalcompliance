@@ -51,3 +51,30 @@ test('Approved proposal pricing carries to the contract (final documents, no new
 test('Pipeline status allowed after proposal or contract generation', () => {
   eq([C().canSetStatus('Proposal generated', 'Sent'), C().canSetStatus('Contract generated', 'Won'), C().canSetStatus('Contract draft', 'Won')], [true, true, false]);
 });
+
+test('Changes since proposal are listed (stores, price, add-ons, services, messaging)', () => {
+  const d = base(); d.stage = 'PROPOSAL'; d.docNos = { PROPOSAL: 'OC-P-2026-0001' };
+  d.commercial.addOnsByPackage = { Loyalty: ['GIFT_CARDS'], Advanced: [] };
+  const q1 = C().buildQuote(global.M, d.commercial);
+  const c = C().convertToContract(d, q1);
+  eq(C().changesSinceProposal(global.M, c.proposalBaseline, c, q1), [], 'no changes right after conversion');
+  c.commercial.stores = 50;
+  c.commercial.specialPrices = { Loyalty: 65 };
+  c.commercial.addOnsByPackage = { Loyalty: ['EMPLOYEE_DISCOUNT'], Advanced: [] };
+  c.commercial.oneTimeItems = [];
+  c.commercial.specialComms = { COMMS_100K: 200 };
+  const q2 = C().buildQuote(global.M, c.commercial);
+  const ch = C().changesSinceProposal(global.M, c.proposalBaseline, c, q2);
+  eq(ch.includes('Stores: 46 → 50'), true);
+  eq(ch.includes('Loyalty price / site / month: USD 70 → USD 65'), true);
+  eq(ch.includes('Employee Discount Program added to Loyalty') && ch.includes('Gift Cards removed from Loyalty'), true);
+  eq(ch.some((x) => /^Optional service removed: Data migration/.test(x)), true);
+  eq(ch.includes('Messaging up to 100,000 / month: USD 250 → USD 200'), true);
+  eq(c.proposalBaseline.docNo, 'OC-P-2026-0001');
+});
+
+test('Proposal baseline is server-owned', () => {
+  const stored = C().convertToContract(Object.assign(base(), { stage: 'PROPOSAL' }), C().buildQuote(global.M, base().commercial));
+  const incoming = JSON.parse(JSON.stringify(stored)); incoming.proposalBaseline = { prices: {}, commercial: {} };
+  eq(C().protectDealFields(incoming, stored, 'Contract draft', {}).proposalBaseline.prices.Loyalty, 70);
+});
