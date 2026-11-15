@@ -7,7 +7,7 @@ module.exports.sampleDeal = {
     pos: 'Retail Pro', ecomPlatform: 'Shopify',
     businessContact: { name: 'A. Client', email: 'a@frg.example', phone: '+20 100 000 0000' },
     billingContact: { name: 'Finance', email: 'finance@frg.example' },
-    signatoryName: 'A. Client', signatoryTitle: 'CEO'
+    signatoryName: 'A. Client', signatoryTitle: 'CEO', signatoryEmail: 'a@frg.example'
   },
   entityId: 'P-EG-CONGINEER',
   commercial: {

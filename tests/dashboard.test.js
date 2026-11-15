@@ -77,7 +77,7 @@ test('Partner performance (Superadmin): deals, open pipeline, won value, win rat
 test('Referral partner is internal only: not used by any document data', (c) => {
   const { sampleDeal } = require('./fixtures');
   const d = JSON.parse(JSON.stringify(sampleDeal)); d.referralPartnerId = 'P-SECRET';
-  ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].forEach((t) => {
+  ['PROPOSAL', 'ORDER_FORM', 'MSA'].forEach((t) => {
     const data = c.buildDocData(t, global.M, d, c.evaluateDeal(global.M, d).quote, { docNo: 'X' });
     if (JSON.stringify(data).includes('P-SECRET')) throw new Error(t + ' contains the partner');
   });

@@ -17,13 +17,13 @@ var SEED = {
   Entities: {
     kind: 'master',
     headers: ['entity_id', 'type', 'legal_name', 'short_name', 'reg_type', 'reg_no', 'address', 'country',
-      'signatory_name', 'signatory_title', 'governing_law', 'logo_file_id', 'active'],
+      'signatory_name', 'signatory_title', 'governing_law', 'logo_file_id', 'active', 'courts_city'],
     rows: [
-      ['OC-US', 'OptCulture', 'Retail Information Systems, Inc., doing business as OptCulture', 'OptCulture', '', '', '', 'United States', '', '', 'United States', '', true],
+      ['OC-US', 'OptCulture', 'Retail Information Systems, Inc., doing business as OptCulture', 'OptCulture', '', '', '', 'United States', '', '', 'United States', '', true, ''],
       ['OC-AE', 'OptCulture', 'RIS Services DMCC', 'OptCulture', 'Licence', 'DMCC-33689',
-        'Office 1104, 11th Floor, X2 Tower, PB No. 73160, JLT, Dubai, UAE', 'United Arab Emirates', '', '', 'United Arab Emirates', '', true],
-      ['OC-IN', 'OptCulture', 'OptCulture Private Limited', 'OptCulture', 'CIN', '', '', 'India', '', '', 'India', '', true],
-      ['P-EG-CONGINEER', 'Partner', 'Congineer Business Solutions', 'Congineer', '', '', '', 'Egypt', '', '', 'Egypt', '', true]
+        'Office 1104, 11th Floor, X2 Tower, PB No. 73160, JLT, Dubai, UAE', 'United Arab Emirates', '', '', 'United Arab Emirates', '', true, ''],
+      ['OC-IN', 'OptCulture', 'OptCulture Private Limited', 'OptCulture', 'CIN', '', '', 'India', '', '', 'India', '', true, ''],
+      ['P-EG-CONGINEER', 'Partner', 'Congineer Business Solutions', 'Congineer', '', '', '', 'Egypt', '', '', 'Egypt', '', true, '']
     ]
   },
 
@@ -189,6 +189,9 @@ var SEED = {
       ['executive_contact_name', 'Amith Lulla', 'SLA escalation – Executive Director'],
       ['executive_contact_email', 'amith.lulla@optculture.com', 'SLA escalation – Executive Director'],
       ['legal_email', 'legal@optculture.com', 'ToS contact'],
+      ['tos_url', 'https://optculture.com/terms-of-service/', 'Online Terms of Service incorporated by the MSA'],
+      ['dpa_url', 'https://optculture.com/DPA/', 'Online Data Processing Agreement incorporated by the MSA'],
+      ['sla_url', 'https://optculture.com/SLA/', 'Online Service Level Agreement incorporated by the MSA'],
       ['default_hosting_region', '', 'DPA hosting region (to be confirmed by OC Tech)'],
       ['brand_table_header_bg', '#7B3FE4', 'Table header background (white bold text) – all documents'],
       ['brand_heading_color', '#B6262B', 'Heading colour (OptCulture red)'],
@@ -234,6 +237,7 @@ var SEED = {
       ['ORDER_FORM', 'OC-Q', 2026, 0],
       ['TOS', 'OC-TOS', 2026, 0],
       ['DPA', 'OC-DPA', 2026, 0],
+      ['MSA', 'OC-MSA', 2026, 0],
       ['DEAL', 'D', 2026, 0],
       ['CLIENT', 'C', '-', 0]
     ]

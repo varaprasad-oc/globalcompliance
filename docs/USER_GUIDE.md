@@ -21,3 +21,10 @@ Search and filter your deals; **Open** to continue or revise (revisions become v
 - Prices come from the master price list and are frozen when you first save a deal. Tick "Use today's price list" (step 2) to update.
 - Never edit prices inside the generated Google Doc. Change the deal and generate again, so approvals and records stay correct.
 - Questions or errors: contact Varaprasad; screenshots help.
+
+
+## Contract stage (from 15 Nov 2026)
+- After the client accepts the proposal, click **Convert to Order Form**. The app generates **two documents**: the **Quotation & Order Form** (cites your Proposal number and the MSA number) and the **Master Services Agreement** (cites the Order Form). The ToS, DPA and SLA are not generated – the MSA incorporates them from optculture.com.
+- Fill the customer's **signatory name, designation and email** (step 1) – they are printed in the MSA signature block.
+- **MSA – Special Terms and Exceptions** (step 3): type any agreed exceptions, naming the clause (one per line). Leave it empty for "None.". Anything typed goes to Amith for approval first (drafts are created meanwhile).
+- When the client signs, mark the deal **Won**. The MSA is then saved on the client: their next deal produces only a new Order Form under the same MSA. Tick "Issue a new MSA anyway" if a new MSA is needed.

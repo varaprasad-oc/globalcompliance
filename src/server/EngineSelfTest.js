@@ -82,7 +82,7 @@ function generateSampleDocs() {
   var results = [];
   deals.forEach(function (deal) {
     var quote = buildQuote(master, deal.commercial);
-    var related = { PROPOSAL: deal.dealId + '-P', ORDER_FORM: deal.dealId + '-Q', TOS: deal.dealId + '-TOS', DPA: deal.dealId + '-DPA' };
+    var related = { PROPOSAL: deal.dealId + '-P', ORDER_FORM: deal.dealId + '-Q', MSA: deal.dealId + '-MSA' };
     DOC_TYPES.forEach(function (type) {
       var data = buildDocData(type, master, deal, quote, { docNo: related[type], docDate: new Date(), user: user, related: related });
       try {

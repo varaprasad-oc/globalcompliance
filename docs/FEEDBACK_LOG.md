@@ -63,3 +63,10 @@
 - My Deals (Superadmin only): tick boxes per deal + "select all on this page", "Delete selected (N)" button, confirm by typing DELETE.
 - Server `apiDeleteDeals` (Superadmin only, re-checks role and the DELETE confirmation): moves every Google Doc and PDF of the deals (incl. archived versions) to the Drive trash (recoverable 30 days), trashes client folders left empty (never the root/type folders), deletes Deals, Documents and Approvals rows, and the Clients row if no other deal uses that client. Audit log keeps a DEALS_DELETED entry; document numbers are not reused.
 - Tests: planner unit test (rows bottom-up, client kept when still used); harness: button visible for Superadmin, selection count, deal removed.
+
+## 29. Management MSA format replaces generated ToS/DPA (see DECISIONS)
+- Logic: CONTRACT docs = ORDER_FORM + MSA (or ORDER_FORM only under an existing MSA); exceptions → approval (re-approval when the text changes); MSA data (parties, online links, initial Order Form, courts, signatories, notice emails); ToS/DPA generation and the Agreement merge retired.
+- Templates: live MSA template copied from management's doc + placeholders (all tokens verified against the data); live Order Form paragraph now cites the MSA and the online ToS/DPA/SLA; repo copy templates/msa.html.
+- Live sheet: Templates (MSA active; TOS/DPA inactive), Numbering MSA row, Entities courts_city column, CommercialTerms tos_url/dpa_url/sla_url.
+- UI: step 1 customer signatory email + notice email; step 3 "MSA – Special Terms and Exceptions (§7)" box (only when an MSA is generated), "What will be generated" box, button "Generate Order Form & MSA"; review shows the exceptions with "Needs Amith's approval".
+- Tests: 81 unit tests and 85 browser checks pass.

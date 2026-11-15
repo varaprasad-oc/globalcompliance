@@ -1,0 +1,62 @@
+<!-- MSA template (management format 2026-11-14). The live Google Doc is a copy of management's document with these
+     placeholders; keep both in sync. Tokens are checked by tests/docdata.test.js. -->
+<h1>MASTER SERVICES AGREEMENT</h1>
+<p><b>MSA No.:</b> {{DocNo}} &nbsp; · &nbsp; <b>Effective Date:</b> {{EffectiveDate}}{{#IF HasInitialOrderForm}} &nbsp; · &nbsp; <b>Initial Order Form:</b> {{InitialOrderFormNo}}{{/IF HasInitialOrderForm}}</p>
+<p>This Master Services Agreement ("MSA" or "Agreement") is entered into between:</p>
+<p><b>OptCulture:</b> {{EntityName}}<br>Registered Address: {{EntityAddressOrTbc}}</p>
+<p>and</p>
+<p><b>Customer:</b> {{ClientLegalName}}<br>Registered Address: {{ClientAddress}}</p>
+<p>Each is referred to as a "Party" and collectively as the "Parties".</p>
+<h2>1. Scope of Agreement</h2>
+<p>This Agreement governs the provision and use of OptCulture's software platform and related services ("Services").</p>
+<p>The Services, subscription terms, fees, billing arrangements and other customer-specific commercial conditions shall be specified in one or more Order Forms agreed between the Parties. Each Order Form forms part of this Agreement. Additional Order Forms may be executed without requiring a new MSA.</p>
+<h2>2. Incorporated Documents</h2>
+<p>The following documents are incorporated into and form part of this Agreement:</p>
+<table>
+<tr><th>Document</th><th>Reference</th></tr>
+<tr><td>Terms of Service (ToS)</td><td>{{TosUrl}}</td></tr>
+<tr><td>Data Processing Agreement (DPA)</td><td>{{DpaUrl}}</td></tr>
+<tr><td>Service Level Agreement (SLA)</td><td>{{SlaUrl}}</td></tr>
+<tr><td>Order Form(s)</td><td>{{#IF HasInitialOrderForm}}Initial Order Form No. {{InitialOrderFormNo}} and any further Order Forms agreed between the Parties{{/IF HasInitialOrderForm}}{{#IF !HasInitialOrderForm}}As agreed between the Parties{{/IF HasInitialOrderForm}}</td></tr>
+</table>
+<p>The versions of the online documents effective on the commencement date of each Order Form shall apply to that Order Form, subject to valid updates under their respective terms. No such update shall override an expressly negotiated provision of this MSA without the Parties' agreement.</p>
+<h2>3. Term and Termination</h2>
+<p>This Agreement commences on the Effective Date and remains in effect until terminated in accordance with its provisions.</p>
+<p>Each Order Form shall govern its own subscription duration, renewal, cancellation and payment obligations.</p>
+<p>Either Party may terminate this Agreement or an affected Order Form if the other Party materially breaches its obligations and fails to remedy the breach within thirty (30) days of written notice. Immediate termination is permitted where required by law or where the breach is incapable of remedy.</p>
+<p>Termination of this Agreement shall terminate all active Order Forms unless otherwise agreed. Termination of an individual Order Form shall not automatically terminate this Agreement or other active Order Forms.</p>
+<p>Either Party may terminate this Agreement by written notice when no Order Form remains active.</p>
+<p>Accrued obligations shall survive termination, and the handling of Customer Data shall be governed by the DPA.</p>
+<h2>4. Order of Precedence</h2>
+<p>In the event of any inconsistency between the contractual documents:</p>
+<p>This MSA shall prevail over the ToS and other general contractual provisions.</p>
+<p>The Order Form shall prevail for customer-specific commercial and subscription terms.</p>
+<p>The DPA shall govern matters concerning personal data processing.</p>
+<p>The SLA shall govern service availability, support and applicable remedies.</p>
+<p>The ToS shall govern all remaining matters concerning the Services.</p>
+<p>Any expressly negotiated exception in this MSA shall prevail over the corresponding standard provision, to the extent permitted by law.</p>
+<h2>5. Governing Law and Dispute Resolution</h2>
+<p>This Agreement shall be governed by the laws of {{GoverningLaw}}, without regard to conflict-of-law principles.</p>
+<p>Any dispute arising from or relating to this Agreement shall be subject to the exclusive jurisdiction of the competent courts of {{CourtsCity}}, unless otherwise agreed in writing.</p>
+<p>Before initiating formal proceedings, the Parties shall make reasonable efforts to resolve disputes through good-faith discussions, except where urgent legal relief is required.</p>
+<h2>6. General Provisions</h2>
+<p>Assignment: Neither Party may assign this Agreement without the other's prior written consent, except to an affiliate or in connection with a merger, restructuring or sale of substantially all relevant assets, provided the assignee assumes the applicable obligations.</p>
+<p>Notices: Formal notices shall be provided in writing, including by email, to the designated contacts specified in this Agreement or subsequently communicated in writing.</p>
+<p>Amendments: Changes to this MSA must be agreed in writing by authorised representatives of both Parties.</p>
+<p>Entire Agreement: This MSA, its Order Forms and incorporated documents constitute the entire agreement between the Parties concerning the Services and supersede prior agreements on the same subject, except those expressly preserved.</p>
+<p>Electronic Execution: This MSA and any Order Form may be executed electronically, including through electronic signature platforms. Electronically executed counterparts shall be legally binding to the extent permitted by applicable law.</p>
+<h2>7. Special Terms and Exceptions</h2>
+<p>The Parties agree to the following customer-specific modifications or additions, if any:</p>
+<p>{{TEXT:MsaExceptions}}</p>
+<p>Unless expressly specified otherwise, these exceptions shall apply to all Order Forms under this MSA.</p>
+<h2>Acceptance and Signatures</h2>
+<p>By signing below, the Parties agree to be bound by this MSA and the documents incorporated herein.</p>
+<table>
+<tr><th></th><th>OptCulture</th><th>Customer</th></tr>
+<tr><td>Legal Entity</td><td>{{EntityName}}</td><td>{{ClientLegalName}}</td></tr>
+<tr><td>Authorised Signatory</td><td>{{EntitySignatoryName}}</td><td>{{ClientSignatoryName}}</td></tr>
+<tr><td>Designation / Email</td><td>{{EntitySignatoryTitle}}</td><td>{{ClientSignatoryTitle}} / {{ClientSignatoryEmail}}</td></tr>
+<tr><td>Signature</td><td></td><td></td></tr>
+<tr><td>Date</td><td></td><td></td></tr>
+<tr><td>Notice Email</td><td>{{OptCultureNoticeEmail}}</td><td>{{ClientNoticeEmail}}</td></tr>
+</table>

@@ -11,7 +11,7 @@ test('Admin row validation: users, discounts, fx, tiers, features, templates', (
   eq(C().coerceAdminRow('Currencies', H('Currencies'), { code: 'QAR', fx_rate: 0 }).ok, false);
   eq(C().coerceAdminRow('CommsTiers', H('CommsTiers'), { tier_id: 'T', list_usd: 100, floor_usd: 200 }).errors, ['floor_usd cannot be above list_usd']);
   eq(C().coerceAdminRow('Features', H('Features'), { feature: 'F', Engagement: 'Yes', Loyalty: 'Included', Advanced: 'Add-on' }).ok, false);
-  eq(C().coerceAdminRow('Templates', H('Templates'), { doc_type: 'TOS', language: 'AR', file_id: 'abc', active: true }).ok, true);
+  eq(C().coerceAdminRow('Templates', H('Templates'), { doc_type: 'MSA', language: 'AR', file_id: 'abc', active: true }).ok, true);
   eq(C().coerceAdminRow('Deals', ['deal_id'], { deal_id: 'x' }).ok, false, 'records tabs are not editable');
 });
 
@@ -33,9 +33,9 @@ test('Clone drops document numbers and the price snapshot', () => {
 
 test('Available languages come from active templates', () => {
   const M = JSON.parse(JSON.stringify(global.M));
-  M.Templates = [{ doc_type: 'TOS', language: 'EN', file_id: 'a', active: true }, { doc_type: 'TOS', language: 'AR', file_id: 'b', active: true },
-    { doc_type: 'DPA', language: 'AR', file_id: 'c', active: false }];
-  eq(C().availableLanguages(M), { PROPOSAL: [], ORDER_FORM: [], TOS: ['EN', 'AR'], DPA: [] });
+  M.Templates = [{ doc_type: 'MSA', language: 'EN', file_id: 'a', active: true }, { doc_type: 'MSA', language: 'AR', file_id: 'b', active: true },
+    { doc_type: 'ORDER_FORM', language: 'AR', file_id: 'c', active: false }];
+  eq(C().availableLanguages(M), { PROPOSAL: [], ORDER_FORM: [], MSA: ['EN', 'AR'] });
 });
 
 test('Arabic documents: Arabic dates and Arabic module text with English fallback', () => {

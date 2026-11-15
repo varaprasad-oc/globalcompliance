@@ -45,21 +45,21 @@ test('Order Form: chosen package, lines, totals, dates', () => {
   eq(d.fields.EntityName, 'Congineer Business Solutions');
 });
 
-test('ToS lists only OptCulture entities', () => {
-  const d = build('TOS');
-  eq(d.lists.OptCultureEntities.map((e) => e.name), ['Retail Information Systems, Inc., doing business as OptCulture', 'RIS Services DMCC', 'OptCulture Private Limited']);
-  eq(d.fields.NonSolicitMonths, '24');
-  eq(d.fields.LiabilityCapMonths, '12');
+test('MSA: parties, online ToS/DPA/SLA links, initial Order Form, exceptions or "None."', () => {
+  const deal = JSON.parse(JSON.stringify(sampleDeal)); deal.stage = 'CONTRACT';
+  let d = C().buildDocData('MSA', global.M, deal, C().buildQuote(global.M, deal.commercial), Object.assign({}, ctx, { docNo: 'OC-MSA-2026-0001', related: { ORDER_FORM: 'OC-Q-2026-0004', MSA: 'OC-MSA-2026-0001' } }));
+  eq([d.fields.EntityName, d.fields.ClientLegalName, d.fields.InitialOrderFormNo, d.flags.HasInitialOrderForm], ['Congineer Business Solutions', 'Fashion Retail Group S.A.E.', 'OC-Q-2026-0004', true]);
+  eq([d.fields.TosUrl, d.fields.DpaUrl, d.fields.SlaUrl], ['https://optculture.com/terms-of-service/', 'https://optculture.com/DPA/', 'https://optculture.com/SLA/']);
+  eq([d.texts.MsaExceptions, d.flags.HasExceptions, d.fields.ClientNoticeEmail, d.fields.OptCultureNoticeEmail], ['None.', false, 'a@frg.example', 'legal@optculture.com']);
+  deal.msaExceptions = 'Clause 3: 60 days cure period.\nClause 5: courts of Cairo.';
+  d = C().buildDocData('MSA', global.M, deal, C().buildQuote(global.M, deal.commercial), ctx);
+  eq([d.texts.MsaExceptions, d.flags.HasExceptions], ['Clause 3: 60 days cure period.\n\nClause 5: courts of Cairo.', true]);
 });
 
-test('DPA: addendum by country, partner adds platform sub-processor', () => {
-  const d = build('DPA');
-  eq(d.flags.Addendum4D, true);
-  eq(d.flags.Addendum4A, false);
-  eq(d.fields.HostingRegion, 'EU (Frankfurt)');
-  eq(d.lists.SubProcessors[0].service, 'Operation of the OptCulture platform');
-  const ksa = JSON.parse(JSON.stringify(sampleDeal)); ksa.client.country = 'Saudi Arabia';
-  eq(build('DPA', ksa).flags.Addendum4A, true);
+test('Order Form cites the Proposal and the MSA, plus the online documents', () => {
+  const deal = JSON.parse(JSON.stringify(sampleDeal)); deal.stage = 'CONTRACT';
+  const d = C().buildDocData('ORDER_FORM', global.M, deal, C().buildQuote(global.M, deal.commercial), Object.assign({}, ctx, { related: { PROPOSAL: 'OC-P-2026-0002', MSA: 'OC-MSA-2026-0001' } }));
+  eq([d.fields.ProposalNo, d.flags.HasProposalNo, d.fields.MsaRef, d.flags.HasMsa, d.fields.MsaNo], ['OC-P-2026-0002', true, 'OC-MSA-2026-0001', true, 'OC-MSA-2026-0001']);
 });
 
 test('Missing-field check per document', () => {
@@ -74,23 +74,13 @@ test('Template token checker flags unknown placeholders', () => {
   eq(C().checkTemplateTokens(text, d), ['Typo', '#IF Nope']);
 });
 
-test('ToS and SLA drafts use only known placeholders', () => {
+test('All 3 Google Doc templates (Proposal, Order Form, MSA) use only known placeholders and balanced IF blocks', () => {
   const fs = require('fs'), path = require('path');
-  const d = build('TOS');
-  const strip = (t) => t.replace(/`[^`]*`/g, '');
-  const tos = strip(fs.readFileSync(path.join(__dirname, '..', 'docs', 'templates', 'TOS.md'), 'utf8'));
-  const sla = strip(fs.readFileSync(path.join(__dirname, '..', 'docs', 'templates', 'SLA.md'), 'utf8'));
-  eq(C().checkTemplateTokens(tos, d), []);
-  eq(C().checkTemplateTokens(sla, d), []);
-});
-
-test('All 4 Google Doc templates use only known placeholders and balanced IF blocks', () => {
-  const fs = require('fs'), path = require('path');
-  const map = { PROPOSAL: 'proposal.html', ORDER_FORM: 'order_form.html', TOS: 'tos.html', DPA: 'dpa.html' };
+  const map = { PROPOSAL: 'proposal.html', ORDER_FORM: 'order_form.html', MSA: 'msa.html' };
   Object.keys(map).forEach((type) => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'templates', map[type]), 'utf8');
     const deal = JSON.parse(JSON.stringify(sampleDeal));
-    const d = C().buildDocData(type, global.M, deal, C().buildQuote(global.M, deal.commercial), Object.assign({}, ctx, { related: { TOS: 'x', DPA: 'x', PROPOSAL: 'x' } }));
+    const d = C().buildDocData(type, global.M, deal, C().buildQuote(global.M, deal.commercial), Object.assign({}, ctx, { related: { MSA: 'x', ORDER_FORM: 'x', PROPOSAL: 'x' } }));
     eq(C().checkTemplateTokens(html, d), [], type + ' unknown tokens:');
     const opens = (html.match(/\{\{#IF !?(\w+)\}\}/g) || []).map((t) => t.replace(/\{\{#IF !?|\}\}/g, ''));
     const closes = (html.match(/\{\{\/IF (\w+)\}\}/g) || []).map((t) => t.replace(/\{\{\/IF |\}\}/g, ''));
@@ -107,11 +97,10 @@ test('Proposal shows selected add-ons table and brand style', () => {
 });
 
 test('Party lines drop blank registration/address cleanly', () => {
-  const d = build('DPA');
+  const d = build('MSA');
   eq(d.fields.EntityPartyDetails, '', 'Congineer has no reg/address in seed');
   eq(d.fields.ClientPartyDetails, ', Commercial Registration No. 123456, Cairo, Egypt');
-  const t = build('TOS');
-  eq(t.fields.EntityRegistration, 'To be provided');
+  eq([d.fields.EntityRegistration, d.fields.EntityAddressOrTbc], ['To be provided', 'To be provided']);
 });
 
 test('Journeys without a "Title:" get a numbered title (no stray colon)', () => {

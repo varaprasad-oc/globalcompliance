@@ -30,7 +30,7 @@ test('Generation plan: DRAFT when approval needed, FINAL when approved or not ne
   const d = fresh();
   const ev = C().evaluateDeal(global.M, d);
   const p1 = C().planGeneration(d, ev, 'Required');
-  eq([p1.ok, p1.mode, p1.status, p1.docTypes.length], [true, 'DRAFT', 'Pending approval', 4]);
+  eq([p1.ok, p1.mode, p1.status, p1.docTypes.length], [true, 'DRAFT', 'Pending approval', 2]);
   eq(C().planGeneration(d, ev, 'Approved').mode, 'FINAL');
   d.commercial.specialPrices = {};
   const ev2 = C().evaluateDeal(global.M, d);

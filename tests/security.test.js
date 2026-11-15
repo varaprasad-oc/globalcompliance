@@ -40,9 +40,9 @@ test('Go-live findings flag blockers and data gaps', () => {
   eq(lv('English template PROPOSAL'), 'BLOCKER', 'seed has no templates');
   eq(lv('Gemini'), 'WARN');
   eq(f.some((x) => x.item === 'Entity P-EG-CONGINEER incomplete'), true);
-  eq(f.some((x) => x.item === 'DPA sub-processor to confirm'), true);
-  M.Templates = ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].map((t) => ({ doc_type: t, language: 'EN', file_id: 'x', active: true, version: t === 'TOS' ? '1.2-draft' : '1.1', notes: '' }));
+  eq(lv('Online document link dpa_url'), 'OK', 'seed has the online DPA link');
+  M.Templates = ['PROPOSAL', 'ORDER_FORM', 'MSA'].map((t) => ({ doc_type: t, language: 'EN', file_id: 'x', active: true, version: t === 'MSA' ? '1.0-draft' : '1.1', notes: '' }));
   const f2 = C().goLiveFindings(M, { MASTER_SHEET_ID: 1, FOLDER_PROPOSALS: 1, FOLDER_ORDER_FORMS: 1, FOLDER_LEGAL: 1, FOLDER_TEMPLATES: 1, FOLDER_ARCHIVE: 1, GCP_PROJECT_ID: 'p', BACKUP_TRIGGER: 'x' });
   eq(f2.filter((x) => x.level === 'BLOCKER').length, 0);
-  eq(f2.some((x) => /Template TOS EN/.test(x.item) && x.level === 'WARN'), true, 'draft legal template flagged');
+  eq(f2.some((x) => /Template MSA EN/.test(x.item) && x.level === 'WARN'), true, 'draft legal template flagged');
 });

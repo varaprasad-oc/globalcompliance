@@ -141,3 +141,13 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## Pilot reps (2026-11-15)
 - Nihaar Akula (nihaar@optculture.com) and Muskan Agarwal (muskan.agarwal@optculture.com): role Rep, manager Varaprasad, region MEA. Added to the live Users tab.
+
+## Contract documents: management MSA format (2026-11-15, Varaprasad) – SUPERSEDES "Contract pack: hybrid Agreement"
+- Source: management's MSA (Google Doc "MSA - 2026-11-14"). ToS, DPA and SLA are **online documents** (optculture.com/terms-of-service, /DPA, /SLA) incorporated by the MSA – **no longer generated per client**. Links editable in CommercialTerms (tos_url, dpa_url, sla_url).
+- Flow: Deal → **Proposal** → **Quotation & Order Form + MSA** (two separate documents).
+- References both ways: Order Form cites the Proposal No. and the MSA No.; MSA cites the initial Order Form No. Numbers reserved together (OC-Q-…, OC-MSA-…).
+- Existing client (MSA saved on the client when a deal with an MSA is **Won**, or typed in "Existing MSA reference") → **Order Form only**; "Issue a new MSA anyway" override.
+- **MSA §7 Special Terms and Exceptions**: text box on the deal (step 3); empty prints "None.". **Any text needs Amith's approval**; editing it after approval needs approval again.
+- MSA template = a copy of management's doc in _Templates ("TEMPLATE – MSA (EN) v1.0", 18bQ-iwrqEhZtP7tQ4DOYB3LSao0nN8n_8fxPynDcULg) with placeholders; old ToS/DPA templates deactivated.
+- New data: Entities.courts_city (jurisdiction city; falls back to governing_law), customer signatory email + notice email on the deal.
+- Open (OptCulture): Amith to confirm the three online pages are live and complete (incl. country DPA addenda formerly drafted here); OptCulture signatory per entity; courts city per entity.

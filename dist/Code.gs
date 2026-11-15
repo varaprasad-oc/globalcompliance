@@ -109,13 +109,13 @@ var SEED = {
   Entities: {
     kind: 'master',
     headers: ['entity_id', 'type', 'legal_name', 'short_name', 'reg_type', 'reg_no', 'address', 'country',
-      'signatory_name', 'signatory_title', 'governing_law', 'logo_file_id', 'active'],
+      'signatory_name', 'signatory_title', 'governing_law', 'logo_file_id', 'active', 'courts_city'],
     rows: [
-      ['OC-US', 'OptCulture', 'Retail Information Systems, Inc., doing business as OptCulture', 'OptCulture', '', '', '', 'United States', '', '', 'United States', '', true],
+      ['OC-US', 'OptCulture', 'Retail Information Systems, Inc., doing business as OptCulture', 'OptCulture', '', '', '', 'United States', '', '', 'United States', '', true, ''],
       ['OC-AE', 'OptCulture', 'RIS Services DMCC', 'OptCulture', 'Licence', 'DMCC-33689',
-        'Office 1104, 11th Floor, X2 Tower, PB No. 73160, JLT, Dubai, UAE', 'United Arab Emirates', '', '', 'United Arab Emirates', '', true],
-      ['OC-IN', 'OptCulture', 'OptCulture Private Limited', 'OptCulture', 'CIN', '', '', 'India', '', '', 'India', '', true],
-      ['P-EG-CONGINEER', 'Partner', 'Congineer Business Solutions', 'Congineer', '', '', '', 'Egypt', '', '', 'Egypt', '', true]
+        'Office 1104, 11th Floor, X2 Tower, PB No. 73160, JLT, Dubai, UAE', 'United Arab Emirates', '', '', 'United Arab Emirates', '', true, ''],
+      ['OC-IN', 'OptCulture', 'OptCulture Private Limited', 'OptCulture', 'CIN', '', '', 'India', '', '', 'India', '', true, ''],
+      ['P-EG-CONGINEER', 'Partner', 'Congineer Business Solutions', 'Congineer', '', '', '', 'Egypt', '', '', 'Egypt', '', true, '']
     ]
   },
 
@@ -281,6 +281,9 @@ var SEED = {
       ['executive_contact_name', 'Amith Lulla', 'SLA escalation – Executive Director'],
       ['executive_contact_email', 'amith.lulla@optculture.com', 'SLA escalation – Executive Director'],
       ['legal_email', 'legal@optculture.com', 'ToS contact'],
+      ['tos_url', 'https://optculture.com/terms-of-service/', 'Online Terms of Service incorporated by the MSA'],
+      ['dpa_url', 'https://optculture.com/DPA/', 'Online Data Processing Agreement incorporated by the MSA'],
+      ['sla_url', 'https://optculture.com/SLA/', 'Online Service Level Agreement incorporated by the MSA'],
       ['default_hosting_region', '', 'DPA hosting region (to be confirmed by OC Tech)'],
       ['brand_table_header_bg', '#7B3FE4', 'Table header background (white bold text) – all documents'],
       ['brand_heading_color', '#B6262B', 'Heading colour (OptCulture red)'],
@@ -326,6 +329,7 @@ var SEED = {
       ['ORDER_FORM', 'OC-Q', 2026, 0],
       ['TOS', 'OC-TOS', 2026, 0],
       ['DPA', 'OC-DPA', 2026, 0],
+      ['MSA', 'OC-MSA', 2026, 0],
       ['DEAL', 'D', 2026, 0],
       ['CLIENT', 'C', '-', 0]
     ]
@@ -672,7 +676,7 @@ function featureMatrix(master, packageNames) {
  * ctx = { docNo, docDate (Date), user: {name, email, phone}, related: {PROPOSAL: 'OC-P-…', ORDER_FORM: …} }
  */
 
-var DOC_TYPES = ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'];
+var DOC_TYPES = ['PROPOSAL', 'ORDER_FORM', 'MSA'];  // TOS / DPA retired: online documents incorporated by the MSA
 
 function _v(x) { return x === undefined || x === null ? '' : String(x); }
 function _contact(c) { c = c || {}; return [c.name, c.email, c.phone].filter(function (s) { return s; }).join(', '); }
@@ -701,7 +705,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
     DocVersion: 'v' + (deal.version || 1),
     ValidUntil: fmtDate(_addDays(date, docType === 'ORDER_FORM' ? terms.quote_valid_days : terms.offer_validity_days)),
     ProposalNo: _v((ctx.related || {}).PROPOSAL), OrderFormNo: _v((ctx.related || {}).ORDER_FORM),
-    TosNo: _v((ctx.related || {}).TOS), DpaNo: _v((ctx.related || {}).DPA),
+    MsaNo: _v((ctx.related || {}).MSA),
 
     ClientLegalName: _v(c.legalName), ClientShortName: _v(c.shortName || c.legalName), ClientCountry: _v(c.country),
     ClientAddress: _v(c.address), ClientBillingAddress: _v(c.billingAddress || 'Same as registered address'),
@@ -737,9 +741,9 @@ function buildDocData(docType, master, deal, quote, ctx) {
     LegalEmail: _v(terms.legal_email)
   };
   var rel = ctx.related || {};
-  var msaRef = _v(com.msaRef || rel.TOS);  // the Agreement's own number, or the client's existing MSA
+  var msaRef = _v(com.msaRef || rel.MSA);  // this deal's MSA number, or the client's existing MSA
   var flags = { IsPartner: isPartner, IsOptCultureEntity: !isPartner, HasMsa: !!msaRef, HasPO: !!com.poNumber,
-    HasProposalNo: !!rel.PROPOSAL, HasOrderFormNo: !!rel.ORDER_FORM, HasTosNo: !!rel.TOS, HasDpaNo: !!rel.DPA };
+    HasProposalNo: !!rel.PROPOSAL, HasOrderFormNo: !!rel.ORDER_FORM, HasMsaNo: !!rel.MSA };
   var lists = {}, tables = {}, texts = {}, images = {};
   if (entity.logo_file_id) images.EntityLogo = entity.logo_file_id;
   if (terms.optculture_logo_file_id) images.OptCultureLogo = terms.optculture_logo_file_id;
@@ -868,27 +872,22 @@ function buildDocData(docType, master, deal, quote, ctx) {
     });
   }
 
-  if (docType === 'TOS') {
-    lists.OptCultureEntities = (master.Entities || []).filter(function (e) { return e.type === 'OptCulture' && isTrue(e.active); })
-      .map(function (e) { return { country: e.country, name: e.legal_name }; });
-  }
+  // Online documents incorporated by the MSA (editable in CommercialTerms) – also cited by the Order Form
+  fields.TosUrl = _v(terms.tos_url || 'https://optculture.com/terms-of-service/');
+  fields.DpaUrl = _v(terms.dpa_url || 'https://optculture.com/DPA/');
+  fields.SlaUrl = _v(terms.sla_url || 'https://optculture.com/SLA/');
 
-  if (docType === 'DPA') {
-    var d = deal.dpa || {};
-    var addendum = country.dpa_addendum || '4F';
-    ['4A', '4B', '4C', '4D', '4E', '4F'].forEach(function (a) { flags['Addendum' + a] = a === addendum; });
-    fields.DpaAddendum = addendum;
-    fields.HostingRegion = _v(d.hostingRegion || terms.default_hosting_region || 'To be confirmed');
-    fields.ExtraDataSubjects = d.extraDataSubjects ? '; ' + d.extraDataSubjects : '';
-    fields.ExtraDataTypes = d.extraDataTypes ? '; ' + d.extraDataTypes : '';
-    fields.SensitiveData = _v(d.sensitiveData || 'None');
-    var platform = (master.Entities || []).filter(function (e) { return e.entity_id === (d.platformEntityId || 'OC-US'); })[0] || {};
-    fields.PlatformEntityName = _v(platform.legal_name);
-    fields.PlatformEntityCountry = _v(platform.country);
-    lists.SubProcessors = (isPartner ? [{ name: platform.legal_name, service: 'Operation of the OptCulture platform', location: platform.country }] : [])
-      .concat((master.SubProcessors || []).filter(function (s) { return isTrue(s.active); })
-        .sort(function (a, b) { return a.display_order - b.display_order; })
-        .map(function (s) { return { name: s.name, service: s.service + (s.condition ? ' (' + s.condition + ')' : ''), location: s.location }; }));
+  if (docType === 'MSA') {
+    var exc = msaExceptions(deal);
+    flags.HasExceptions = !!exc;
+    texts.MsaExceptions = (exc || 'None.').replace(/\r/g, '').replace(/\n+/g, '\n\n');  // one paragraph per line
+    fields.EffectiveDate = fields.DocDate;
+    fields.InitialOrderFormNo = _v(rel.ORDER_FORM);
+    flags.HasInitialOrderForm = !!rel.ORDER_FORM;
+    fields.CourtsCity = _v(entity.courts_city || entity.governing_law || 'To be agreed');
+    fields.ClientSignatoryEmail = _v(c.signatoryEmail);
+    fields.ClientNoticeEmail = _v(c.noticeEmail || c.signatoryEmail || (c.businessContact || {}).email);
+    fields.OptCultureNoticeEmail = _v(terms.legal_email || 'legal@optculture.com');
   }
 
   return { docType: docType, language: ctx.language || 'EN', fields: fields, flags: flags, lists: lists, tables: tables, texts: texts, images: images, style: style };
@@ -901,8 +900,8 @@ function missingForDoc(docType, deal) {
     PROPOSAL: [[c.legalName, 'Client legal name'], [c.country, 'Country']],
     ORDER_FORM: [[c.legalName, 'Client legal name'], [c.address, 'Registered address'], [c.businessContact && c.businessContact.email, 'Business contact email'],
       [c.billingContact && c.billingContact.email, 'Billing contact email'], [deal.entityId, 'Contracting entity / partner'], [com.termMonths, 'Subscription term']],
-    TOS: [[c.legalName, 'Client legal name'], [deal.entityId, 'Contracting entity / partner']],
-    DPA: [[c.legalName, 'Client legal name'], [c.address, 'Registered address'], [c.country, 'Country'], [deal.entityId, 'Contracting entity / partner']]
+    MSA: [[c.legalName, 'Client legal name'], [c.address, 'Registered address'], [deal.entityId, 'Contracting entity / partner'],
+      [c.signatoryName, 'Customer signatory name'], [c.signatoryTitle, 'Customer signatory designation'], [c.signatoryEmail, 'Customer signatory email']]
   }[docType] || [];
   return req.filter(function (r) { return !r[0]; }).map(function (r) { return r[1]; });
 }
@@ -934,7 +933,7 @@ function checkTemplateTokens(text, data) {
  *   dealId, version, status,
  *   client: {...}, entityId,
  *   commercial: {...},                        // see Pricing.js / DocData.js
- *   docs: { PROPOSAL: true, ORDER_FORM: true, TOS: true, DPA: true },
+ *   docs: { PROPOSAL: true } | { ORDER_FORM: true, MSA: true },  msaExceptions: 'MSA §7 text',
  *   language: 'EN' | 'AR' | 'BI',
  *   proposal: { title, tagline, multiBrand, showConsulting },
  *   narrative: { notes, executiveSummary, journeys: [], multiBrandIntro },
@@ -945,8 +944,8 @@ function checkTemplateTokens(text, data) {
 var DEAL_STATUS = { DRAFT: 'Draft', PENDING: 'Pending approval', APPROVED: 'Approved', REJECTED: 'Rejected', GENERATED: 'Generated',
   PROPOSAL_GENERATED: 'Proposal generated', CONTRACT_DRAFT: 'Contract draft', CONTRACT_GENERATED: 'Contract generated', SENT: 'Sent', WON: 'Won', LOST: 'Lost' };
 
-/** Two-stage flow: PROPOSAL (proposal only) → CONTRACT (Order Form + ToS/MSA + DPA). */
-var STAGE_DOCS = { PROPOSAL: ['PROPOSAL'], CONTRACT: ['ORDER_FORM', 'TOS', 'DPA'] };
+/** Two-stage flow: PROPOSAL (proposal only) → CONTRACT (Quotation & Order Form + MSA, or Order Form only under an existing MSA). */
+var STAGE_DOCS = { PROPOSAL: ['PROPOSAL'], CONTRACT: ['ORDER_FORM', 'MSA'] };  // ToS, DPA and SLA are online documents incorporated by the MSA
 var GENERATED_STATUSES = ['Generated', 'Proposal generated', 'Contract generated', 'Sent', 'Won', 'Lost'];
 
 /** A proposal that has been generated (and possibly sent) can be converted to the contract stage. */
@@ -1006,7 +1005,7 @@ function convertToContract(deal, quote) {
   d.proposalBaseline = proposalBaseline(deal, quote);
   d.stage = 'CONTRACT';
   d.status = DEAL_STATUS.CONTRACT_DRAFT;
-  d.docs = { ORDER_FORM: true, TOS: true, DPA: true };
+  d.docs = { ORDER_FORM: true, MSA: true };
   d.commercial = d.commercial || {};
   if (!d.commercial.orderPackage || (d.commercial.packages || []).indexOf(d.commercial.orderPackage) === -1) d.commercial.orderPackage = (d.commercial.packages || [])[0];
   return d;
@@ -1024,36 +1023,43 @@ function applyCountryDefaults(master, deal) {
 }
 
 /**
- * Hybrid contract pack (decision #22):
- *  - AGREEMENT: first contract for a client → one document: MSA/ToS (+SLA) with Annexure A Order Form and Annexure B DPA.
- *  - ORDER_ONLY: the client already has an MSA (recorded on the client when an Agreement deal was Won, or typed in
- *    "MSA reference") → standalone Order Form citing that MSA. deal.newMsa forces a fresh Agreement.
- * deal.msa = { no, dpaNo, dealId, date } is filled by the server from the Clients tab.
+ * Contract stage (management MSA format, 2026-11-15):
+ *  - NEW_MSA: first contract for a client → Quotation & Order Form + MSA (two documents). The MSA incorporates the online
+ *    ToS, DPA and SLA by link; the Order Form cites the Proposal and the MSA; the MSA cites the initial Order Form.
+ *  - ORDER_ONLY: the client already has an MSA (saved on the client when a deal with an MSA was Won, or typed in
+ *    "Existing MSA reference") → Order Form only, citing that MSA. deal.newMsa forces a new MSA.
+ * deal.msa = { no, dealId, date } is filled by the server from the Clients tab.
  */
 function existingMsa(deal) {
   var msa = deal.msa || {}, ref = String((deal.commercial || {}).msaRef || '').trim();
   if (msa.no && msa.dealId !== deal.dealId) return { no: msa.no, dpaNo: msa.dpaNo || '', dealId: msa.dealId || '', date: msa.date || '', source: 'client' };
-  if (ref && ref !== (deal.docNos || {}).TOS) return { no: ref, dpaNo: '', dealId: '', date: '', source: 'manual' };
+  if (ref && ref !== (deal.docNos || {}).MSA) return { no: ref, dpaNo: '', dealId: '', date: '', source: 'manual' };
   return null;
 }
 
 function contractMode(deal) {
   if (deal.stage !== 'CONTRACT') return null;
-  return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'AGREEMENT';
+  return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'NEW_MSA';
 }
 
-/** Numbers the documents should cite: the deal's own numbers, or the client's existing MSA/DPA for a standalone Order Form. */
+/** Numbers the documents should cite: the deal's own numbers, or the client's existing MSA for a standalone Order Form. */
 function relatedNumbers(deal) {
   var rel = JSON.parse(JSON.stringify(deal.docNos || {}));
   if (contractMode(deal) === 'ORDER_ONLY') {
-    var msa = existingMsa(deal);
-    rel.TOS = msa.no; rel.DPA = msa.dpaNo || '';
+    rel.MSA = existingMsa(deal).no;
   }
   return rel;
 }
 
+/** MSA §7 exceptions that will be printed (only when an MSA is generated). Any text needs Superadmin approval. */
+function msaExceptions(deal) {
+  if (deal.stage !== 'CONTRACT' || contractMode(deal) !== 'NEW_MSA') return '';
+  var t = String(deal.msaExceptions || '').trim();
+  return /^none\.?$/i.test(t) ? '' : t;
+}
+
 function selectedDocs(deal) {
-  if (deal.stage === 'CONTRACT') return contractMode(deal) === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['TOS', 'ORDER_FORM', 'DPA'];
+  if (deal.stage === 'CONTRACT') return contractMode(deal) === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['ORDER_FORM', 'MSA'];
   var d = deal.docs || {};
   var allowed = deal.stage ? STAGE_DOCS[deal.stage] : DOC_TYPES;
   return DOC_TYPES.filter(function (t) { return d[t] && allowed.indexOf(t) !== -1; });
@@ -1086,8 +1092,9 @@ function evaluateDeal(master, deal) {
     quote: quote.ok ? quote : null,
     missing: missing,
     readyToGenerate: errors.length === 0 && Object.keys(missing).length === 0,
-    needsApproval: quote.ok ? quote.needsApproval : false,
-    approvalReasons: quote.ok ? quote.approvalReasons : [],
+    needsApproval: quote.ok ? quote.needsApproval || !!msaExceptions(deal) : false,
+    approvalReasons: quote.ok ? quote.approvalReasons.concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
+    msaExceptions: msaExceptions(deal),
     changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : [],
     contract: deal.stage === 'CONTRACT' ? { mode: contractMode(deal), msa: existingMsa(deal) } : null
   };
@@ -1129,12 +1136,18 @@ function dealRecord(deal, evaluation, userEmail, nowIso, existing) {
     quote_json: evaluation.quote ? JSON.stringify(evaluation.quote) : '',
     needs_approval: !!evaluation.needsApproval,
     approval_status: !evaluation.needsApproval ? 'Not required'
-      : (existing && (existing.approval_status === 'Approved' || existing.approval_status === 'Pending') && existing.quote_json === JSON.stringify(evaluation.quote))
+      : (existing && (existing.approval_status === 'Approved' || existing.approval_status === 'Pending') && existing.quote_json === JSON.stringify(evaluation.quote) &&
+          _exceptionsOf(existing) === String(evaluation.msaExceptions || ''))
         ? existing.approval_status : 'Required',
     ai_draft_json: existing ? existing.ai_draft_json : '',
     final_text_json: JSON.stringify(deal.narrative || {}),
     version: Number(deal.version || 1)
   };
+}
+
+/** The exceptions text an existing deal record was approved with (approval is kept only while text and prices are unchanged). */
+function _exceptionsOf(rec) {
+  try { return msaExceptions(JSON.parse(rec.input_json || '{}')); } catch (e) { return ''; }
 }
 
 /** Summary row for deal lists and dashboards (value = first-year total of the Order Form package). */
@@ -1417,7 +1430,6 @@ function planGeneration(deal, evaluation, approvalStatus) {
     ok: true,
     mode: draft ? 'DRAFT' : 'FINAL',
     docTypes: docTypes,
-    combine: contractMode(deal) === 'AGREEMENT',  // merge ToS + Order Form + DPA into one Agreement document
     status: draft ? DEAL_STATUS.PENDING : (deal.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_GENERATED : deal.stage === 'PROPOSAL' ? DEAL_STATUS.PROPOSAL_GENERATED : DEAL_STATUS.GENERATED),
     reason: draft ? 'Special pricing needs Amith’s approval: DRAFT documents (no PDF) are created now; final PDFs are generated after approval.' : ''
   };
@@ -1524,7 +1536,7 @@ function coerceAdminRow(tab, headers, obj) {
   if (tab === 'Currencies' && !(row.fx_rate > 0)) errors.push('fx_rate must be greater than 0');
   if (tab === 'CommsTiers' && row.floor_usd !== '' && row.list_usd !== '' && row.floor_usd > row.list_usd) errors.push('floor_usd cannot be above list_usd');
   if (tab === 'Features') ['Engagement', 'Loyalty', 'Advanced'].forEach(function (p) { if (p in row && ['Included', 'Not included', 'Add-on'].indexOf(row[p]) === -1) errors.push(p + ' must be Included, Not included or Add-on'); });
-  if (tab === 'Templates' && ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].indexOf(row.doc_type) === -1) errors.push('doc_type must be PROPOSAL, ORDER_FORM, TOS or DPA');
+  if (tab === 'Templates' && ['PROPOSAL', 'ORDER_FORM', 'MSA'].indexOf(row.doc_type) === -1) errors.push('doc_type must be PROPOSAL, ORDER_FORM or MSA');
   if (tab === 'Templates' && ['EN', 'AR', 'BI'].indexOf(row.language) === -1) errors.push('language must be EN, AR or BI');
   return { ok: errors.length === 0, row: row, errors: errors };
 }
@@ -1547,7 +1559,7 @@ function withSnapshot(master, snap) {
 
 /** Which languages have an active template per document type: {PROPOSAL: ['EN'], ...} */
 function availableLanguages(master) {
-  var out = { PROPOSAL: [], ORDER_FORM: [], TOS: [], DPA: [] };
+  var out = { PROPOSAL: [], ORDER_FORM: [], MSA: [] };
   (master.Templates || []).forEach(function (t) {
     if (isTrue(t.active) && t.file_id && out[t.doc_type] && out[t.doc_type].indexOf(t.language) === -1) out[t.doc_type].push(t.language);
   });
@@ -1572,7 +1584,7 @@ function goLiveFindings(master, props) {
   });
   add(props.GCP_PROJECT_ID ? 'OK' : 'WARN', 'Gemini (Vertex AI)', props.GCP_PROJECT_ID ? 'project ' + props.GCP_PROJECT_ID : 'not connected – reps must type the narrative');
   var langs = availableLanguages(master);
-  ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].forEach(function (t) { add(langs[t].indexOf('EN') !== -1 ? 'OK' : 'BLOCKER', 'English template ' + t, langs[t].indexOf('EN') !== -1 ? '' : 'no active EN template'); });
+  ['PROPOSAL', 'ORDER_FORM', 'MSA'].forEach(function (t) { add(langs[t].indexOf('EN') !== -1 ? 'OK' : 'BLOCKER', 'English template ' + t, langs[t].indexOf('EN') !== -1 ? '' : 'no active EN template'); });
   (master.Templates || []).forEach(function (t) {
     if (isTrue(t.active) && /draft/i.test(String(t.version) + ' ' + String(t.notes))) add('WARN', 'Template ' + t.doc_type + ' ' + t.language + ' v' + t.version, 'still marked draft / pending legal review');
   });
@@ -1585,14 +1597,13 @@ function goLiveFindings(master, props) {
     if (!/@optculture\.com$/i.test(String(u.email))) add('BLOCKER', 'User outside domain', u.email);
   });
   (master.Entities || []).filter(function (e) { return isTrue(e.active); }).forEach(function (e) {
-    var gaps = ['signatory_name', 'signatory_title', 'address'].filter(function (k) { return !e[k]; });
+    var gaps = ['signatory_name', 'signatory_title', 'address', 'courts_city'].filter(function (k) { return !e[k]; });
     if (e.type === 'Partner' && !e.reg_no) gaps.push('reg_no');
     if (gaps.length) add('WARN', 'Entity ' + e.entity_id + ' incomplete', 'missing ' + gaps.join(', '));
   });
-  (master.SubProcessors || []).forEach(function (s) { if (/TBC/i.test(s.name + ' ' + s.location)) add('WARN', 'DPA sub-processor to confirm', s.name); });
   var terms = {};
   (master.CommercialTerms || []).forEach(function (r) { terms[r.key] = r.value; });
-  if (!terms.default_hosting_region) add('WARN', 'DPA hosting region', 'CommercialTerms.default_hosting_region is empty');
+  ['tos_url', 'dpa_url', 'sla_url'].forEach(function (k) { add(terms[k] ? 'OK' : 'WARN', 'Online document link ' + k, terms[k] ? terms[k] + ' – confirm the page is live' : 'CommercialTerms.' + k + ' is empty (default link used)'); });
   if (!terms.optculture_logo_file_id) add('WARN', 'Logo', 'CommercialTerms.optculture_logo_file_id is empty');
   add(props.BACKUP_TRIGGER ? 'OK' : 'WARN', 'Daily backup', props.BACKUP_TRIGGER ? '' : 'run installTriggers()');
   return out;
@@ -1769,15 +1780,15 @@ function attachClientMsa_(deal) {
   return deal;
 }
 
-/** When an Agreement deal is Won, its MSA/DPA numbers become the client's: later deals get a standalone Order Form. */
+/** When a deal that produced an MSA is Won, that MSA becomes the client's: later deals get an Order Form only. */
 function recordClientMsa_(deal) {
-  if (contractMode(deal) !== 'AGREEMENT' || !(deal.docNos || {}).TOS) return;
+  if (contractMode(deal) !== 'NEW_MSA' || !(deal.docNos || {}).MSA) return;
   var name = String(((deal.client || {}).legalName) || '').toLowerCase();
   var c = readRecords_('Clients').filter(function (r) {
     return (deal.clientId && r.client_id === deal.clientId) || (name && String(r.legal_name).toLowerCase() === name);
   })[0];
   if (!c) return;
-  c.msa_no = deal.docNos.TOS; c.dpa_no = deal.docNos.DPA || ''; c.msa_deal_id = deal.dealId; c.msa_date = new Date().toISOString().slice(0, 10);
+  c.msa_no = deal.docNos.MSA; c.dpa_no = ''; c.msa_deal_id = deal.dealId; c.msa_date = new Date().toISOString().slice(0, 10);
   writeRecord_('Clients', c, c._row);
   audit_('CLIENT_MSA_RECORDED', { client: c.client_id, msa: c.msa_no }, deal.dealId);
 }
@@ -1895,7 +1906,7 @@ function apiCloneDeal(dealId) {
   return res;
 }
 
-/** Stage 1 → 2: proposal accepted, prepare Order Form + ToS/MSA + DPA (no new version, same document numbers). */
+/** Stage 1 → 2: proposal accepted, prepare Quotation & Order Form + MSA (no new version, same document numbers). */
 function apiConvertToContract(dealId) {
   var user = requireUser_();
   var m = getMaster();
@@ -1975,8 +1986,8 @@ function apiDeleteDeals(dealIds, confirmText) {
  * Template syntax: see docs/PLACEHOLDERS.md.
  */
 
-var DOC_FOLDER_KEY = { PROPOSAL: 'PROPOSALS', ORDER_FORM: 'ORDER_FORMS', TOS: 'LEGAL', DPA: 'LEGAL' };
-var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'Terms of Service', DPA: 'DPA', AGREEMENT: 'Agreement' };
+var DOC_FOLDER_KEY = { PROPOSAL: 'PROPOSALS', ORDER_FORM: 'ORDER_FORMS', MSA: 'LEGAL', TOS: 'LEGAL', DPA: 'LEGAL' };
+var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Quotation & Order Form', MSA: 'Master Services Agreement', TOS: 'Terms of Service', DPA: 'DPA', AGREEMENT: 'Agreement' };
 var TABLE_STYLE = { headerBg: '#7B3FE4', headerFg: '#ffffff', border: '#c9d2dc', font: 'Arial', size: 10 };
 
 /**
@@ -2021,50 +2032,10 @@ function generateDocument(docType, data, opts) {
   doc.saveAndClose();
 
   var result = { docId: copy.getId(), docUrl: copy.getUrl(), pdfId: '', pdfUrl: '', name: name, warnings: warnings };
-  if (opts.partOnly) return result;  // a part of the combined Agreement: merged, then deleted
   if (!opts.draft) {
     var pdf = folder.createFile(copy.getAs(MimeType.PDF)).setName(name + '.pdf');
     result.pdfId = pdf.getId();
     result.pdfUrl = pdf.getUrl();
-  }
-  shareFiles_([result.docId, result.pdfId].filter(String), opts.shareWith || []);
-  return result;
-}
-
-/**
- * Combined Agreement: the generated ToS/MSA doc + "Annexure A" (Order Form) + "Annexure B" (DPA), copied element by element.
- * parts = [{ title, docId }]. The part documents are moved to the trash afterwards. Returns the same shape as generateDocument.
- */
-function mergeAgreement_(main, parts, opts) {
-  var doc = DocumentApp.openById(main.docId), body = doc.getBody(), E = DocumentApp.ElementType;
-  var note = body.appendParagraph('The following Annexures form part of this Agreement: ' + parts.map(function (p) { return p.title; }).join('; ') +
-    '. In case of conflict, the order of precedence set out in this Agreement applies.');
-  note.setHeading(DocumentApp.ParagraphHeading.NORMAL).editAsText().setItalic(true).setBold(false);
-  parts.forEach(function (p) {
-    body.appendPageBreak();
-    var h = body.appendParagraph(p.title);
-    h.setHeading(DocumentApp.ParagraphHeading.HEADING1);
-    var src = DocumentApp.openById(p.docId).getBody();
-    for (var i = 0; i < src.getNumChildren(); i++) {
-      var el = src.getChild(i).copy(), t = el.getType();
-      if (t === E.PARAGRAPH) body.appendParagraph(el.asParagraph());
-      else if (t === E.TABLE) body.appendTable(el.asTable());
-      else if (t === E.LIST_ITEM) body.appendListItem(el.asListItem());
-      else if (t === E.PAGE_BREAK) body.appendPageBreak(el.asPageBreak());
-      // table of contents etc. are skipped
-    }
-    try { DriveApp.getFileById(p.docId).setTrashed(true); } catch (e) { console.warn(e); }
-  });
-  styleAllTableHeaders_(body, opts.headerBg || TABLE_STYLE.headerBg);
-  if (opts.rtl) applyRtl_(body);
-  doc.saveAndClose();
-  var file = DriveApp.getFileById(main.docId);
-  if (opts.name) file.setName(opts.name);
-  var result = { docId: main.docId, docUrl: file.getUrl(), pdfId: '', pdfUrl: '', name: file.getName(), warnings: main.warnings || [] };
-  if (!opts.draft) {
-    var folder = file.getParents().next();
-    var pdf = folder.createFile(file.getAs(MimeType.PDF)).setName(file.getName() + '.pdf');
-    result.pdfId = pdf.getId(); result.pdfUrl = pdf.getUrl();
   }
   shareFiles_([result.docId, result.pdfId].filter(String), opts.shareWith || []);
   return result;
@@ -2476,14 +2447,12 @@ function generateForDeal_(dealId, user) {
   var shareWith = [owner, ownerUser.manager_email].filter(Boolean);
   var ownerProfile = { name: ownerUser.name || user.name, email: owner, phone: ownerUser.phone || '' };
 
-  archivePreviousVersions_(dealId, deal.version, plan.combine ? plan.docTypes.concat(['AGREEMENT']) : plan.docTypes);
+  archivePreviousVersions_(dealId, deal.version, plan.docTypes);
 
   var results = [];
   var related = relatedNumbers(deal);
   var clientName = deal.client.shortName || deal.client.legalName;
-  if (plan.combine) {
-    results.push(generateAgreement_(deal, pm, ev, plan, related, ownerProfile, shareWith, user));
-  } else plan.docTypes.forEach(function (t) {
+  plan.docTypes.forEach(function (t) {
     var lang = docLanguage_(deal, t, pm);
     var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: related, language: lang });
     try {
@@ -2524,38 +2493,6 @@ function generateForDeal_(dealId, user) {
   });
 
   return { mode: plan.mode, message: plan.reason, results: results, deal: deal, summary: dealSummary(newRec) };
-}
-
-/**
- * First contract for a client: ONE Agreement document = MSA/ToS (+SLA) + Annexure A Order Form + Annexure B DPA.
- * Number of the Agreement = the ToS/MSA number; the annexures keep their own Order Form / DPA numbers (all reserved together).
- */
-function generateAgreement_(deal, pm, ev, plan, related, ownerProfile, shareWith, user) {
-  var dealId = deal.dealId, draft = plan.mode === 'DRAFT', clientName = deal.client.shortName || deal.client.legalName;
-  var lang = docLanguage_(deal, 'TOS', pm), made = {};
-  var no = deal.docNos.TOS;
-  try {
-    ['TOS', 'ORDER_FORM', 'DPA'].forEach(function (t) {
-      var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: related, language: docLanguage_(deal, t, pm) });
-      made[t] = generateDocument(t, data, { clientName: clientName, version: deal.version, draft: draft, language: docLanguage_(deal, t, pm), partOnly: true });
-    });
-    var name = [no, safeName_(clientName), 'Agreement', 'v' + (deal.version || 1)].join('_') + (draft ? '_DRAFT' : '');
-    var r = mergeAgreement_(made.TOS, [
-      { title: 'Annexure A — Quotation & Order Form No. ' + deal.docNos.ORDER_FORM, docId: made.ORDER_FORM.docId },
-      { title: 'Annexure B — Data Processing Agreement No. ' + deal.docNos.DPA, docId: made.DPA.docId }
-    ], { name: name, draft: draft, shareWith: shareWith, rtl: lang === 'AR' });
-    var tpl = getActiveTemplate_('TOS', lang);
-    appendRecord_('Documents', { doc_no: no, deal_id: dealId, doc_type: 'AGREEMENT', language: lang, version: deal.version,
-      template_version: tpl.version, doc_file_id: r.docId, pdf_file_id: r.pdfId, created_by: user.email, created_at: new Date(),
-      status: draft ? 'Draft' : 'Final' });
-    var warnings = [].concat(made.TOS.warnings || [], made.ORDER_FORM.warnings || [], made.DPA.warnings || []);
-    return { type: 'AGREEMENT', label: 'Agreement (MSA + Order Form ' + deal.docNos.ORDER_FORM + ' + DPA ' + deal.docNos.DPA + ')', docNo: no,
-      docUrl: r.docUrl, pdfUrl: r.pdfUrl, pdfId: r.pdfId, warnings: warnings };
-  } catch (e) {
-    Object.keys(made).forEach(function (t) { try { DriveApp.getFileById(made[t].docId).setTrashed(true); } catch (x) { /* already gone */ } });
-    notifyFailure_('Generating Agreement for deal ' + dealId, e);
-    return { type: 'AGREEMENT', label: 'Agreement', docNo: no, error: String(e.message || e) };
-  }
 }
 
 /** Move files of earlier versions of this deal to _Archive and mark them Superseded. */
@@ -2777,7 +2714,7 @@ function apiAdminCheckTemplate(fileIdOrUrl, docType) {
   var text = [doc.getBody().getText(), doc.getHeader() ? doc.getHeader().getText() : '', doc.getFooter() ? doc.getFooter().getText() : ''].join('\n');
   var m = getMaster();
   var sample = sampleDealForChecks_();
-  var data = buildDocData(docType, m, sample, buildQuote(m, sample.commercial), { docNo: 'CHECK', related: { PROPOSAL: 'x', ORDER_FORM: 'x', TOS: 'x', DPA: 'x' } });
+  var data = buildDocData(docType, m, sample, buildQuote(m, sample.commercial), { docNo: 'CHECK', related: { PROPOSAL: 'x', ORDER_FORM: 'x', MSA: 'x' } });
   var unknown = checkTemplateTokens(text, data).filter(function (t) { return ['label', 'amount', 'title', 'text'].indexOf(t) === -1; });
   var opens = (text.match(/\{\{#IF !?\w+\}\}/g) || []).length, closes = (text.match(/\{\{\/IF \w+\}\}/g) || []).length;
   return { fileId: id, title: doc.getName(), unknown: unknown, ifBalanced: opens === closes, ok: unknown.length === 0 && opens === closes };
@@ -3060,7 +2997,7 @@ function generateSampleDocs() {
   var results = [];
   deals.forEach(function (deal) {
     var quote = buildQuote(master, deal.commercial);
-    var related = { PROPOSAL: deal.dealId + '-P', ORDER_FORM: deal.dealId + '-Q', TOS: deal.dealId + '-TOS', DPA: deal.dealId + '-DPA' };
+    var related = { PROPOSAL: deal.dealId + '-P', ORDER_FORM: deal.dealId + '-Q', MSA: deal.dealId + '-MSA' };
     DOC_TYPES.forEach(function (type) {
       var data = buildDocData(type, master, deal, quote, { docNo: related[type], docDate: new Date(), user: user, related: related });
       try {

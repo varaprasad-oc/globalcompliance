@@ -23,7 +23,6 @@ function planGeneration(deal, evaluation, approvalStatus) {
     ok: true,
     mode: draft ? 'DRAFT' : 'FINAL',
     docTypes: docTypes,
-    combine: contractMode(deal) === 'AGREEMENT',  // merge ToS + Order Form + DPA into one Agreement document
     status: draft ? DEAL_STATUS.PENDING : (deal.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_GENERATED : deal.stage === 'PROPOSAL' ? DEAL_STATUS.PROPOSAL_GENERATED : DEAL_STATUS.GENERATED),
     reason: draft ? 'Special pricing needs Amith’s approval: DRAFT documents (no PDF) are created now; final PDFs are generated after approval.' : ''
   };

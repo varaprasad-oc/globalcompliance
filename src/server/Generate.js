@@ -31,14 +31,12 @@ function generateForDeal_(dealId, user) {
   var shareWith = [owner, ownerUser.manager_email].filter(Boolean);
   var ownerProfile = { name: ownerUser.name || user.name, email: owner, phone: ownerUser.phone || '' };
 
-  archivePreviousVersions_(dealId, deal.version, plan.combine ? plan.docTypes.concat(['AGREEMENT']) : plan.docTypes);
+  archivePreviousVersions_(dealId, deal.version, plan.docTypes);
 
   var results = [];
   var related = relatedNumbers(deal);
   var clientName = deal.client.shortName || deal.client.legalName;
-  if (plan.combine) {
-    results.push(generateAgreement_(deal, pm, ev, plan, related, ownerProfile, shareWith, user));
-  } else plan.docTypes.forEach(function (t) {
+  plan.docTypes.forEach(function (t) {
     var lang = docLanguage_(deal, t, pm);
     var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: related, language: lang });
     try {
@@ -79,38 +77,6 @@ function generateForDeal_(dealId, user) {
   });
 
   return { mode: plan.mode, message: plan.reason, results: results, deal: deal, summary: dealSummary(newRec) };
-}
-
-/**
- * First contract for a client: ONE Agreement document = MSA/ToS (+SLA) + Annexure A Order Form + Annexure B DPA.
- * Number of the Agreement = the ToS/MSA number; the annexures keep their own Order Form / DPA numbers (all reserved together).
- */
-function generateAgreement_(deal, pm, ev, plan, related, ownerProfile, shareWith, user) {
-  var dealId = deal.dealId, draft = plan.mode === 'DRAFT', clientName = deal.client.shortName || deal.client.legalName;
-  var lang = docLanguage_(deal, 'TOS', pm), made = {};
-  var no = deal.docNos.TOS;
-  try {
-    ['TOS', 'ORDER_FORM', 'DPA'].forEach(function (t) {
-      var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: related, language: docLanguage_(deal, t, pm) });
-      made[t] = generateDocument(t, data, { clientName: clientName, version: deal.version, draft: draft, language: docLanguage_(deal, t, pm), partOnly: true });
-    });
-    var name = [no, safeName_(clientName), 'Agreement', 'v' + (deal.version || 1)].join('_') + (draft ? '_DRAFT' : '');
-    var r = mergeAgreement_(made.TOS, [
-      { title: 'Annexure A — Quotation & Order Form No. ' + deal.docNos.ORDER_FORM, docId: made.ORDER_FORM.docId },
-      { title: 'Annexure B — Data Processing Agreement No. ' + deal.docNos.DPA, docId: made.DPA.docId }
-    ], { name: name, draft: draft, shareWith: shareWith, rtl: lang === 'AR' });
-    var tpl = getActiveTemplate_('TOS', lang);
-    appendRecord_('Documents', { doc_no: no, deal_id: dealId, doc_type: 'AGREEMENT', language: lang, version: deal.version,
-      template_version: tpl.version, doc_file_id: r.docId, pdf_file_id: r.pdfId, created_by: user.email, created_at: new Date(),
-      status: draft ? 'Draft' : 'Final' });
-    var warnings = [].concat(made.TOS.warnings || [], made.ORDER_FORM.warnings || [], made.DPA.warnings || []);
-    return { type: 'AGREEMENT', label: 'Agreement (MSA + Order Form ' + deal.docNos.ORDER_FORM + ' + DPA ' + deal.docNos.DPA + ')', docNo: no,
-      docUrl: r.docUrl, pdfUrl: r.pdfUrl, pdfId: r.pdfId, warnings: warnings };
-  } catch (e) {
-    Object.keys(made).forEach(function (t) { try { DriveApp.getFileById(made[t].docId).setTrashed(true); } catch (x) { /* already gone */ } });
-    notifyFailure_('Generating Agreement for deal ' + dealId, e);
-    return { type: 'AGREEMENT', label: 'Agreement', docNo: no, error: String(e.message || e) };
-  }
 }
 
 /** Move files of earlier versions of this deal to _Archive and mark them Superseded. */

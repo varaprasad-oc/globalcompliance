@@ -55,7 +55,7 @@ function apiAdminCheckTemplate(fileIdOrUrl, docType) {
   var text = [doc.getBody().getText(), doc.getHeader() ? doc.getHeader().getText() : '', doc.getFooter() ? doc.getFooter().getText() : ''].join('\n');
   var m = getMaster();
   var sample = sampleDealForChecks_();
-  var data = buildDocData(docType, m, sample, buildQuote(m, sample.commercial), { docNo: 'CHECK', related: { PROPOSAL: 'x', ORDER_FORM: 'x', TOS: 'x', DPA: 'x' } });
+  var data = buildDocData(docType, m, sample, buildQuote(m, sample.commercial), { docNo: 'CHECK', related: { PROPOSAL: 'x', ORDER_FORM: 'x', MSA: 'x' } });
   var unknown = checkTemplateTokens(text, data).filter(function (t) { return ['label', 'amount', 'title', 'text'].indexOf(t) === -1; });
   var opens = (text.match(/\{\{#IF !?\w+\}\}/g) || []).length, closes = (text.match(/\{\{\/IF \w+\}\}/g) || []).length;
   return { fileId: id, title: doc.getName(), unknown: unknown, ifBalanced: opens === closes, ok: unknown.length === 0 && opens === closes };

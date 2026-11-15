@@ -5,7 +5,7 @@
  *   dealId, version, status,
  *   client: {...}, entityId,
  *   commercial: {...},                        // see Pricing.js / DocData.js
- *   docs: { PROPOSAL: true, ORDER_FORM: true, TOS: true, DPA: true },
+ *   docs: { PROPOSAL: true } | { ORDER_FORM: true, MSA: true },  msaExceptions: 'MSA §7 text',
  *   language: 'EN' | 'AR' | 'BI',
  *   proposal: { title, tagline, multiBrand, showConsulting },
  *   narrative: { notes, executiveSummary, journeys: [], multiBrandIntro },
@@ -16,8 +16,8 @@
 var DEAL_STATUS = { DRAFT: 'Draft', PENDING: 'Pending approval', APPROVED: 'Approved', REJECTED: 'Rejected', GENERATED: 'Generated',
   PROPOSAL_GENERATED: 'Proposal generated', CONTRACT_DRAFT: 'Contract draft', CONTRACT_GENERATED: 'Contract generated', SENT: 'Sent', WON: 'Won', LOST: 'Lost' };
 
-/** Two-stage flow: PROPOSAL (proposal only) → CONTRACT (Order Form + ToS/MSA + DPA). */
-var STAGE_DOCS = { PROPOSAL: ['PROPOSAL'], CONTRACT: ['ORDER_FORM', 'TOS', 'DPA'] };
+/** Two-stage flow: PROPOSAL (proposal only) → CONTRACT (Quotation & Order Form + MSA, or Order Form only under an existing MSA). */
+var STAGE_DOCS = { PROPOSAL: ['PROPOSAL'], CONTRACT: ['ORDER_FORM', 'MSA'] };  // ToS, DPA and SLA are online documents incorporated by the MSA
 var GENERATED_STATUSES = ['Generated', 'Proposal generated', 'Contract generated', 'Sent', 'Won', 'Lost'];
 
 /** A proposal that has been generated (and possibly sent) can be converted to the contract stage. */
@@ -77,7 +77,7 @@ function convertToContract(deal, quote) {
   d.proposalBaseline = proposalBaseline(deal, quote);
   d.stage = 'CONTRACT';
   d.status = DEAL_STATUS.CONTRACT_DRAFT;
-  d.docs = { ORDER_FORM: true, TOS: true, DPA: true };
+  d.docs = { ORDER_FORM: true, MSA: true };
   d.commercial = d.commercial || {};
   if (!d.commercial.orderPackage || (d.commercial.packages || []).indexOf(d.commercial.orderPackage) === -1) d.commercial.orderPackage = (d.commercial.packages || [])[0];
   return d;
@@ -95,36 +95,43 @@ function applyCountryDefaults(master, deal) {
 }
 
 /**
- * Hybrid contract pack (decision #22):
- *  - AGREEMENT: first contract for a client → one document: MSA/ToS (+SLA) with Annexure A Order Form and Annexure B DPA.
- *  - ORDER_ONLY: the client already has an MSA (recorded on the client when an Agreement deal was Won, or typed in
- *    "MSA reference") → standalone Order Form citing that MSA. deal.newMsa forces a fresh Agreement.
- * deal.msa = { no, dpaNo, dealId, date } is filled by the server from the Clients tab.
+ * Contract stage (management MSA format, 2026-11-15):
+ *  - NEW_MSA: first contract for a client → Quotation & Order Form + MSA (two documents). The MSA incorporates the online
+ *    ToS, DPA and SLA by link; the Order Form cites the Proposal and the MSA; the MSA cites the initial Order Form.
+ *  - ORDER_ONLY: the client already has an MSA (saved on the client when a deal with an MSA was Won, or typed in
+ *    "Existing MSA reference") → Order Form only, citing that MSA. deal.newMsa forces a new MSA.
+ * deal.msa = { no, dealId, date } is filled by the server from the Clients tab.
  */
 function existingMsa(deal) {
   var msa = deal.msa || {}, ref = String((deal.commercial || {}).msaRef || '').trim();
   if (msa.no && msa.dealId !== deal.dealId) return { no: msa.no, dpaNo: msa.dpaNo || '', dealId: msa.dealId || '', date: msa.date || '', source: 'client' };
-  if (ref && ref !== (deal.docNos || {}).TOS) return { no: ref, dpaNo: '', dealId: '', date: '', source: 'manual' };
+  if (ref && ref !== (deal.docNos || {}).MSA) return { no: ref, dpaNo: '', dealId: '', date: '', source: 'manual' };
   return null;
 }
 
 function contractMode(deal) {
   if (deal.stage !== 'CONTRACT') return null;
-  return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'AGREEMENT';
+  return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'NEW_MSA';
 }
 
-/** Numbers the documents should cite: the deal's own numbers, or the client's existing MSA/DPA for a standalone Order Form. */
+/** Numbers the documents should cite: the deal's own numbers, or the client's existing MSA for a standalone Order Form. */
 function relatedNumbers(deal) {
   var rel = JSON.parse(JSON.stringify(deal.docNos || {}));
   if (contractMode(deal) === 'ORDER_ONLY') {
-    var msa = existingMsa(deal);
-    rel.TOS = msa.no; rel.DPA = msa.dpaNo || '';
+    rel.MSA = existingMsa(deal).no;
   }
   return rel;
 }
 
+/** MSA §7 exceptions that will be printed (only when an MSA is generated). Any text needs Superadmin approval. */
+function msaExceptions(deal) {
+  if (deal.stage !== 'CONTRACT' || contractMode(deal) !== 'NEW_MSA') return '';
+  var t = String(deal.msaExceptions || '').trim();
+  return /^none\.?$/i.test(t) ? '' : t;
+}
+
 function selectedDocs(deal) {
-  if (deal.stage === 'CONTRACT') return contractMode(deal) === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['TOS', 'ORDER_FORM', 'DPA'];
+  if (deal.stage === 'CONTRACT') return contractMode(deal) === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['ORDER_FORM', 'MSA'];
   var d = deal.docs || {};
   var allowed = deal.stage ? STAGE_DOCS[deal.stage] : DOC_TYPES;
   return DOC_TYPES.filter(function (t) { return d[t] && allowed.indexOf(t) !== -1; });
@@ -157,8 +164,9 @@ function evaluateDeal(master, deal) {
     quote: quote.ok ? quote : null,
     missing: missing,
     readyToGenerate: errors.length === 0 && Object.keys(missing).length === 0,
-    needsApproval: quote.ok ? quote.needsApproval : false,
-    approvalReasons: quote.ok ? quote.approvalReasons : [],
+    needsApproval: quote.ok ? quote.needsApproval || !!msaExceptions(deal) : false,
+    approvalReasons: quote.ok ? quote.approvalReasons.concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
+    msaExceptions: msaExceptions(deal),
     changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : [],
     contract: deal.stage === 'CONTRACT' ? { mode: contractMode(deal), msa: existingMsa(deal) } : null
   };
@@ -200,12 +208,18 @@ function dealRecord(deal, evaluation, userEmail, nowIso, existing) {
     quote_json: evaluation.quote ? JSON.stringify(evaluation.quote) : '',
     needs_approval: !!evaluation.needsApproval,
     approval_status: !evaluation.needsApproval ? 'Not required'
-      : (existing && (existing.approval_status === 'Approved' || existing.approval_status === 'Pending') && existing.quote_json === JSON.stringify(evaluation.quote))
+      : (existing && (existing.approval_status === 'Approved' || existing.approval_status === 'Pending') && existing.quote_json === JSON.stringify(evaluation.quote) &&
+          _exceptionsOf(existing) === String(evaluation.msaExceptions || ''))
         ? existing.approval_status : 'Required',
     ai_draft_json: existing ? existing.ai_draft_json : '',
     final_text_json: JSON.stringify(deal.narrative || {}),
     version: Number(deal.version || 1)
   };
+}
+
+/** The exceptions text an existing deal record was approved with (approval is kept only while text and prices are unchanged). */
+function _exceptionsOf(rec) {
+  try { return msaExceptions(JSON.parse(rec.input_json || '{}')); } catch (e) { return ''; }
 }
 
 /** Summary row for deal lists and dashboards (value = first-year total of the Order Form package). */

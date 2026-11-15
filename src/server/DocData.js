@@ -23,7 +23,7 @@
  * ctx = { docNo, docDate (Date), user: {name, email, phone}, related: {PROPOSAL: 'OC-P-…', ORDER_FORM: …} }
  */
 
-var DOC_TYPES = ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'];
+var DOC_TYPES = ['PROPOSAL', 'ORDER_FORM', 'MSA'];  // TOS / DPA retired: online documents incorporated by the MSA
 
 function _v(x) { return x === undefined || x === null ? '' : String(x); }
 function _contact(c) { c = c || {}; return [c.name, c.email, c.phone].filter(function (s) { return s; }).join(', '); }
@@ -52,7 +52,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
     DocVersion: 'v' + (deal.version || 1),
     ValidUntil: fmtDate(_addDays(date, docType === 'ORDER_FORM' ? terms.quote_valid_days : terms.offer_validity_days)),
     ProposalNo: _v((ctx.related || {}).PROPOSAL), OrderFormNo: _v((ctx.related || {}).ORDER_FORM),
-    TosNo: _v((ctx.related || {}).TOS), DpaNo: _v((ctx.related || {}).DPA),
+    MsaNo: _v((ctx.related || {}).MSA),
 
     ClientLegalName: _v(c.legalName), ClientShortName: _v(c.shortName || c.legalName), ClientCountry: _v(c.country),
     ClientAddress: _v(c.address), ClientBillingAddress: _v(c.billingAddress || 'Same as registered address'),
@@ -88,9 +88,9 @@ function buildDocData(docType, master, deal, quote, ctx) {
     LegalEmail: _v(terms.legal_email)
   };
   var rel = ctx.related || {};
-  var msaRef = _v(com.msaRef || rel.TOS);  // the Agreement's own number, or the client's existing MSA
+  var msaRef = _v(com.msaRef || rel.MSA);  // this deal's MSA number, or the client's existing MSA
   var flags = { IsPartner: isPartner, IsOptCultureEntity: !isPartner, HasMsa: !!msaRef, HasPO: !!com.poNumber,
-    HasProposalNo: !!rel.PROPOSAL, HasOrderFormNo: !!rel.ORDER_FORM, HasTosNo: !!rel.TOS, HasDpaNo: !!rel.DPA };
+    HasProposalNo: !!rel.PROPOSAL, HasOrderFormNo: !!rel.ORDER_FORM, HasMsaNo: !!rel.MSA };
   var lists = {}, tables = {}, texts = {}, images = {};
   if (entity.logo_file_id) images.EntityLogo = entity.logo_file_id;
   if (terms.optculture_logo_file_id) images.OptCultureLogo = terms.optculture_logo_file_id;
@@ -219,27 +219,22 @@ function buildDocData(docType, master, deal, quote, ctx) {
     });
   }
 
-  if (docType === 'TOS') {
-    lists.OptCultureEntities = (master.Entities || []).filter(function (e) { return e.type === 'OptCulture' && isTrue(e.active); })
-      .map(function (e) { return { country: e.country, name: e.legal_name }; });
-  }
+  // Online documents incorporated by the MSA (editable in CommercialTerms) – also cited by the Order Form
+  fields.TosUrl = _v(terms.tos_url || 'https://optculture.com/terms-of-service/');
+  fields.DpaUrl = _v(terms.dpa_url || 'https://optculture.com/DPA/');
+  fields.SlaUrl = _v(terms.sla_url || 'https://optculture.com/SLA/');
 
-  if (docType === 'DPA') {
-    var d = deal.dpa || {};
-    var addendum = country.dpa_addendum || '4F';
-    ['4A', '4B', '4C', '4D', '4E', '4F'].forEach(function (a) { flags['Addendum' + a] = a === addendum; });
-    fields.DpaAddendum = addendum;
-    fields.HostingRegion = _v(d.hostingRegion || terms.default_hosting_region || 'To be confirmed');
-    fields.ExtraDataSubjects = d.extraDataSubjects ? '; ' + d.extraDataSubjects : '';
-    fields.ExtraDataTypes = d.extraDataTypes ? '; ' + d.extraDataTypes : '';
-    fields.SensitiveData = _v(d.sensitiveData || 'None');
-    var platform = (master.Entities || []).filter(function (e) { return e.entity_id === (d.platformEntityId || 'OC-US'); })[0] || {};
-    fields.PlatformEntityName = _v(platform.legal_name);
-    fields.PlatformEntityCountry = _v(platform.country);
-    lists.SubProcessors = (isPartner ? [{ name: platform.legal_name, service: 'Operation of the OptCulture platform', location: platform.country }] : [])
-      .concat((master.SubProcessors || []).filter(function (s) { return isTrue(s.active); })
-        .sort(function (a, b) { return a.display_order - b.display_order; })
-        .map(function (s) { return { name: s.name, service: s.service + (s.condition ? ' (' + s.condition + ')' : ''), location: s.location }; }));
+  if (docType === 'MSA') {
+    var exc = msaExceptions(deal);
+    flags.HasExceptions = !!exc;
+    texts.MsaExceptions = (exc || 'None.').replace(/\r/g, '').replace(/\n+/g, '\n\n');  // one paragraph per line
+    fields.EffectiveDate = fields.DocDate;
+    fields.InitialOrderFormNo = _v(rel.ORDER_FORM);
+    flags.HasInitialOrderForm = !!rel.ORDER_FORM;
+    fields.CourtsCity = _v(entity.courts_city || entity.governing_law || 'To be agreed');
+    fields.ClientSignatoryEmail = _v(c.signatoryEmail);
+    fields.ClientNoticeEmail = _v(c.noticeEmail || c.signatoryEmail || (c.businessContact || {}).email);
+    fields.OptCultureNoticeEmail = _v(terms.legal_email || 'legal@optculture.com');
   }
 
   return { docType: docType, language: ctx.language || 'EN', fields: fields, flags: flags, lists: lists, tables: tables, texts: texts, images: images, style: style };
@@ -252,8 +247,8 @@ function missingForDoc(docType, deal) {
     PROPOSAL: [[c.legalName, 'Client legal name'], [c.country, 'Country']],
     ORDER_FORM: [[c.legalName, 'Client legal name'], [c.address, 'Registered address'], [c.businessContact && c.businessContact.email, 'Business contact email'],
       [c.billingContact && c.billingContact.email, 'Billing contact email'], [deal.entityId, 'Contracting entity / partner'], [com.termMonths, 'Subscription term']],
-    TOS: [[c.legalName, 'Client legal name'], [deal.entityId, 'Contracting entity / partner']],
-    DPA: [[c.legalName, 'Client legal name'], [c.address, 'Registered address'], [c.country, 'Country'], [deal.entityId, 'Contracting entity / partner']]
+    MSA: [[c.legalName, 'Client legal name'], [c.address, 'Registered address'], [deal.entityId, 'Contracting entity / partner'],
+      [c.signatoryName, 'Customer signatory name'], [c.signatoryTitle, 'Customer signatory designation'], [c.signatoryEmail, 'Customer signatory email']]
   }[docType] || [];
   return req.filter(function (r) { return !r[0]; }).map(function (r) { return r[1]; });
 }

@@ -141,8 +141,10 @@
                   <div><label>Business contact phone</label><input data-f="client.businessContact.phone"></div>
                   <div><label>Billing contact name</label><input data-f="client.billingContact.name"></div>
                   <div><label>Billing contact email <span class="req">*</span></label><input data-f="client.billingContact.email" type="email"></div>
-                  <div><label>Client signatory name</label><input data-f="client.signatoryName"></div>
-                  <div><label>Client signatory title</label><input data-f="client.signatoryTitle"></div>
+                  <div><label>Customer signatory name <span class="muted">(MSA)</span></label><input data-f="client.signatoryName"></div>
+                  <div><label>Customer signatory designation <span class="muted">(MSA)</span></label><input data-f="client.signatoryTitle"></div>
+                  <div><label>Customer signatory email <span class="muted">(MSA)</span></label><input data-f="client.signatoryEmail" type="email"></div>
+                  <div><label>Customer notice email <span class="muted">(MSA – defaults to signatory email)</span></label><input data-f="client.noticeEmail" type="email"></div>
                 </div>
               </div>
             </div>
@@ -211,12 +213,10 @@
                 <h3>What will be generated</h3>
                 <div id="contractPack" class="card" style="margin:0 0 10px;padding:12px 14px">—</div>
                 <label id="newMsaBox" class="hidden" style="display:inline-flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" data-f="newMsa" style="width:auto"> Issue a new MSA anyway (e.g. new entity or the old MSA expired)</label>
-                <h3>DPA details</h3>
-                <div class="grid">
-                  <div><label>Hosting region</label><input data-f="dpa.hostingRegion" placeholder="Default from Master Sheet"></div>
-                  <div><label>Extra data subjects</label><input data-f="dpa.extraDataSubjects"></div>
-                  <div><label>Extra data types</label><input data-f="dpa.extraDataTypes"></div>
-                  <div><label>Sensitive data (if any)</label><input data-f="dpa.sensitiveData" placeholder="None"></div>
+                <div id="msaBox">
+                  <h3>MSA – Special Terms and Exceptions (§7)</h3>
+                  <p class="muted" style="margin-top:0">Type any exceptions agreed with the customer, naming the clause they change (one per line). Leave empty to print “None.”. <b>Anything typed here needs Amith’s approval</b> and applies to all Order Forms under this MSA. The ToS, DPA and SLA are not generated – the MSA incorporates them from optculture.com.</p>
+                  <textarea data-f="msaExceptions" id="msaExceptions" rows="4" placeholder="e.g. Clause 3 (Term and Termination): cure period of 45 days instead of 30."></textarea>
                 </div>
               </div>
             </div>
@@ -282,7 +282,7 @@
           <p class="muted">Make a copy of the current template in <b>_Templates</b>, edit or translate it (keep every {{tag}}), then paste its link here. The app checks the tags before activating it, and the previous version for that document and language is switched off.</p>
           <div class="grid">
             <div class="wide"><label>Google Doc link</label><input id="tplUrl" placeholder="https://docs.google.com/document/d/…"></div>
-            <div><label>Document</label><select id="tplType"><option value="PROPOSAL">Proposal</option><option value="ORDER_FORM">Order Form</option><option value="TOS">Terms of Service</option><option value="DPA">DPA</option></select></div>
+            <div><label>Document</label><select id="tplType"><option value="PROPOSAL">Proposal</option><option value="ORDER_FORM">Order Form</option><option value="MSA">Master Services Agreement</option></select></div>
             <div><label>Language</label><select id="tplLang"><option value="EN">English</option><option value="AR">Arabic</option><option value="BI">Bilingual</option></select></div>
             <div><label>Version</label><input id="tplVer" placeholder="e.g. 1.3"></div>
             <div class="wide"><label>Notes</label><input id="tplNotes" placeholder="e.g. Arabic translation by …, legal review done"></div>
@@ -323,7 +323,7 @@
 
 <script>
   var APPROVAL = null, BOOT = null, LISTS = null, DEAL = null, STEP = 1, EVAL_TIMER = null, LAST = null;
-  var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'Terms of Service', DPA: 'DPA', AGREEMENT: 'Agreement (MSA + Order Form + DPA)' };
+  var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Quotation & Order Form', MSA: 'Master Services Agreement', TOS: 'Terms of Service (retired)', DPA: 'DPA (retired)', AGREEMENT: 'Agreement (retired)' };
   function $(id) { return document.getElementById(id); }
   function qa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -364,9 +364,9 @@
     $('busyX').onclick = busyClose;
   }
   function genSteps(deal) {
-    var com = stageOf(deal) === 'CONTRACT', agr = com && !(LAST && LAST.contract && LAST.contract.mode === 'ORDER_ONLY');
+    var com = stageOf(deal) === 'CONTRACT', msa = com && !(LAST && LAST.contract && LAST.contract.mode === 'ORDER_ONLY');
     return ['Saving the deal'].concat(!com ? ['Creating the Proposal from the template', 'Filling prices, packages and features'] :
-      agr ? ['Reserving MSA, Order Form and DPA numbers', 'Creating the MSA, Order Form and DPA', 'Combining them into one Agreement'] : ['Creating the Quotation & Order Form', 'Filling prices and terms'])
+      msa ? ['Reserving the Order Form and MSA numbers', 'Creating the Quotation & Order Form', 'Creating the MSA (with special terms)'] : ['Creating the Quotation & Order Form', 'Filling prices and terms'])
       .concat(['Converting to PDF', 'Saving to Drive, sharing and emailing the links']);
   }
   function resultsTable(g) {
@@ -560,7 +560,7 @@
     });
     d.commercial.termMonths = Number(d.commercial.termMonths || 12);
     d.stage = stageOf(DEAL);
-    d.docs = d.stage === 'PROPOSAL' ? { PROPOSAL: true } : { ORDER_FORM: true, TOS: true, DPA: true };
+    d.docs = d.stage === 'PROPOSAL' ? { PROPOSAL: true } : { ORDER_FORM: true, MSA: true };
     d.commercial.packages = selectedPackages();
     var byPkg = {}, all = [];
     d.commercial.packages.forEach(function (p) { byPkg[p] = []; });
@@ -579,8 +579,11 @@
     return d;
   }
 
+  /** MSA exceptions text the stored deal was saved (and possibly approved) with: editing it needs approval again. */
+  var STORED_EXC = '';
+  function normExc(t) { t = String(t || '').trim(); return /^none\.?$/i.test(t) ? '' : t; }
   function fill(d) {
-    DEAL = d; OTS_KEY = '';
+    DEAL = d; OTS_KEY = ''; STORED_EXC = normExc(d.msaExceptions);
     qa('[data-f]').forEach(function (el) {
       var v = getPath(d, el.dataset.f);
       if (el.type === 'checkbox') el.checked = !!v;
@@ -656,7 +659,7 @@
     [/contracting entity|partner/i, 1, '#entity'], [/invalid email/i, 1, '[data-f="client.businessContact.email"],[data-f="client.billingContact.email"]'],
     [/package must be/i, 3, '#orderPackage'], [/subscription term/i, 3, '[data-f="commercial.termMonths"]'],
     [/at least one package|unknown package/i, 2, '#pkgs input'], [/store or e-commerce/i, 2, '[data-f="commercial.stores"]'],
-    [/market/i, 2, '#market'], [/currency/i, 2, '#currency'], [/special/i, 2, '#specials input, #otSpecials input'], [/document/i, 3, '#contractPack']
+    [/market/i, 2, '#market'], [/currency/i, 2, '#currency'], [/special/i, 2, '#specials input, #otSpecials input'], [/document/i, 3, '#contractPack'], [/signatory name/i, 1, '[data-f="client.signatoryName"]'], [/signatory designation/i, 1, '[data-f="client.signatoryTitle"]'], [/signatory email/i, 1, '[data-f="client.signatoryEmail"]']
   ];
   function fixFor(text) { for (var i = 0; i < FIX_MAP.length; i++) if (FIX_MAP[i][0].test(text)) return FIX_MAP[i]; return null; }
   function renderBlockers(ev) {
@@ -741,16 +744,17 @@
   function renderContractPack(ev) {
     var c = ev && ev.contract;
     if (!c) return;
-    var msa = c.msa;
+    var msa = c.msa, newMsa = c.mode === 'NEW_MSA';
     $('newMsaBox').classList.toggle('hidden', !msa);
-    $('btnGenerate').textContent = c.mode === 'AGREEMENT' ? 'Generate Agreement (MSA + Order Form + DPA)' : 'Generate Order Form';
-    $('contractPack').innerHTML = c.mode === 'AGREEMENT'
-      ? '<b>One Agreement document</b> – Master Services Agreement / Terms of Service (with SLA)<br>&nbsp;&nbsp;• Annexure A – Quotation &amp; Order Form<br>&nbsp;&nbsp;• Annexure B – Data Processing Agreement (PDPL)' +
-        '<p class="muted" style="margin:6px 0 0">The Order Form cites the Agreement’s MSA number. When this deal is marked <b>Won</b>, the MSA is saved on the client, so later deals produce only an Order Form.</p>'
+    $('msaBox').classList.toggle('hidden', !newMsa);
+    $('btnGenerate').textContent = newMsa ? 'Generate Order Form & MSA' : 'Generate Order Form';
+    $('contractPack').innerHTML = newMsa
+      ? '<b>Two documents</b><br>&nbsp;&nbsp;• Quotation &amp; Order Form – cites the Proposal and the MSA number<br>&nbsp;&nbsp;• Master Services Agreement – cites this Order Form; incorporates the online ToS, DPA and SLA' +
+        '<p class="muted" style="margin:6px 0 0">When this deal is marked <b>Won</b>, the MSA is saved on the client, so later deals produce only an Order Form.</p>'
       : '<b>Quotation &amp; Order Form only</b> – under the client’s existing MSA <b>' + esc(msa.no) + '</b>' +
-        (msa.dealId ? ' (signed with deal ' + esc(msa.dealId) + (msa.date ? ', ' + esc(msa.date) : '') + ')' : ' (entered in “MSA reference”)') +
-        (msa.dpaNo ? ' and DPA <b>' + esc(msa.dpaNo) + '</b>' : '') + '.';
+        (msa.dealId ? ' (signed with deal ' + esc(msa.dealId) + (msa.date ? ', ' + esc(msa.date) : '') + ')' : ' (entered in “Existing MSA reference”)') + '.';
   }
+
 
   function renderSide(ev, d) {
     renderContractPack(ev);
@@ -785,7 +789,7 @@
       sideRows.forEach(function (r) { h += '<tr><td>' + r[0] + '</td>' + q.packages.map(function (p) { return '<td class="num">' + r[1](p) + '</td>'; }).join('') + '</tr>'; });
       h += '</table>' + (stageOf(d) === 'PROPOSAL' ? '<p class="muted">Totals are calculated at the Order Form stage.</p>' : '');
       if (stageOf(d) === 'CONTRACT' && (ev.changesSinceProposal || []).length) h += '<p><span class="badge warn">' + ev.changesSinceProposal.length + ' change(s) since proposal</span></p>';
-      h += '<p>' + (!ev.needsApproval ? '<span class="badge ok">Standard pricing</span>' : APPROVAL === 'Approved' ? '<span class="badge ok">Special pricing approved by Amith</span>' : APPROVAL === 'Pending' ? '<span class="badge warn">Waiting for Amith’s approval</span>' : '<span class="badge warn">Needs Amith’s approval</span>') + '</p>';
+      h += '<p>' + (!ev.needsApproval ? '<span class="badge ok">Standard pricing</span>' : APPROVAL === 'Approved' && normExc(ev.msaExceptions) === STORED_EXC ? '<span class="badge ok">Special pricing approved by Amith</span>' : APPROVAL === 'Pending' ? '<span class="badge warn">Waiting for Amith’s approval</span>' : '<span class="badge warn">Needs Amith’s approval</span>') + '</p>';
     }
     var miss = Object.keys(ev.missing || {});
     h += miss.length ? '<p class="muted">Missing for: ' + miss.map(function (t) { return DOC_LABEL[t]; }).join(', ') + '</p>' : (ev.ok ? '<p><span class="badge ok">Ready to generate</span></p>' : '');
@@ -797,7 +801,8 @@
     h += '<table><tr><th colspan="2">Deal</th></tr>' +
       '<tr><td>Client</td><td>' + esc(c.legalName) + (c.shortName ? ' (' + esc(c.shortName) + ')' : '') + ', ' + esc(c.country) + '</td></tr>' +
       '<tr><td>Contracting party</td><td>' + esc(ent ? ent.name : '—') + '</td></tr>' +
-      '<tr><td>Documents</td><td>' + Object.keys(d.docs || {}).filter(function (k) { return d.docs[k]; }).map(function (k) { return DOC_LABEL[k]; }).join(', ') + '</td></tr>' +
+      '<tr><td>Documents</td><td>' + (stageOf(d) === 'PROPOSAL' ? ['PROPOSAL'] : ev.contract && ev.contract.mode === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['ORDER_FORM', 'MSA']).map(function (k) { return DOC_LABEL[k]; }).join(', ') + '</td></tr>' +
+      (ev.msaExceptions ? '<tr><td>MSA special terms</td><td style="white-space:pre-wrap">' + esc(ev.msaExceptions) + ' <span class="badge warn">Needs Amith’s approval</span></td></tr>' : '') +
       (stageOf(d) === 'CONTRACT' ? '<tr><td>Order Form</td><td>' + esc(com.orderPackage || '') + ' · ' + esc(com.termMonths) + ' months · ' + esc(com.billingCycle) + '</td></tr>' : '') + '</table>';
     if (q) {
       h += '<h3>Pricing (' + esc(q.currency) + ')</h3><table><tr><th></th>' + q.packages.map(function (p) { return '<th class="num">' + esc(p.package) + '</th>'; }).join('') + '</tr>';
@@ -828,12 +833,13 @@
       h += '<h3>Changed since proposal' + (d.proposalBaseline && d.proposalBaseline.docNo ? ' ' + esc(d.proposalBaseline.docNo) : '') + '</h3>' +
         (ch.length ? '<ul class="tight">' + ch.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<p class="muted">No changes – the Order Form matches the proposal.</p>');
     }
-    if (ev.needsApproval) h += '<h3>' + (APPROVAL === 'Approved' ? 'Special pricing – approved by Amith' : APPROVAL === 'Pending' ? 'Special pricing – waiting for Amith' : 'Approval required') + '</h3><ul class="tight">' + ev.approvalReasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' + (APPROVAL === 'Approved' ? '<p class="muted">Changing these prices will need approval again.</p>' : '');
+    var apprOk = APPROVAL === 'Approved' && normExc(ev.msaExceptions) === STORED_EXC;
+    if (ev.needsApproval) h += '<h3>' + (apprOk ? 'Special pricing / terms – approved by Amith' : APPROVAL === 'Pending' && normExc(ev.msaExceptions) === STORED_EXC ? 'Waiting for Amith’s approval' : 'Approval required') + '</h3><ul class="tight">' + ev.approvalReasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' + (apprOk ? '<p class="muted">Changing these prices or the MSA special terms will need approval again.</p>' : '');
     if (ev.errors.length) h += '<h3>Fix before generating</h3><ul class="tight error">' + ev.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>';
     if (ev.readyToGenerate) h += '<p><span class="badge ok">All selected documents have the information they need.</span></p>';
     $('btnGenerate').disabled = !ev.readyToGenerate;
     renderBlockers(ev);
-    $('genHint').textContent = !ev.readyToGenerate ? 'Fix the items listed above to enable generation.' : (ev.needsApproval && APPROVAL !== 'Approved' ? (APPROVAL === 'Pending' ? 'Will create DRAFTS (approval already requested).' : 'Will create DRAFTS and request Amith’s approval.') : 'Will create final Docs + PDFs.');
+    $('genHint').textContent = !ev.readyToGenerate ? 'Fix the items listed above to enable generation.' : (ev.needsApproval && !(APPROVAL === 'Approved' && normExc(ev.msaExceptions) === STORED_EXC) ? (APPROVAL === 'Pending' ? 'Will create DRAFTS (approval already requested).' : 'Will create DRAFTS and request Amith’s approval.') : 'Will create final Docs + PDFs.');
     $('review').innerHTML = h;
   }
 
@@ -1054,8 +1060,8 @@
   var STAGE_UI = {
     PROPOSAL: { banner: '<b>Stage 1 of 2 – Proposal.</b> Enter the client, pricing and proposal text, then generate the proposal. When the client accepts, click <b>Convert to Order Form</b>.',
       steps: ['1 · Client', '2 · Commercials', '3 · Proposal', '4 · Review'], gen: 'Generate proposal' },
-    CONTRACT: { banner: '<b>Stage 2 of 2 – Order Form.</b> Add contract details and Order Form terms; the Order Form, Terms of Service / MSA and DPA are generated together.',
-      steps: ['1 · Contract details', '2 · Commercials', '3 · Order Form & documents', '4 · Review'], gen: 'Generate Agreement (MSA + Order Form + DPA)' }
+    CONTRACT: { banner: '<b>Stage 2 of 2 – Order Form.</b> Add contract details and Order Form terms; the Quotation &amp; Order Form and the MSA are generated together (Order Form only if the client already has an MSA).',
+      steps: ['1 · Contract details', '2 · Commercials', '3 · Order Form & documents', '4 · Review'], gen: 'Generate Order Form & MSA' }
   };
   function stageOf(d) { return (d && d.stage) || 'PROPOSAL'; }
   function applyStage(stage) {
@@ -1088,9 +1094,9 @@
   // ---------- languages ----------
   function langHint() {
     if (!LISTS || !LISTS.languages) return;
-    var lang = $('language').value, names = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', TOS: 'ToS', DPA: 'DPA' };
+    var lang = $('language').value, names = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', MSA: 'MSA' };
     if (lang === 'EN') { $('langHint').textContent = ''; return; }
-    var sel = stageOf(DEAL) === 'PROPOSAL' ? ['PROPOSAL'] : (LAST && LAST.contract && LAST.contract.mode === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['TOS', 'ORDER_FORM', 'DPA']);
+    var sel = stageOf(DEAL) === 'PROPOSAL' ? ['PROPOSAL'] : (LAST && LAST.contract && LAST.contract.mode === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['ORDER_FORM', 'MSA']);
     var yes = sel.filter(function (t) { return (LISTS.languages[t] || []).indexOf(lang) !== -1; }), no = sel.filter(function (t) { return yes.indexOf(t) === -1; });
     $('langHint').innerHTML = (yes.length ? 'In ' + (lang === 'AR' ? 'Arabic' : 'bilingual') + ': ' + yes.map(function (t) { return names[t]; }).join(', ') + '. ' : '') +
       (no.length ? '<span class="badge warn">No ' + (lang === 'AR' ? 'Arabic' : 'bilingual') + ' template yet for ' + no.map(function (t) { return names[t]; }).join(', ') + ' – these will be generated in English.</span>' : '');

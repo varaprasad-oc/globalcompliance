@@ -45,15 +45,15 @@ function attachClientMsa_(deal) {
   return deal;
 }
 
-/** When an Agreement deal is Won, its MSA/DPA numbers become the client's: later deals get a standalone Order Form. */
+/** When a deal that produced an MSA is Won, that MSA becomes the client's: later deals get an Order Form only. */
 function recordClientMsa_(deal) {
-  if (contractMode(deal) !== 'AGREEMENT' || !(deal.docNos || {}).TOS) return;
+  if (contractMode(deal) !== 'NEW_MSA' || !(deal.docNos || {}).MSA) return;
   var name = String(((deal.client || {}).legalName) || '').toLowerCase();
   var c = readRecords_('Clients').filter(function (r) {
     return (deal.clientId && r.client_id === deal.clientId) || (name && String(r.legal_name).toLowerCase() === name);
   })[0];
   if (!c) return;
-  c.msa_no = deal.docNos.TOS; c.dpa_no = deal.docNos.DPA || ''; c.msa_deal_id = deal.dealId; c.msa_date = new Date().toISOString().slice(0, 10);
+  c.msa_no = deal.docNos.MSA; c.dpa_no = ''; c.msa_deal_id = deal.dealId; c.msa_date = new Date().toISOString().slice(0, 10);
   writeRecord_('Clients', c, c._row);
   audit_('CLIENT_MSA_RECORDED', { client: c.client_id, msa: c.msa_no }, deal.dealId);
 }
@@ -171,7 +171,7 @@ function apiCloneDeal(dealId) {
   return res;
 }
 
-/** Stage 1 → 2: proposal accepted, prepare Order Form + ToS/MSA + DPA (no new version, same document numbers). */
+/** Stage 1 → 2: proposal accepted, prepare Quotation & Order Form + MSA (no new version, same document numbers). */
 function apiConvertToContract(dealId) {
   var user = requireUser_();
   var m = getMaster();

@@ -50,7 +50,7 @@ function coerceAdminRow(tab, headers, obj) {
   if (tab === 'Currencies' && !(row.fx_rate > 0)) errors.push('fx_rate must be greater than 0');
   if (tab === 'CommsTiers' && row.floor_usd !== '' && row.list_usd !== '' && row.floor_usd > row.list_usd) errors.push('floor_usd cannot be above list_usd');
   if (tab === 'Features') ['Engagement', 'Loyalty', 'Advanced'].forEach(function (p) { if (p in row && ['Included', 'Not included', 'Add-on'].indexOf(row[p]) === -1) errors.push(p + ' must be Included, Not included or Add-on'); });
-  if (tab === 'Templates' && ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].indexOf(row.doc_type) === -1) errors.push('doc_type must be PROPOSAL, ORDER_FORM, TOS or DPA');
+  if (tab === 'Templates' && ['PROPOSAL', 'ORDER_FORM', 'MSA'].indexOf(row.doc_type) === -1) errors.push('doc_type must be PROPOSAL, ORDER_FORM or MSA');
   if (tab === 'Templates' && ['EN', 'AR', 'BI'].indexOf(row.language) === -1) errors.push('language must be EN, AR or BI');
   return { ok: errors.length === 0, row: row, errors: errors };
 }
@@ -73,7 +73,7 @@ function withSnapshot(master, snap) {
 
 /** Which languages have an active template per document type: {PROPOSAL: ['EN'], ...} */
 function availableLanguages(master) {
-  var out = { PROPOSAL: [], ORDER_FORM: [], TOS: [], DPA: [] };
+  var out = { PROPOSAL: [], ORDER_FORM: [], MSA: [] };
   (master.Templates || []).forEach(function (t) {
     if (isTrue(t.active) && t.file_id && out[t.doc_type] && out[t.doc_type].indexOf(t.language) === -1) out[t.doc_type].push(t.language);
   });
@@ -98,7 +98,7 @@ function goLiveFindings(master, props) {
   });
   add(props.GCP_PROJECT_ID ? 'OK' : 'WARN', 'Gemini (Vertex AI)', props.GCP_PROJECT_ID ? 'project ' + props.GCP_PROJECT_ID : 'not connected – reps must type the narrative');
   var langs = availableLanguages(master);
-  ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].forEach(function (t) { add(langs[t].indexOf('EN') !== -1 ? 'OK' : 'BLOCKER', 'English template ' + t, langs[t].indexOf('EN') !== -1 ? '' : 'no active EN template'); });
+  ['PROPOSAL', 'ORDER_FORM', 'MSA'].forEach(function (t) { add(langs[t].indexOf('EN') !== -1 ? 'OK' : 'BLOCKER', 'English template ' + t, langs[t].indexOf('EN') !== -1 ? '' : 'no active EN template'); });
   (master.Templates || []).forEach(function (t) {
     if (isTrue(t.active) && /draft/i.test(String(t.version) + ' ' + String(t.notes))) add('WARN', 'Template ' + t.doc_type + ' ' + t.language + ' v' + t.version, 'still marked draft / pending legal review');
   });
@@ -111,14 +111,13 @@ function goLiveFindings(master, props) {
     if (!/@optculture\.com$/i.test(String(u.email))) add('BLOCKER', 'User outside domain', u.email);
   });
   (master.Entities || []).filter(function (e) { return isTrue(e.active); }).forEach(function (e) {
-    var gaps = ['signatory_name', 'signatory_title', 'address'].filter(function (k) { return !e[k]; });
+    var gaps = ['signatory_name', 'signatory_title', 'address', 'courts_city'].filter(function (k) { return !e[k]; });
     if (e.type === 'Partner' && !e.reg_no) gaps.push('reg_no');
     if (gaps.length) add('WARN', 'Entity ' + e.entity_id + ' incomplete', 'missing ' + gaps.join(', '));
   });
-  (master.SubProcessors || []).forEach(function (s) { if (/TBC/i.test(s.name + ' ' + s.location)) add('WARN', 'DPA sub-processor to confirm', s.name); });
   var terms = {};
   (master.CommercialTerms || []).forEach(function (r) { terms[r.key] = r.value; });
-  if (!terms.default_hosting_region) add('WARN', 'DPA hosting region', 'CommercialTerms.default_hosting_region is empty');
+  ['tos_url', 'dpa_url', 'sla_url'].forEach(function (k) { add(terms[k] ? 'OK' : 'WARN', 'Online document link ' + k, terms[k] ? terms[k] + ' – confirm the page is live' : 'CommercialTerms.' + k + ' is empty (default link used)'); });
   if (!terms.optculture_logo_file_id) add('WARN', 'Logo', 'CommercialTerms.optculture_logo_file_id is empty');
   add(props.BACKUP_TRIGGER ? 'OK' : 'WARN', 'Daily backup', props.BACKUP_TRIGGER ? '' : 'run installTriggers()');
   return out;
