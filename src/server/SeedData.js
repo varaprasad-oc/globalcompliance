@@ -225,7 +225,8 @@ var SEED = {
       ['PROPOSAL', 'OC-P', 2026, 0],
       ['ORDER_FORM', 'OC-Q', 2026, 0],
       ['TOS', 'OC-TOS', 2026, 0],
-      ['DPA', 'OC-DPA', 2026, 0]
+      ['DPA', 'OC-DPA', 2026, 0],
+      ['DEAL', 'D', 2026, 0]
     ]
   },
 

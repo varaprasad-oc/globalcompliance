@@ -92,7 +92,7 @@ function apiSaveDeal(deal) {
     if (existing && !canAccessDeal(user, existing.created_by, m.Users)) throw new Error('You do not have access to this deal.');
     deal = protectDealFields(deal, existing ? JSON.parse(existing.input_json) : null, existing ? existing.status : null, pricingSnapshot(m));
     applyCountryDefaults(m, deal);
-    if (!deal.dealId) deal.dealId = newId_('D');
+    if (!deal.dealId) { try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); } }  // short id D-2026-0001 (falls back if Numbering has no DEAL row)
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var rec = dealRecord(deal, ev, user.email, new Date().toISOString(), existing);

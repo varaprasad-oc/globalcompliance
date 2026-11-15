@@ -60,6 +60,7 @@ const api = {
   });
   await p.goto('file://' + path.join(__dirname, '..', 'src/ui/Index.html'), { waitUntil: 'domcontentloaded' });
   await p.waitForSelector('#view-dash:not(.hidden)');
+  const menu = async (id, sel) => { await p.click('[data-menu="' + id + '"]'); await p.waitForTimeout(150); await p.click('.menu:not(.hidden) ' + sel); };
   const check = (name, cond) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) process.exitCode = 1; };
 
   check('Real logo in header', (await p.getAttribute('header img', 'src')).startsWith('data:image/png;base64,'));
@@ -115,7 +116,7 @@ const api = {
   check('Saved: title shows deal id', (await p.textContent('#dealTitle')).includes('D-TEST-1'));
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(300);
   check('My Deals lists the deal in Proposal stage', (await p.textContent('#dealList')).includes('Proposal stage'));
-  await p.click('[data-clone="D-TEST-1"]'); await p.waitForTimeout(400);
+  await menu('D-TEST-1', '[data-clone="D-TEST-1"]'); await p.waitForTimeout(400);
   check('Clone opens a new draft', (await p.textContent('#dealTitle')).includes('D-TEST-2'));
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(300);
   await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(500);
@@ -138,8 +139,10 @@ const api = {
 
   // ---------- Stage 2: convert to Order Form ----------
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
-  check('Convert button shown for generated proposal', await p.isVisible('[data-convert="D-TEST-1"]'));
-  await p.click('[data-convert="D-TEST-1"]'); await p.waitForTimeout(600);
+  await p.click('[data-menu="D-TEST-1"]'); await p.waitForTimeout(150);
+  check('Menu shows Convert for generated proposal', await p.isVisible('.menu:not(.hidden) [data-convert="D-TEST-1"]'));
+  await p.screenshot({ path: path.join(out, 'menu.png') });
+  await p.click('.menu:not(.hidden) [data-convert="D-TEST-1"]'); await p.waitForTimeout(600);
   check('Stage 2 banner and contract fields visible', (await p.textContent('#stageBanner')).includes('Stage 2 of 2') && (await p.isVisible('[data-f="client.address"]')));
   await p.fill('[data-f="client.address"]', 'Cairo, Egypt');
   await p.fill('[data-f="client.businessContact.email"]', 'buyer@frg.example');
@@ -163,7 +166,7 @@ const api = {
 
   // ---------- pipeline, dashboard, admin ----------
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
-  await p.click('[data-status="Sent"][data-id="D-TEST-1"]'); await p.waitForTimeout(500);
+  await menu('D-TEST-1', '[data-status="Sent"][data-id="D-TEST-1"]'); await p.waitForTimeout(500);
   check('Pipeline status Sent saved', store.deals['D-TEST-1'].status === 'Sent');
   await p.fill('#fText', 'nomatch'); await p.waitForTimeout(100);
   check('Search filter works', (await p.textContent('#dealList')).includes('match the filter'));
