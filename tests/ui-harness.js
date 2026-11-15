@@ -9,7 +9,7 @@ M.Templates = ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].map((t) => ({ doc_type: t
 let USER = { ok: true, email: 'varaprasad@optculture.com', name: 'Varaprasad SN', role: 'Manager' };
 const store = { deals: {}, clients: [], approvals: [] }; let seq = 0;
 const api = {
-  apiBootstrap: () => ({ user: USER, lists: { markets: M.Markets.map((r) => r.market), currencies: M.Currencies.map((r) => r.code), packages: M.Packages.map((r) => r.package), countries: M.Countries,
+  apiBootstrap: () => ({ user: USER, lists: { features: ctx.featureMatrix(M, M.Packages.map((r) => r.package)), markets: M.Markets.map((r) => r.market), currencies: M.Currencies.map((r) => r.code), packages: M.Packages.map((r) => r.package), countries: M.Countries,
     addOns: M.PriceItems.filter((r) => r.category === 'ADDON').map((r) => ({ id: r.item_id, label: r.label, packages: r.packages })),
     oneTimeItems: M.PriceItems.filter((r) => r.category === 'ONE_TIME' && r.item_id !== 'STORE_INSTALL').map((r) => ({ id: r.item_id, label: r.label, unit: r.unit })) } }),
   apiFormLists: () => ({ aiEnabled: true, languages: ctx.availableLanguages(M), countries: M.Countries, entities: M.Entities.map((e) => ({ id: e.entity_id, name: e.legal_name, type: e.type, country: e.country })),
@@ -73,7 +73,10 @@ const api = {
   await p.check('input[data-arr="commercial.packages"][value="Loyalty"]');
   await p.check('input[data-arr="commercial.packages"][value="Advanced"]');
   await p.fill('input[data-map="commercial.specialPrices"][data-key="Loyalty"]', '70');
-  await p.check('input[data-arr="commercial.addOns"][value="GIFT_CARDS"]');
+  check('Special price boxes only for ticked packages', (await p.isVisible('[data-pkgbox="Loyalty"]')) && (await p.isVisible('[data-pkgbox="Advanced"]')) && !(await p.isVisible('[data-pkgbox="Engagement"]')));
+  check('Engagement add-on column locked', await p.isDisabled('#matrix input[data-addon="MANAGED_SERVICES"][data-pkg="Engagement"]'));
+  check('Included features are fixed ticks', (await p.$$eval('#matrix input[disabled][checked]', (x) => x.length)) > 20);
+  await p.check('#matrix input[data-addon="GIFT_CARDS"][data-pkg="Loyalty"]');
   await p.waitForTimeout(900);
   check('Live summary shows approval badge', (await p.textContent('#side')).includes('Needs Amith'));
   check('Order Form package list follows packages', (await p.$$eval('#orderPackage option', (o) => o.map((x) => x.value))).join() === 'Loyalty,Advanced');

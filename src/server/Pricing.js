@@ -12,7 +12,8 @@
  *   market, currency, stores, ecomSites,
  *   packages: ['Loyalty', 'Advanced'],          // packages to quote
  *   specialPrices: { Loyalty: 150 },             // optional, per site per month, in quote currency
- *   addOns: ['GIFT_CARDS'],                      // optional ADDON item_ids
+ *   addOns: ['GIFT_CARDS'],                      // optional ADDON item_ids (all quoted packages)
+ *   addOnsByPackage: { Loyalty: ['GIFT_CARDS'] },  // optional, per package – overrides addOns for that package
  *   oneTimeItems: [{ id: 'MIGRATION_100K', qty: 1 }],  // optional ONE_TIME items (STORE_INSTALL is automatic)
  *   specialComms: { COMMS_100K: 200 }             // optional negotiated platform-comms price per tier, in quote currency
  * }
@@ -138,7 +139,8 @@ function buildQuote(master, input) {
     var oneTimeTotal = oneTime.reduce(function (s, l) { return s + (l.total || 0); }, 0);
 
     var addOns = items.filter(function (i) {
-      return i.category === 'ADDON' && (input.addOns || []).indexOf(i.item_id) !== -1 && _appliesTo(i, name);
+      var chosen = (input.addOnsByPackage && input.addOnsByPackage[name]) ? input.addOnsByPackage[name] : (input.addOns || []);
+      return i.category === 'ADDON' && chosen.indexOf(i.item_id) !== -1 && _appliesTo(i, name);
     }).map(function (i) { return itemLine(i, 1); });
     var addOnsMonthly = addOns.reduce(function (s, l) { return s + (l.total || 0); }, 0);
 
@@ -231,6 +233,6 @@ function featureMatrix(master, packageNames) {
     .map(function (f) {
       var v = {};
       packageNames.forEach(function (p) { v[p] = f[p]; });
-      return { feature: f.feature, values: v, description: f.description_en, descriptionAr: f.description_ar };
+      return { feature: f.feature, values: v, description: f.description_en, descriptionAr: f.description_ar, addonItemId: f.addon_item_id || '' };
     });
 }

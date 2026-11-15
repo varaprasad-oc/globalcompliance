@@ -107,3 +107,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 | 11 | Go-live | **In 1 week (target 2026-11-22)**: short UAT, pilot overlapping launch. |
 | 12 | Pilot | Varaprasad names 2 reps (emails pending), added as Reps in Users. |
 | — | AI | Launch without AI (see above). |
+
+## Add-ons per package (2026-11-15)
+- Add-ons are chosen per package in a features table (included features fixed). AI add-ons (Recommendations, Reporting, Grouping & Clustering, Predictive Segmentation, Assisted Campaigns) are priced "Custom quote" and don't add to totals. Features.addon_item_id links a feature to its PriceItems row.

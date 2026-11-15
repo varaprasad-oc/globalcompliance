@@ -123,8 +123,9 @@
               <h3>Packages to quote</h3>
               <div class="checks" id="pkgs"></div>
               <div class="grid" id="specials"></div>
-              <h3>Add-ons</h3>
-              <div class="checks" id="addons"></div>
+              <h3>What’s included &amp; add-ons</h3>
+              <p class="muted" style="margin-top:0">✔ = included in the package (fixed). Tick add-ons per package; columns of packages you haven’t selected are locked.</p>
+              <div id="matrix" style="overflow-x:auto"></div>
               <h3>Optional one-time services</h3>
               <div id="onetime"></div>
               <h3>Platform messaging (negotiated price, optional)</h3>
@@ -317,8 +318,8 @@
     $('entity').innerHTML = '<option value="">— select —</option>' + LISTS.entities.map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.name + (e.type === 'Partner' ? ' (partner – ' + e.country + ')' : ' (' + e.country + ')')) + '</option>'; }).join('');
     $('clientList').innerHTML = LISTS.clients.map(function (c) { return '<option value="' + esc(c.legalName) + '">'; }).join('');
     $('pkgs').innerHTML = b.packages.map(function (p) { return '<label><input type="checkbox" data-arr="commercial.packages" value="' + esc(p) + '"> ' + esc(p) + '</label>'; }).join('');
-    $('specials').innerHTML = b.packages.map(function (p) { return '<div><label>Special price / site / month – ' + esc(p) + '</label><input type="number" min="0" data-map="commercial.specialPrices" data-key="' + esc(p) + '" placeholder="Standard"></div>'; }).join('');
-    $('addons').innerHTML = b.addOns.map(function (a) { return '<label title="Packages: ' + esc(a.packages) + '"><input type="checkbox" data-arr="commercial.addOns" value="' + esc(a.id) + '"> ' + esc(a.label) + '</label>'; }).join('');
+    $('specials').innerHTML = b.packages.map(function (p) { return '<div data-pkgbox="' + esc(p) + '" class="hidden"><label>Special price / site / month – ' + esc(p) + '</label><input type="number" min="0" data-map="commercial.specialPrices" data-key="' + esc(p) + '" placeholder="Standard"></div>'; }).join('');
+    buildMatrix(b);
     $('onetime').innerHTML = b.oneTimeItems.map(function (o) { return '<div class="checks"><label><input type="checkbox" data-ot="' + esc(o.id) + '"> ' + esc(o.label) + '</label>' + (o.unit === 'per hour' ? ' <input type="number" min="1" value="10" data-otqty="' + esc(o.id) + '" style="width:90px"> hours' : '') + '</div>'; }).join('');
     $('comms').innerHTML = LISTS.commsTiers.map(function (t) { return '<div><label>Up to ' + Number(t.messages).toLocaleString('en-US') + ' / month – negotiated price</label><input type="number" min="0" data-map="commercial.specialComms" data-key="' + esc(t.id) + '" placeholder="List price"></div>'; }).join('');
 
@@ -361,6 +362,46 @@
     $('btnGenerate').onclick = generate;
   }
 
+  // ---------- packages: included features + add-ons matrix ----------
+  function applies(pk, list) { list = String(list || 'ALL'); return list === 'ALL' || list.split(',').map(function (x) { return x.trim(); }).indexOf(pk) !== -1; }
+  function buildMatrix(b) {
+    var pk = b.packages, linked = {};
+    var included = b.features.filter(function (f) { return pk.some(function (p) { return f.values[p] !== 'Add-on'; }) && !pk.some(function (p) { return f.values[p] === 'Add-on'; }); });
+    var addonFeatures = b.features.filter(function (f) { return pk.some(function (p) { return f.values[p] === 'Add-on'; }); });
+    addonFeatures.forEach(function (f) { if (f.addonItemId) linked[f.addonItemId] = true; });
+    var otherAddons = b.addOns.filter(function (a) { return !linked[a.id]; });
+    var head = '<tr><th>Capability</th>' + pk.map(function (p) { return '<th style="text-align:center" data-col="' + esc(p) + '">' + esc(p) + '</th>'; }).join('') + '</tr>';
+    var rows = included.map(function (f) {
+      return '<tr><td>' + esc(f.feature) + '</td>' + pk.map(function (p) {
+        return '<td style="text-align:center" data-col="' + esc(p) + '">' + (f.values[p] === 'Included' ? '<input type="checkbox" checked disabled title="Included">' : '<span class="muted">—</span>') + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    function addonRow(label, id, okFor) {
+      return '<tr><td>' + esc(label) + (id ? '' : ' <span class="muted">(price on request)</span>') + '</td>' + pk.map(function (p) {
+        if (!okFor(p) || !id) return '<td style="text-align:center" data-col="' + esc(p) + '"><span class="muted">' + (okFor(p) && !id ? 'ask' : '—') + '</span></td>';
+        return '<td style="text-align:center" data-col="' + esc(p) + '"><input type="checkbox" data-addon="' + esc(id) + '" data-pkg="' + esc(p) + '"></td>';
+      }).join('') + '</tr>';
+    }
+    rows += '<tr><td colspan="' + (pk.length + 1) + '" style="background:var(--soft);font-weight:bold">Add-ons (tick to add)</td></tr>';
+    rows += addonFeatures.map(function (f) { return addonRow(f.feature, f.addonItemId, function (p) { return f.values[p] === 'Add-on'; }); }).join('');
+    rows += otherAddons.map(function (a) { return addonRow(a.label, a.id, function (p) { return applies(p, a.packages); }); }).join('');
+    $('matrix').innerHTML = '<table>' + head + rows + '</table>';
+  }
+  function selectedPackages() { return qa('input[data-arr="commercial.packages"]:checked').map(function (e) { return e.value; }); }
+  function refreshPkgUI() {
+    var sel = selectedPackages();
+    qa('[data-pkgbox]').forEach(function (d) {
+      var on = sel.indexOf(d.dataset.pkgbox) !== -1;
+      d.classList.toggle('hidden', !on);
+      if (!on) d.querySelector('input').value = '';
+    });
+    qa('#matrix [data-col]').forEach(function (c) { c.style.opacity = sel.indexOf(c.dataset.col) !== -1 ? '1' : '.35'; });
+    qa('#matrix input[data-addon]').forEach(function (e) {
+      var on = sel.indexOf(e.dataset.pkg) !== -1;
+      e.disabled = !on; if (!on) e.checked = false;
+    });
+  }
+
   function refreshOrderPackages() {
     var sel = $('orderPackage'), cur = sel.value;
     var pk = qa('input[data-arr="commercial.packages"]:checked').map(function (e) { return e.value; });
@@ -382,7 +423,11 @@
       setPath(d, el.dataset.f, v);
     });
     d.commercial.termMonths = Number(d.commercial.termMonths || 12);
-    ['packages', 'addOns'].forEach(function (k) { d.commercial[k] = qa('input[data-arr="commercial.' + k + '"]:checked').map(function (e) { return e.value; }); });
+    d.commercial.packages = selectedPackages();
+    var byPkg = {}, all = [];
+    d.commercial.packages.forEach(function (p) { byPkg[p] = []; });
+    qa('#matrix input[data-addon]:checked').forEach(function (e) { if (byPkg[e.dataset.pkg]) { byPkg[e.dataset.pkg].push(e.dataset.addon); if (all.indexOf(e.dataset.addon) === -1) all.push(e.dataset.addon); } });
+    d.commercial.addOnsByPackage = byPkg; d.commercial.addOns = all;
     ['specialPrices', 'specialComms'].forEach(function (k) {
       var m = {}; qa('input[data-map="commercial.' + k + '"]').forEach(function (e) { if (e.value !== '') m[e.dataset.key] = Number(e.value); }); d.commercial[k] = m;
     });
@@ -402,7 +447,11 @@
     });
     var com = d.commercial || {};
     qa('input[data-arr="commercial.packages"]').forEach(function (e) { e.checked = (com.packages || []).indexOf(e.value) !== -1; });
-    qa('input[data-arr="commercial.addOns"]').forEach(function (e) { e.checked = (com.addOns || []).indexOf(e.value) !== -1; });
+    qa('#matrix input[data-addon]').forEach(function (e) {
+      var list = com.addOnsByPackage && com.addOnsByPackage[e.dataset.pkg] ? com.addOnsByPackage[e.dataset.pkg] : (com.addOns || []);
+      e.checked = (com.packages || []).indexOf(e.dataset.pkg) !== -1 && list.indexOf(e.dataset.addon) !== -1;
+    });
+    refreshPkgUI();
     qa('input[data-map]').forEach(function (e) { var m = getPath(d, e.dataset.map) || {}; e.value = m[e.dataset.key] === undefined ? '' : m[e.dataset.key]; });
     qa('input[data-ot]').forEach(function (e) { var it = (com.oneTimeItems || []).filter(function (x) { return x.id === e.dataset.ot; })[0]; e.checked = !!it; var q = document.querySelector('[data-otqty="' + e.dataset.ot + '"]'); if (q && it) q.value = it.qty; });
     refreshOrderPackages();
@@ -432,6 +481,7 @@
   // ---------- live evaluation ----------
   function changed() {
     refreshOrderPackages();
+    refreshPkgUI();
     clearTimeout(EVAL_TIMER); EVAL_TIMER = setTimeout(function () { evaluate(false); }, 600);
   }
   function evaluate(forReview) {

@@ -23,6 +23,7 @@ function apiBootstrap() {
       markets: m.Markets.map(function (r) { return r.market; }),
       currencies: m.Currencies.map(function (r) { return r.code; }),
       packages: m.Packages.filter(function (r) { return isTrue(r.active); }).map(function (r) { return r.package; }),
+      features: featureMatrix(m, m.Packages.filter(function (r) { return isTrue(r.active); }).map(function (r) { return r.package; })),
       countries: m.Countries,
       addOns: m.PriceItems.filter(function (r) { return r.category === 'ADDON' && isTrue(r.active); })
         .map(function (r) { return { id: r.item_id, label: r.label, packages: r.packages }; }),

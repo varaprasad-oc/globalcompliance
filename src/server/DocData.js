@@ -163,7 +163,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
         var cells = quote.packages.map(function (x) {
           var a = x.addOns.filter(function (o) { return o.id === id; })[0];
           if (a) label = a.label;
-          return a ? m(a.total) : 'Not available';
+          return a ? (a.text || m(a.total)) : 'Not selected';
         });
         return [label].concat(cells);
       })
@@ -202,7 +202,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
       billing: fields.BillingCycle + ', in advance',
       amount: m(op.licenceAnnual) + ' / year'
     }].concat(op.addOns.map(function (a) {
-      return { product: a.label, scope: 'Add-on', billing: fields.BillingCycle + ', in advance', amount: m(a.total * 12) + ' / year' };
+      return { product: a.label, scope: 'Add-on', billing: fields.BillingCycle + ', in advance', amount: a.text ? a.text : m(a.total * 12) + ' / year' };
     }));
 
     lists.UsageLines = [{

@@ -18,7 +18,7 @@ test('Developed / USD / <10 sites matches rate card exactly', () => {
   eq(line(r.usage, 'COMMS_100K').unitPrice, 250);
   eq(line(r.usage, 'COMMS_1M').unitPrice, 1500);
   eq(r.rateCardOneTime.map((l) => l.unitPrice), [150, 125, 1000, 4000, null, 10000, 20000]);
-  eq(r.rateCardAddOns.map((l) => l.unitPrice), [50, 50, 5000, 2500, 10000, 500]);
+  eq(r.rateCardAddOns.map((l) => l.unitPrice), [50, 50, 5000, 2500, 10000, 500, null, null, null, null, null], 'AI add-ons are custom quote');
   eq(r.needsApproval, false);
 });
 
@@ -113,4 +113,18 @@ test('Platform comms volume tiers: special below list needs approval, below floo
   eq(r.approvalReasons.length, 2);
   eq(/BELOW FLOOR/.test(r.approvalReasons[1]), true);
   eq(q({ packages: ['Loyalty'] }).needsApproval, false);
+});
+
+test('Add-ons can be chosen per package; AI add-ons show as custom quote', () => {
+  const r = q({ packages: ['Loyalty', 'Advanced'], addOnsByPackage: { Loyalty: ['GIFT_CARDS'], Advanced: ['AI_REPORTING'] } });
+  eq(pkg(r, 'Loyalty').addOns.map((a) => a.id), ['GIFT_CARDS']);
+  eq(pkg(r, 'Loyalty').addOnsMonthly, 50);
+  eq(pkg(r, 'Advanced').addOns.map((a) => [a.id, a.text]), [['AI_REPORTING', 'Custom quote']]);
+  eq(pkg(r, 'Advanced').addOnsMonthly, 0, 'custom-quote add-ons do not add to totals');
+});
+
+test('Feature matrix links add-on features to price items', () => {
+  const fm = C().featureMatrix(M, ['Engagement', 'Loyalty', 'Advanced']);
+  eq(fm.find((f) => f.feature === 'Gift Cards').addonItemId, 'GIFT_CARDS');
+  eq(fm.find((f) => f.feature === 'E-receipts').addonItemId, '');
 });
