@@ -34,3 +34,4 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-14: Sprint 8 built: Approvals.js, dashboard stats (pure), generation refactor (generateForDeal_), approver notification, UI Dashboard/Approvals/filters/status. Browser harness 23/23.
 - 2026-11-14: Sprint 9 built: AdminLogic.js (pure), Admin.js, RTL in engine, Arabic data, price snapshots, UI Admin/language hints. Fixed: clones no longer reuse document numbers. Browser harness 30/30.
 - 2026-11-15: Sprint 10 built: security review found and fixed 3 issues; Ops.js (backup, alerts, go-live check); UAT.md, USER_GUIDE.md, ADMIN_GUIDE.md, GO_LIVE.md.
+- 2026-11-15: Deployed as Apps Script version 10 ("v13 – proposal price reference"): feedback rounds 1–2 live (two-stage flow, package matrix, select-all, white-label fix, singular/plural, proposal unit prices). Awaiting regenerated test proposal for visual check.
