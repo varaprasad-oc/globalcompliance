@@ -150,6 +150,12 @@ const api = {
   await p.screenshot({ path: path.join(out, 'menu.png') });
   await p.click('.menu:not(.hidden) [data-convert="D-TEST-1"]'); await p.waitForTimeout(600);
   check('Stage 2 banner and contract fields visible', (await p.textContent('#stageBanner')).includes('Stage 2 of 2') && (await p.isVisible('[data-f="client.address"]')));
+  await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(800);
+  const gb = await p.textContent('#genBlockers');
+  await (await p.$('#view-deal .step[data-step="4"]')).screenshot({ path: path.join(out, 'blockers.png') });
+  check('Disabled Generate explains what is missing', (await p.isDisabled('#btnGenerate')) && gb.includes('Registered address') && gb.includes('Billing contact email'));
+  await p.click('#genBlockers a[data-fix]'); await p.waitForTimeout(400);
+  check('Fix → jumps to step 1 and outlines missing fields', (await p.isVisible('[data-f="client.address"]')) && (await p.getAttribute('[data-f="client.address"]', 'class')).includes('missing'));
   await p.fill('[data-f="client.address"]', 'Cairo, Egypt');
   await p.fill('[data-f="client.businessContact.email"]', 'buyer@frg.example');
   await p.fill('[data-f="client.billingContact.email"]', 'finance@frg.example');

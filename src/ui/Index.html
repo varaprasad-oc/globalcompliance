@@ -25,6 +25,10 @@
     .menu .sep { border-top:1px solid var(--line); margin:6px 0; }
     .menu .grp { font-size:11px; color:var(--muted); padding:2px 14px 4px; text-transform:uppercase; letter-spacing:.5px; }
     a.dealname { color:var(--ink); font-weight:bold; text-decoration:none; } a.dealname:hover { color:var(--red); text-decoration:underline; }
+    .missing { border-color:#d93025 !important; box-shadow:0 0 0 2px rgba(217,48,37,.15); }
+    #genBlockers { border:1px solid #f3c2bd; background:#fdf2f1; border-radius:6px; padding:10px 14px; margin-top:12px; }
+    #genBlockers ul { margin:6px 0 0; padding-left:18px; } #genBlockers li { margin:3px 0; }
+    #genBlockers a { color:var(--red); font-weight:bold; text-decoration:none; margin-left:6px; cursor:pointer; }
     .two { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; }
     .layout { display:flex; min-height:calc(100vh - 44px); }
     nav { width:190px; background:#fff; border-right:1px solid var(--line); padding:12px 0; flex-shrink:0; }
@@ -216,6 +220,7 @@
               <div class="grid" style="margin-top:10px"><div class="wide"><label>Note to Amith (shown with the approval request, e.g. why the special price)</label><textarea data-f="approvalNote" style="min-height:50px"></textarea></div></div>
               <div id="genResult"></div>
               <div id="docList"></div>
+              <div id="genBlockers" class="hidden"></div>
               <div class="bar" style="margin-top:12px">
                 <span id="genHint" class="muted"></span>
                 <span><button class="secondary" id="btnSave2">Save draft</button> <button class="purple" id="btnGenerate" disabled>Generate documents</button> <button id="btnConvert" class="hidden">Convert to Order Form →</button></span>
@@ -572,6 +577,43 @@
     });
     return rows;
   }
+  /** Where each missing item / error is fixed: [matcher, step, field selector]. */
+  var FIX_MAP = [
+    [/legal name/i, 1, '[data-f="client.legalName"]'], [/^country/i, 1, '#country'], [/registered address/i, 1, '[data-f="client.address"]'],
+    [/business contact email/i, 1, '[data-f="client.businessContact.email"]'], [/billing contact email/i, 1, '[data-f="client.billingContact.email"]'],
+    [/contracting entity|partner/i, 1, '#entity'], [/invalid email/i, 1, '[data-f="client.businessContact.email"],[data-f="client.billingContact.email"]'],
+    [/package must be/i, 3, '#orderPackage'], [/subscription term/i, 3, '[data-f="commercial.termMonths"]'],
+    [/at least one package|unknown package/i, 2, '#pkgs input'], [/store or e-commerce/i, 2, '[data-f="commercial.stores"]'],
+    [/market/i, 2, '#market'], [/currency/i, 2, '#currency'], [/special/i, 2, '#specials input, #otSpecials input'], [/document/i, 3, '[data-f="docs.TOS"]']
+  ];
+  function fixFor(text) { for (var i = 0; i < FIX_MAP.length; i++) if (FIX_MAP[i][0].test(text)) return FIX_MAP[i]; return null; }
+  function renderBlockers(ev) {
+    var items = [];
+    (ev.errors || []).forEach(function (e) { items.push({ text: e, fix: fixFor(e) }); });
+    var byField = {}, order = [];
+    Object.keys(ev.missing || {}).forEach(function (t) { ev.missing[t].forEach(function (m) { if (!byField[m]) { byField[m] = []; order.push(m); } byField[m].push(DOC_LABEL[t]); }); });
+    order.forEach(function (m) { items.push({ text: m + ' (' + byField[m].join(', ') + ')', fix: fixFor(m) }); });
+    var box = $('genBlockers');
+    qa('.missing').forEach(function (el) { el.classList.remove('missing'); });
+    if (!items.length) { box.classList.add('hidden'); $('btnGenerate').title = ''; return; }
+    var steps = STAGE_UI[stageOf(DEAL)].steps;
+    box.innerHTML = '<b>What’s missing before you can generate:</b><ul>' + items.map(function (it, i) {
+      return '<li>' + esc(it.text) + (it.fix ? ' <span class="muted">— ' + esc(steps[it.fix[1] - 1]) + '</span><a data-fix="' + i + '">Fix →</a>' : '') + '</li>';
+    }).join('') + '</ul>';
+    box.classList.remove('hidden');
+    $('btnGenerate').title = 'Missing: ' + items.map(function (it) { return it.text; }).join('; ');
+    qa('[data-fix]').forEach(function (a) {
+      a.onclick = function () {
+        var it = items[Number(a.dataset.fix)];
+        items.forEach(function (x) { if (x.fix) qa(x.fix[2]).forEach(function (el) { el.classList.add('missing'); }); });
+        go(it.fix[1]);
+        var el = document.querySelector(it.fix[2]);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); try { el.focus(); } catch (e) {} }
+      };
+    });
+  }
+  document.addEventListener('input', function (e) { if (e.target.classList && e.target.classList.contains('missing') && e.target.value) e.target.classList.remove('missing'); });
+  document.addEventListener('change', function (e) { if (e.target.classList && e.target.classList.contains('missing') && (e.target.value || e.target.checked)) e.target.classList.remove('missing'); });
   var OTS_KEY = '';
   function renderOtSpecials(q, d) {
     var box = $('otSpecials');
@@ -680,7 +722,8 @@
         oneTimeRowsFor(q).forEach(function (r) { row(esc(r[0]), r[1]); });
         row('One-time total', function (p) { return money(q.currency, p.oneTimeTotal + (q.optionalOneTimeTotal || 0)); });
         row('<b>First-year total</b>', function (p) { return '<b>' + money(q.currency, p.firstYearTotal + (q.optionalOneTimeTotal || 0)) + '</b>'; });
-        h += '</table><p class="muted" style="font-size:12px">* special price</p>';
+        var anySpecial = q.packages.some(function (p) { return p.oneTime.some(function (l) { return l.specialUnitPrice !== null && l.specialUnitPrice !== undefined; }); }) || q.optionalOneTime.some(function (l) { return l.specialUnitPrice !== null && l.specialUnitPrice !== undefined; });
+        h += '</table>' + (anySpecial ? '<p class="muted" style="font-size:12px">* special price</p>' : '');
         if (q.optionalOneTime.length) h += '<p class="muted">Optional services: ' + q.optionalOneTime.map(function (l) { return esc(l.label) + ' ' + (l.text || (l.qty > 1 ? l.qty + ' × ' + money(q.currency, l.unitPrice) + ' = ' : '') + money(q.currency, l.total)); }).join('; ') + '</p>';
       }
     }
@@ -691,11 +734,10 @@
     }
     if (ev.needsApproval) h += '<h3>' + (APPROVAL === 'Approved' ? 'Special pricing – approved by Amith' : APPROVAL === 'Pending' ? 'Special pricing – waiting for Amith' : 'Approval required') + '</h3><ul class="tight">' + ev.approvalReasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' + (APPROVAL === 'Approved' ? '<p class="muted">Changing these prices will need approval again.</p>' : '');
     if (ev.errors.length) h += '<h3>Fix before generating</h3><ul class="tight error">' + ev.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>';
-    var miss = Object.keys(ev.missing || {});
-    if (miss.length) h += '<h3>Missing information</h3><ul class="tight">' + miss.map(function (t) { return '<li><b>' + DOC_LABEL[t] + ':</b> ' + ev.missing[t].map(esc).join(', ') + '</li>'; }).join('') + '</ul>';
     if (ev.readyToGenerate) h += '<p><span class="badge ok">All selected documents have the information they need.</span></p>';
     $('btnGenerate').disabled = !ev.readyToGenerate;
-    $('genHint').textContent = !ev.readyToGenerate ? 'Complete the items above to enable generation.' : (ev.needsApproval && APPROVAL !== 'Approved' ? (APPROVAL === 'Pending' ? 'Will create DRAFTS (approval already requested).' : 'Will create DRAFTS and request Amith’s approval.') : 'Will create final Docs + PDFs.');
+    renderBlockers(ev);
+    $('genHint').textContent = !ev.readyToGenerate ? 'Fix the items listed above to enable generation.' : (ev.needsApproval && APPROVAL !== 'Approved' ? (APPROVAL === 'Pending' ? 'Will create DRAFTS (approval already requested).' : 'Will create DRAFTS and request Amith’s approval.') : 'Will create final Docs + PDFs.');
     $('review').innerHTML = h;
   }
 
