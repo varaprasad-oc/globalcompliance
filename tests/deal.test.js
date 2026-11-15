@@ -5,10 +5,12 @@ const fresh = () => { const d = JSON.parse(JSON.stringify(sampleDeal)); d.docs =
 test('Country defaults fill market, currency and entity only when blank', () => {
   const d = { client: { legalName: 'X', country: 'United Arab Emirates' }, commercial: {} };
   C().applyCountryDefaults(global.M, d);
-  eq([d.commercial.market, d.commercial.currency, d.entityId], ['High Income', 'AED', 'OC-AE']);
-  const e = { client: { country: 'Saudi Arabia' }, commercial: { market: 'Developed', currency: 'USD' } };
+  eq([d.commercial.market, d.commercial.currency, d.entityId], ['High Income', 'USD', 'OC-AE']);
+  const e = { client: { country: 'Saudi Arabia' }, commercial: { market: 'Developed', currency: 'SAR' } };
   C().applyCountryDefaults(global.M, e);
-  eq([e.commercial.market, e.commercial.currency, e.entityId], ['Developed', 'USD', undefined], 'KSA: rep keeps choices; no default entity (partner must be picked)');
+  eq([e.commercial.market, e.commercial.currency, e.entityId], ['Developed', 'USD', undefined], 'KSA: market choice kept, currency forced to USD, partner must be picked');
+  const cur = (country) => { const x = { client: { country }, commercial: { currency: 'AED' } }; C().applyCountryDefaults(global.M, x); return x.commercial.currency; };
+  eq([cur('India'), cur('South Africa'), cur('Egypt'), cur('United States'), cur('Qatar')], ['INR', 'ZAR', 'USD', 'USD', 'USD']);
 });
 
 test('Complete sample deal evaluates as ready, with approval for the special price', () => {

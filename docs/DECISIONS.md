@@ -120,3 +120,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 ## Proposal = price reference, Order Form = totals (2026-11-15)
 - Proposal (stage 1) shows unit/rate-card prices only; optional one-time services are listed with their rate-card price, not calculated.
 - Totals (recurring per year, one-time, first-year value) appear only in stage 2 and on the Quotation & Order Form.
+
+## Currency per country (2026-11-15)
+- **INR** for India, **ZAR** for South Africa, **USD** for every other country (incl. UAE, KSA, Egypt, GCC). Fixed by country, not editable by reps; enforced on the server. Countries without a row default to USD.

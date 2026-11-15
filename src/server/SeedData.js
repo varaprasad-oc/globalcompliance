@@ -30,14 +30,15 @@ var SEED = {
   Countries: {
     kind: 'master',
     // entity_id blank = no OptCulture entity -> rep must pick a local partner
+    // default_currency is FIXED per country (rep cannot change it): INR for India, ZAR for South Africa, USD for all others
     headers: ['country', 'default_market', 'default_currency', 'dpa_addendum', 'entity_id'],
     rows: [
       ['United States', 'Developed', 'USD', '4F', 'OC-US'],
       ['Canada', 'Developed', 'USD', '4F', 'OC-US'],
       ['United Kingdom', 'Developed', 'USD', '4E', ''],
       ['European Union (any)', 'Developed', 'USD', '4E', ''],
-      ['United Arab Emirates', 'High Income', 'AED', '4B', 'OC-AE'],
-      ['Saudi Arabia', 'High Income', 'SAR', '4A', ''],
+      ['United Arab Emirates', 'High Income', 'USD', '4B', 'OC-AE'],
+      ['Saudi Arabia', 'High Income', 'USD', '4A', ''],
       ['Qatar', 'High Income', 'USD', '4F', ''],
       ['Kuwait', 'High Income', 'USD', '4F', ''],
       ['Bahrain', 'High Income', 'USD', '4F', ''],

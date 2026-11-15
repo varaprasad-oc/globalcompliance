@@ -68,6 +68,7 @@ const api = {
   await p.fill('[data-f="client.legalName"]', 'Fashion Retail Group S.A.E.');
   await p.fill('[data-f="client.shortName"]', 'FRG');
   await p.selectOption('#country', 'Egypt');
+  check('Currency is locked (fixed by country)', await p.isDisabled('#currency'));
   check('Country sets market/currency/partner', (await p.inputValue('#market')) === 'Emerging' && (await p.inputValue('#currency')) === 'USD' && (await p.inputValue('#entity')) === 'P-EG-CONGINEER');
   await p.waitForTimeout(900);
   check('No pricing in summary before stores/packages', (await p.textContent('#side')).includes('Pricing appears once'));

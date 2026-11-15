@@ -83,13 +83,13 @@ function convertToContract(deal, quote) {
   return d;
 }
 
-/** Fill market / currency / contracting entity from the Countries tab when the rep has not chosen them. */
+/** Market / contracting entity default from the Countries tab; currency is always the country's fixed currency. */
 function applyCountryDefaults(master, deal) {
   deal.commercial = deal.commercial || {};
   var country = (master.Countries || []).filter(function (r) { return r.country === (deal.client || {}).country; })[0];
-  if (!country) return deal;
+  if (!country) { if ((deal.client || {}).country) deal.commercial.currency = 'USD'; return deal; }
   if (!deal.commercial.market) deal.commercial.market = country.default_market;
-  if (!deal.commercial.currency) deal.commercial.currency = country.default_currency;
+  deal.commercial.currency = country.default_currency || 'USD';  // fixed per country (INR India, ZAR South Africa, USD others)
   if (!deal.entityId && country.entity_id) deal.entityId = country.entity_id;
   return deal;
 }

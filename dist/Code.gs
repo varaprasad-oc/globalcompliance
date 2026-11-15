@@ -122,14 +122,15 @@ var SEED = {
   Countries: {
     kind: 'master',
     // entity_id blank = no OptCulture entity -> rep must pick a local partner
+    // default_currency is FIXED per country (rep cannot change it): INR for India, ZAR for South Africa, USD for all others
     headers: ['country', 'default_market', 'default_currency', 'dpa_addendum', 'entity_id'],
     rows: [
       ['United States', 'Developed', 'USD', '4F', 'OC-US'],
       ['Canada', 'Developed', 'USD', '4F', 'OC-US'],
       ['United Kingdom', 'Developed', 'USD', '4E', ''],
       ['European Union (any)', 'Developed', 'USD', '4E', ''],
-      ['United Arab Emirates', 'High Income', 'AED', '4B', 'OC-AE'],
-      ['Saudi Arabia', 'High Income', 'SAR', '4A', ''],
+      ['United Arab Emirates', 'High Income', 'USD', '4B', 'OC-AE'],
+      ['Saudi Arabia', 'High Income', 'USD', '4A', ''],
       ['Qatar', 'High Income', 'USD', '4F', ''],
       ['Kuwait', 'High Income', 'USD', '4F', ''],
       ['Bahrain', 'High Income', 'USD', '4F', ''],
@@ -972,13 +973,13 @@ function convertToContract(deal, quote) {
   return d;
 }
 
-/** Fill market / currency / contracting entity from the Countries tab when the rep has not chosen them. */
+/** Market / contracting entity default from the Countries tab; currency is always the country's fixed currency. */
 function applyCountryDefaults(master, deal) {
   deal.commercial = deal.commercial || {};
   var country = (master.Countries || []).filter(function (r) { return r.country === (deal.client || {}).country; })[0];
-  if (!country) return deal;
+  if (!country) { if ((deal.client || {}).country) deal.commercial.currency = 'USD'; return deal; }
   if (!deal.commercial.market) deal.commercial.market = country.default_market;
-  if (!deal.commercial.currency) deal.commercial.currency = country.default_currency;
+  deal.commercial.currency = country.default_currency || 'USD';  // fixed per country (INR India, ZAR South Africa, USD others)
   if (!deal.entityId && country.entity_id) deal.entityId = country.entity_id;
   return deal;
 }
