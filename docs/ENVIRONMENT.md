@@ -14,6 +14,14 @@
 | **Web app v1** (domain-only, runs as varaprasad@; v4 live, v5 pending) | https://script.google.com/a/macros/optculture.com/s/AKfycbwKYpTw0Dd05z3gte-f9eSfAr8ycXRMw6lqpLMzurI-rUq4rvaH4xsTzekLg0vypcLy/exec |
 | Self-test output (can be deleted) | Doc `1Ix75HK0mlEuAeJLf0M7-FqHWv0NZgj-Z7Wgdyt8k8UU`, PDF `1eVJmNNr1WTISSVIG9zajuAPiaSIm38-F` (01 Proposals/2026/SELFTEST) |
 
+## Guides (Shared Drive → Guides `1zwXr_96_iEKQ-jH4XytbbIXZLoKgUvAB`)
+| Guide | Google file |
+|---|---|
+| User Guide (Sales) | `1oyUog00ya_j8XyT6rutNA0Zj7Ov7VHtpIiW8xy7QB3Y` |
+| Admin Guide | `1s_7sarPF4lfEqkNfa3Xd0hO3zV1i-J6gdIn2n-TpwTU` |
+| Go-live Plan | `12fnn8VTnNL4nop4vy9NrlNp4J-Xno4UW8Fe6qDZka0w` |
+| UAT Checklist (Sheet) | `1RHq_Ts-cQ95vSKUJyFe9run16ysbI-V1kp_cczUPtl8` |
+
 ## Templates (_Templates folder, registered in the Templates tab)
 | Doc type | Google Doc | Version | Source |
 |---|---|---|---|
