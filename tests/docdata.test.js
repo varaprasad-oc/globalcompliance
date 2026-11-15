@@ -110,3 +110,9 @@ test('Party lines drop blank registration/address cleanly', () => {
   const t = build('TOS');
   eq(t.fields.EntityRegistration, 'To be provided');
 });
+
+test('Journeys without a "Title:" get a numbered title (no stray colon)', () => {
+  const deal = JSON.parse(JSON.stringify(sampleDeal)); deal.narrative.journeys = ['test', 'Win-back: lapsed shoppers'];
+  const d = C().buildDocData('PROPOSAL', global.M, deal, C().buildQuote(global.M, deal.commercial), ctx);
+  eq(d.lists.Journeys, [{ title: 'Journey 1', text: 'test' }, { title: 'Win-back', text: 'lapsed shoppers' }]);
+});

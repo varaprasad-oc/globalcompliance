@@ -54,7 +54,7 @@ th{background:#7B3FE4;color:#ffffff}
 <p>{{/IF HasJourneys}}</p>
 
 <h1>Detailed Break-up of Fees</h1>
-<p>The following sets out the one-time and recurring commercials for implementing OptCulture for {{ClientShortName}} ({{Stores}} stores{{#IF HasEcom}} and {{EcomSites}} e-commerce site(s){{/IF HasEcom}}, {{Sites}} sites in total). All figures are shown in {{Currency}}.</p>
+<p>The following sets out the one-time and recurring commercials for implementing OptCulture for {{ClientShortName}} ({{StoresText}}{{#IF HasEcom}} and {{EcomSitesText}}{{/IF HasEcom}}, {{SitesText}} in total). All figures are shown in {{Currency}}.</p>
 <h2>One-Time Implementation Fee</h2>
 <p>{{TABLE:OneTimeFees}}</p>
 <p>{{#IF HasOptionalOneTime}}</p>
@@ -71,7 +71,7 @@ th{background:#7B3FE4;color:#ffffff}
 <p>{{/IF HasAddOns}}</p>
 <h3>Plans — Inclusions</h3>
 <p>{{TABLE:PlanMatrix}}</p>
-<p class="small">Pricing is quoted for a single unified instance covering {{Sites}} sites. Should {{ClientShortName}} add stores, brands or storefronts, the same per-site model applies at preferred terms reflective of that scale.</p>
+<p class="small">Pricing is quoted for a single unified instance covering {{SitesText}}. Should {{ClientShortName}} add stores, brands or storefronts, the same per-site model applies at preferred terms reflective of that scale.</p>
 
 <h2>Communication Pricing</h2>
 <table><tr><th>Description</th><th>Price</th></tr><tr><td>{{EACH:Usage}}{{label}}</td><td>{{price}}</td></tr></table>

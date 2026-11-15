@@ -25,7 +25,7 @@
 ## Templates (_Templates folder, registered in the Templates tab)
 | Doc type | Google Doc | Version | Source |
 |---|---|---|---|
-| PROPOSAL | `1cy5np3Yk1VNwHrOOpg_EoEoLpm1mDngKA2q55u_Athc` | 1.1 | templates/proposal.html |
+| PROPOSAL | `15P0tySL51h0nO4jOD_Xz9MtYL2Y0R9GoS5aAkEm4dc8` | 1.2 | templates/proposal.html |
 | ORDER_FORM | `1murHdOTD1S4BEpUXKmjCuEu_ulI4If8H7rMRm4anU04` | 1.1 | templates/order_form.html |
 | TOS (+SLA Schedule 2) | `1QKr3CwlWgbpLTElTxTaOFG-gLuwyWKXM66gTHK2u--k` | 1.2-draft | docs/templates/TOS.md + SLA.md → `node tools/md2html.js` |
 | DPA | `1hFHe5yts99MqTMaf2QHHieMc4LST23HR_ZquSdpD1ZI` | 1.2-draft | docs/templates/DPA.md → `node tools/md2html.js` |

@@ -68,6 +68,9 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{Stores}}` | 46 |
 | `{{EcomSites}}` | 1 |
 | `{{Sites}}` | 47 |
+| `{{StoresText}}` | 46 stores |
+| `{{EcomSitesText}}` | 1 e-commerce site |
+| `{{SitesText}}` | 47 sites |
 | `{{MarketDiscount}}` | 35% |
 | `{{SlabLabel}}` | 10 - 49 |
 | `{{SlabDiscount}}` | 10% |
@@ -179,6 +182,9 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{Stores}}` | 46 |
 | `{{EcomSites}}` | 1 |
 | `{{Sites}}` | 47 |
+| `{{StoresText}}` | 46 stores |
+| `{{EcomSitesText}}` | 1 e-commerce site |
+| `{{SitesText}}` | 47 sites |
 | `{{MarketDiscount}}` | 35% |
 | `{{SlabLabel}}` | 10 - 49 |
 | `{{SlabDiscount}}` | 10% |
@@ -281,6 +287,9 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{Stores}}` | 46 |
 | `{{EcomSites}}` | 1 |
 | `{{Sites}}` | 47 |
+| `{{StoresText}}` | 46 stores |
+| `{{EcomSitesText}}` | 1 e-commerce site |
+| `{{SitesText}}` | 47 sites |
 | `{{MarketDiscount}}` | 35% |
 | `{{SlabLabel}}` | 10 - 49 |
 | `{{SlabDiscount}}` | 10% |
@@ -365,6 +374,9 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{Stores}}` | 46 |
 | `{{EcomSites}}` | 1 |
 | `{{Sites}}` | 47 |
+| `{{StoresText}}` | 46 stores |
+| `{{EcomSitesText}}` | 1 e-commerce site |
+| `{{SitesText}}` | 47 sites |
 | `{{MarketDiscount}}` | 35% |
 | `{{SlabLabel}}` | 10 - 49 |
 | `{{SlabDiscount}}` | 10% |

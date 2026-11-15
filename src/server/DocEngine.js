@@ -307,9 +307,11 @@ function replaceLiteral_(el, token, value) {
   var f, guard = 0;
   while ((f = el.findText(pattern)) && guard++ < 1000) {
     var t = f.getElement().asText();
-    var s = f.getStartOffset();
-    t.deleteText(s, f.getEndOffsetInclusive());
-    if (v) t.insertText(s, v);
+    var s = f.getStartOffset(), e = f.getEndOffsetInclusive();
+    // Insert first, then delete the tag: the new text keeps the tag's own style. (Deleting first can leave an empty
+    // run, and Google Docs then copies the style of the previous text – e.g. a white table header.)
+    if (v) { t.insertText(s, v); t.deleteText(s + v.length, e + v.length); }
+    else t.deleteText(s, e);
   }
 }
 

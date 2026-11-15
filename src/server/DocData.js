@@ -73,6 +73,9 @@ function buildDocData(docType, master, deal, quote, ctx) {
     RepName: _v(user.name), RepEmail: _v(user.email), RepPhone: _v(user.phone),
 
     Currency: cur, Market: quote.market, Stores: String(quote.stores), EcomSites: String(quote.ecomSites), Sites: String(quote.sites),
+    StoresText: quote.stores + (quote.stores === 1 ? ' store' : ' stores'),
+    EcomSitesText: quote.ecomSites + (quote.ecomSites === 1 ? ' e-commerce site' : ' e-commerce sites'),
+    SitesText: quote.sites + (quote.sites === 1 ? ' site' : ' sites'),
     MarketDiscount: formatPct(quote.discounts.marketPct), SlabLabel: quote.discounts.slabLabel, SlabDiscount: formatPct(quote.discounts.slabPct),
 
     OfferValidityDays: _v(terms.offer_validity_days), PriceLockMonths: _v(terms.price_lock_months),
@@ -110,9 +113,9 @@ function buildDocData(docType, master, deal, quote, ctx) {
     flags.HasMultiBrandIntro = !!n.multiBrandIntro;
     texts.ExecutiveSummary = _v(n.executiveSummary);
     texts.MultiBrandIntro = _v(n.multiBrandIntro);
-    lists.Journeys = (n.journeys || []).map(function (j) {
+    lists.Journeys = (n.journeys || []).map(function (j, i) {
       var parts = String(j).split(':'); // "Title: text" convention
-      return parts.length > 1 ? { title: parts.shift().trim(), text: parts.join(':').trim() } : { title: '', text: String(j) };
+      return parts.length > 1 && parts[0].trim() ? { title: parts.shift().trim(), text: parts.join(':').trim() } : { title: 'Journey ' + (i + 1), text: String(j).replace(/^\s*:\s*/, '') };
     });
 
     // Modules: features included in at least one selected package that have a description
@@ -132,7 +135,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
     ];
     if (flags.HasSpecialPrice) priceRows.push(['Licence fee / site / month (special price)'].concat(quote.packages.map(function (x) { return x.specialPricePerSite === null ? m(x.standardPricePerSite) : m(x.specialPricePerSite); })));
     priceRows.push(['Billed annually – per site'].concat(quote.packages.map(function (x) { return m(x.annualPerSite) + ' / year'; })));
-    priceRows.push(['Total licence – ' + quote.sites + ' sites / year'].concat(quote.packages.map(function (x) { return m(x.licenceAnnual); })));
+    priceRows.push(['Total licence – ' + quote.sites + (quote.sites === 1 ? ' site' : ' sites') + ' / year'].concat(quote.packages.map(function (x) { return m(x.licenceAnnual); })));
     priceRows.push(['Receipts included / site / month'].concat(quote.packages.map(function (x) { return x.receiptsIncludedPerSite.toLocaleString('en-US'); })));
     priceRows.push(['Per additional 1,000 receipts'].concat(quote.packages.map(function (x) { return m(x.overagePer1000); })));
     tables.PriceSummary = { headers: ['Recurring charges'].concat(pkgNames), rows: priceRows };
@@ -198,7 +201,7 @@ function buildDocData(docType, master, deal, quote, ctx) {
 
     lists.SubscriptionLines = [{
       product: 'OptCulture ' + op.package + ' Plan – platform licence',
-      scope: op.sites + ' sites (' + quote.stores + ' stores' + (quote.ecomSites ? ' + ' + quote.ecomSites + ' e-commerce' : '') + ') @ ' + m(op.finalPricePerSite) + ' / site / month',
+      scope: op.sites + (op.sites === 1 ? ' site (' : ' sites (') + quote.stores + (quote.stores === 1 ? ' store' : ' stores') + (quote.ecomSites ? ' + ' + quote.ecomSites + ' e-commerce' : '') + ') @ ' + m(op.finalPricePerSite) + ' / site / month',
       billing: fields.BillingCycle + ', in advance',
       amount: m(op.licenceAnnual) + ' / year'
     }].concat(op.addOns.map(function (a) {
