@@ -33,3 +33,8 @@
 - Dashboard: period selector (30/60/90 days, 6/12 months, All time); trend shows 12 months for long periods; new "Needs follow-up" card listing idle open deals (oldest first) with Open buttons.
 - Live Master Sheet: CommercialTerms row `stale_days = 60` added.
 - Verified: unit tests (dashboard period/stale), browser harness 70 checks pass.
+
+## 22. Short client id
+- New clients get C-0001, C-0002 … from a new Numbering row `CLIENT | C | - | 0` ("-" = never resets, no year). Falls back to the old timestamp id only if that row is missing.
+- Deal screen title now shows: Client · D-2026-0001 · C-0001 · v1.
+- Live sheet: CLIENT row added (last_no 1); the existing test client renamed C-261115-075620-597 → C-0001 in Clients and Deals.

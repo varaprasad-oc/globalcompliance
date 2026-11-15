@@ -319,7 +319,8 @@ var SEED = {
       ['ORDER_FORM', 'OC-Q', 2026, 0],
       ['TOS', 'OC-TOS', 2026, 0],
       ['DPA', 'OC-DPA', 2026, 0],
-      ['DEAL', 'D', 2026, 0]
+      ['DEAL', 'D', 2026, 0],
+      ['CLIENT', 'C', '-', 0]
     ]
   },
 
@@ -1603,6 +1604,7 @@ function visibleOwners_(user) {
 /**
  * Sprint 4: document numbers OC-P-2026-0001 etc. Uses a script lock so two reps never get the same number.
  * The counter resets each calendar year. Also used for short deal ids (doc_type DEAL → D-2026-0001).
+ * A row whose year is "-" never resets and has no year in the number (doc_type CLIENT → C-0001).
  */
 function nextDocNo(docType, callerHoldsLock) {
   var lock = LockService.getScriptLock();
@@ -1615,17 +1617,23 @@ function nextDocNo(docType, callerHoldsLock) {
     var year = new Date().getFullYear();
     for (var r = 1; r < values.length; r++) {
       if (values[r][iType] !== docType) continue;
-      var last = Number(values[r][iYear]) === year ? Number(values[r][iLast]) : 0;
+      var perpetual = String(values[r][iYear]).trim() === '-';
+      var last = perpetual || Number(values[r][iYear]) === year ? Number(values[r][iLast]) : 0;
       var next = last + 1;
-      sh.getRange(r + 1, iYear + 1).setValue(year);
+      if (!perpetual) sh.getRange(r + 1, iYear + 1).setValue(year);
       sh.getRange(r + 1, iLast + 1).setValue(next);
       SpreadsheetApp.flush();
-      return values[r][iPrefix] + '-' + year + '-' + ('000' + next).slice(-4);
+      return formatDocNo(values[r][iPrefix], perpetual ? null : year, next);
     }
     throw new Error('No numbering row for ' + docType);
   } finally {
     if (!callerHoldsLock) lock.releaseLock();
   }
+}
+
+/** Pure formatter (tested in Node): prefix-year-0001, or prefix-0001 when year is null. */
+function formatDocNo(prefix, year, n) {
+  return prefix + '-' + (year ? year + '-' : '') + ('000' + n).slice(-4);
 }
 
 // ===================== Deals.js =====================
@@ -1657,6 +1665,11 @@ function newId_(prefix) {
   return prefix + '-' + Utilities.formatDate(new Date(), 'Asia/Dubai', 'yyMMdd-HHmmss') + '-' + Math.floor(Math.random() * 900 + 100);
 }
 
+/** Short client id C-0001 (falls back to a timestamp id if Numbering has no CLIENT row). Caller holds the script lock. */
+function newClientId_() {
+  try { return nextDocNo('CLIENT', true); } catch (e) { return newId_('C'); }
+}
+
 function findDeal_(dealId) {
   return readRecords_('Deals').filter(function (r) { return r.deal_id === dealId; })[0] || null;
 }
@@ -1668,7 +1681,7 @@ function upsertClient_(deal, userEmail) {
     return r.client_id === deal.clientId || String(r.legal_name).toLowerCase() === String(c.legalName).toLowerCase();
   })[0];
   var rec = {
-    client_id: existing ? existing.client_id : newId_('C'),
+    client_id: existing ? existing.client_id : newClientId_(),
     legal_name: c.legalName, short_name: c.shortName || '', country: c.country || '', address: c.address || '',
     reg_type: c.regType || '', reg_no: c.regNo || '', website: c.website || '', brands: c.brands || '', pos: c.pos || '',
     ecom_platform: c.ecomPlatform || '', business_contact: JSON.stringify(c.businessContact || {}),

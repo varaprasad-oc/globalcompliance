@@ -537,7 +537,7 @@
     qa('input[data-ot]').forEach(function (e) { var it = (com.oneTimeItems || []).filter(function (x) { return x.id === e.dataset.ot; })[0]; e.checked = !!it; var q = document.querySelector('[data-otqty="' + e.dataset.ot + '"]'); if (q && it) q.value = it.qty; });
     refreshOrderPackages();
     if (com.orderPackage) $('orderPackage').value = com.orderPackage;
-    $('dealTitle').textContent = d.dealId ? (d.client && d.client.legalName ? d.client.legalName : 'Deal') + ' · ' + d.dealId + ' · v' + (d.version || 1) : 'New Deal';
+    $('dealTitle').textContent = d.dealId ? (d.client && d.client.legalName ? d.client.legalName : 'Deal') + ' · ' + d.dealId + (d.clientId ? ' · ' + d.clientId : '') + ' · v' + (d.version || 1) : 'New Deal';
     $('dealStatus').textContent = d.status || 'Draft';
     var snap = d.pricingSnapshot;
     $('priceFreeze').classList.toggle('hidden', !snap);

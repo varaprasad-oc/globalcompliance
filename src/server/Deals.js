@@ -26,6 +26,11 @@ function newId_(prefix) {
   return prefix + '-' + Utilities.formatDate(new Date(), 'Asia/Dubai', 'yyMMdd-HHmmss') + '-' + Math.floor(Math.random() * 900 + 100);
 }
 
+/** Short client id C-0001 (falls back to a timestamp id if Numbering has no CLIENT row). Caller holds the script lock. */
+function newClientId_() {
+  try { return nextDocNo('CLIENT', true); } catch (e) { return newId_('C'); }
+}
+
 function findDeal_(dealId) {
   return readRecords_('Deals').filter(function (r) { return r.deal_id === dealId; })[0] || null;
 }
@@ -37,7 +42,7 @@ function upsertClient_(deal, userEmail) {
     return r.client_id === deal.clientId || String(r.legal_name).toLowerCase() === String(c.legalName).toLowerCase();
   })[0];
   var rec = {
-    client_id: existing ? existing.client_id : newId_('C'),
+    client_id: existing ? existing.client_id : newClientId_(),
     legal_name: c.legalName, short_name: c.shortName || '', country: c.country || '', address: c.address || '',
     reg_type: c.regType || '', reg_no: c.regNo || '', website: c.website || '', brands: c.brands || '', pos: c.pos || '',
     ecom_platform: c.ecomPlatform || '', business_contact: JSON.stringify(c.businessContact || {}),

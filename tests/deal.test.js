@@ -63,3 +63,10 @@ test('Clone resets id, version and status', () => {
   eq([c.dealId, c.version, c.status, c.client.shortName], ['D-2', 1, 'Draft', 'FRG']);
   eq(d.dealId, 'D-1', 'original untouched');
 });
+
+test('Short ids: deals D-2026-0001, clients C-0001 (perpetual CLIENT numbering row)', (c) => {
+  eq(c.formatDocNo('D', 2026, 1), 'D-2026-0001');
+  eq(c.formatDocNo('C', null, 7), 'C-0007');
+  const row = c.SEED.Numbering.rows.filter((r) => r[0] === 'CLIENT')[0];
+  eq([row[1], row[2]], ['C', '-']);
+});
