@@ -15,6 +15,7 @@ var ADMIN_TABS = {
   CommsTiers: { key: 'tier_id', bool: ['active'], numeric: ['messages', 'list_usd', 'floor_usd', 'display_order'] },
   Features: { key: 'feature', bool: [], numeric: ['display_order'] },
   CommercialTerms: { key: 'key', bool: [], numeric: [] },
+  Partners: { key: 'partner_id', bool: ['active'], numeric: ['commission_pct'] },
   SubProcessors: { key: 'name', bool: ['active'], numeric: ['display_order'] },
   Templates: { key: 'file_id', bool: ['active'], numeric: [] },
   AIPrompts: { key: 'key', bool: [], numeric: ['temperature'] }

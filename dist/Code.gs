@@ -300,6 +300,13 @@ var SEED = {
     ]
   },
 
+  // Referral partners: INTERNAL ONLY (deal attribution + partner performance). Never printed in any document.
+  Partners: {
+    kind: 'master',
+    headers: ['partner_id', 'name', 'type', 'country', 'contact_name', 'contact_email', 'commission_pct', 'active', 'notes'],
+    rows: []
+  },
+
   SubProcessors: {
     kind: 'master',
     // To be completed by OC Tech (Sprint 0 input 0.9)
@@ -1147,6 +1154,7 @@ function dealSummary(rec) {
     createdBy: rec.created_by, createdAt: rec.created_at instanceof Date ? rec.created_at.toISOString() : String(rec.created_at || ''), updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
     lastGeneratedAt: d.lastGeneratedAt || '',
+    referralPartnerId: d.referralPartnerId || '',
     stage: d.stage || '',
     orderPackage: op ? op.package : '',
     value: value,
@@ -1203,6 +1211,22 @@ function dashboardStats(summaries, users, now, opts) {
     if (sm.status === 'Contract generated') s.actions.notSent.push(mini(sm));
     if (sm.status === 'Rejected') s.actions.rejected.push(mini(sm));
   });
+  // partner performance (Superadmin only: opts.partners is passed for Superadmin)
+  if (opts.partners) {
+    var pName = {};
+    opts.partners.forEach(function (p) { pName[p.partner_id] = p.name; });
+    s.byPartner = {};
+    summaries.forEach(function (sm) {
+      if (!sm.referralPartnerId) return;
+      var k = pName[sm.referralPartnerId] || sm.referralPartnerId;
+      var r = s.byPartner[k] = s.byPartner[k] || { deals: 0, open: 0, won: 0, lost: 0, pipelineUsd: 0, wonUsd: 0, winRate: null };
+      r.deals++;
+      if (sm.status === 'Won') { r.won++; r.wonUsd += sm.valueUsd || 0; }
+      else if (sm.status === 'Lost') r.lost++;
+      else { r.open++; r.pipelineUsd += sm.valueUsd || 0; }
+    });
+    Object.keys(s.byPartner).forEach(function (k) { var r = s.byPartner[k]; r.winRate = (r.won + r.lost) ? Math.round(r.won / (r.won + r.lost) * 1000) / 1000 : null; });
+  }
   s.avgDiscountPct = discN ? Math.round(discSum / discN * 1000) / 1000 : 0;
   s.winRate = (f.won + f.lost) ? Math.round(f.won / (f.won + f.lost) * 1000) / 1000 : null;
   var reachedProposal = f.proposal + f.contract + f.won + f.lost;
@@ -1439,6 +1463,7 @@ var ADMIN_TABS = {
   CommsTiers: { key: 'tier_id', bool: ['active'], numeric: ['messages', 'list_usd', 'floor_usd', 'display_order'] },
   Features: { key: 'feature', bool: [], numeric: ['display_order'] },
   CommercialTerms: { key: 'key', bool: [], numeric: [] },
+  Partners: { key: 'partner_id', bool: ['active'], numeric: ['commission_pct'] },
   SubProcessors: { key: 'name', bool: ['active'], numeric: ['display_order'] },
   Templates: { key: 'file_id', bool: ['active'], numeric: [] },
   AIPrompts: { key: 'key', bool: [], numeric: ['temperature'] }
@@ -1767,6 +1792,7 @@ function apiFormLists() {
     languages: availableLanguages(m),
     aiEnabled: !!getProp_('GCP_PROJECT_ID'),
     staleDays: staleDaysSetting_(),
+    partners: (m.Partners || []).filter(function (p) { return isTrue(p.active); }).map(function (p) { return { id: p.partner_id, name: p.name, type: p.type, country: p.country }; }),
     commsTiers: (m.CommsTiers || []).filter(function (t) { return isTrue(t.active); }).map(function (t) { return { id: t.tier_id, messages: t.messages, label: t.label }; }),
     clients: readRecords_('Clients').filter(function (r) { return canAccessDeal(user, r.owner_email, m.Users); }).map(function (r) {
       return { clientId: r.client_id, legalName: r.legal_name, shortName: r.short_name, country: r.country, address: r.address,
@@ -2594,7 +2620,8 @@ function apiDashboard(opts) {
   var user = requireUser_();  // everyone: rep = own, manager = team, superadmin = all
   var users = getMaster().Users;
   var rows = readRecords_('Deals').filter(function (r) { return canAccessDeal(user, r.created_by, users); }).map(dealSummary);
-  return { stats: dashboardStats(rows, users, new Date(), { periodDays: (opts || {}).periodDays || 0, staleDays: staleDaysSetting_() }), deals: rows };
+  return { stats: dashboardStats(rows, users, new Date(), { periodDays: (opts || {}).periodDays || 0, staleDays: staleDaysSetting_(),
+    partners: user.role === CONFIG.ROLES.SUPERADMIN ? getMaster().Partners || [] : null }), deals: rows };
 }
 
 /** Superadmin tool: re-apply file sharing (owner + current manager) on every final/draft document, e.g. after a team change. */

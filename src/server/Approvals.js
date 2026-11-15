@@ -87,7 +87,8 @@ function apiDashboard(opts) {
   var user = requireUser_();  // everyone: rep = own, manager = team, superadmin = all
   var users = getMaster().Users;
   var rows = readRecords_('Deals').filter(function (r) { return canAccessDeal(user, r.created_by, users); }).map(dealSummary);
-  return { stats: dashboardStats(rows, users, new Date(), { periodDays: (opts || {}).periodDays || 0, staleDays: staleDaysSetting_() }), deals: rows };
+  return { stats: dashboardStats(rows, users, new Date(), { periodDays: (opts || {}).periodDays || 0, staleDays: staleDaysSetting_(),
+    partners: user.role === CONFIG.ROLES.SUPERADMIN ? getMaster().Partners || [] : null }), deals: rows };
 }
 
 /** Superadmin tool: re-apply file sharing (owner + current manager) on every final/draft document, e.g. after a team change. */

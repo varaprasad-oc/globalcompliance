@@ -94,6 +94,7 @@ function apiFormLists() {
     languages: availableLanguages(m),
     aiEnabled: !!getProp_('GCP_PROJECT_ID'),
     staleDays: staleDaysSetting_(),
+    partners: (m.Partners || []).filter(function (p) { return isTrue(p.active); }).map(function (p) { return { id: p.partner_id, name: p.name, type: p.type, country: p.country }; }),
     commsTiers: (m.CommsTiers || []).filter(function (t) { return isTrue(t.active); }).map(function (t) { return { id: t.tier_id, messages: t.messages, label: t.label }; }),
     clients: readRecords_('Clients').filter(function (r) { return canAccessDeal(user, r.owner_email, m.Users); }).map(function (r) {
       return { clientId: r.client_id, legalName: r.legal_name, shortName: r.short_name, country: r.country, address: r.address,

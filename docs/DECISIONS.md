@@ -133,3 +133,8 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - **Existing client** (deal marked **Won** with an Agreement → MSA saved on the Clients tab: msa_no, dpa_no, msa_deal_id, msa_date) → standalone Quotation & Order Form citing that MSA/DPA.
 - MSA signed outside the app: type it in "Existing MSA reference" (or fill msa_no in the Clients tab) → Order Form only.
 - Rep can tick "Issue a new MSA anyway" (new entity / expired MSA).
+
+## Referral partners (2026-11-15, Varaprasad)
+- New master tab **Partners** (partner_id, name, type, country, contact, commission_pct, active, notes), edited by the Superadmin in Admin → Partners.
+- Rep picks an optional **Referral partner** on the deal (step 1). **Internal only: never printed in any document.**
+- Superadmin dashboard: **Partner performance** (deals, open, won, lost, win rate, pipeline USD, won USD) for the selected period.

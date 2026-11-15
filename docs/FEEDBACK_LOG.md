@@ -47,3 +47,10 @@
 
 ## 24. Date column in "Generated documents"
 - Date + time next to Version; list sorted newest first.
+
+## 25. Partners master + partner performance
+- See DECISIONS "Referral partners". Live sheet: Partners tab created (headers only – Superadmin adds partners). Unit test proves no document contains the partner.
+
+## 26. Processing screen while documents are generated
+- Full-screen overlay with spinner, elapsed seconds and the steps (save → create → combine → PDF → share/email); then a success dialog with the document links and "Back to My Deals" (automatic after 10 s; "Stay on this deal" or opening a link cancels it). Errors show in the same dialog.
+- Also used for Convert to Order Form and Amith's "Approve & generate" (returns to Approvals).

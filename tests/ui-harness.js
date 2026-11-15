@@ -12,7 +12,7 @@ const api = {
   apiBootstrap: () => ({ user: USER, lists: { features: ctx.featureMatrix(M, M.Packages.map((r) => r.package)), markets: M.Markets.map((r) => r.market), currencies: M.Currencies.map((r) => r.code), packages: M.Packages.map((r) => r.package), countries: M.Countries,
     addOns: M.PriceItems.filter((r) => r.category === 'ADDON').map((r) => ({ id: r.item_id, label: r.label, packages: r.packages })),
     oneTimeItems: M.PriceItems.filter((r) => r.category === 'ONE_TIME' && r.item_id !== 'STORE_INSTALL').map((r) => ({ id: r.item_id, label: r.label, unit: r.unit })) } }),
-  apiFormLists: () => ({ staleDays: 60, aiEnabled: true, languages: ctx.availableLanguages(M), countries: M.Countries, entities: M.Entities.map((e) => ({ id: e.entity_id, name: e.legal_name, type: e.type, country: e.country })),
+  apiFormLists: () => ({ partners: [{ id: 'P-1', name: 'Gulf Retail Advisors', country: 'UAE' }], staleDays: 60, aiEnabled: true, languages: ctx.availableLanguages(M), countries: M.Countries, entities: M.Entities.map((e) => ({ id: e.entity_id, name: e.legal_name, type: e.type, country: e.country })),
     commsTiers: M.CommsTiers.map((t) => ({ id: t.tier_id, messages: t.messages, label: t.label })), clients: store.clients }),
   apiEvaluateDeal: (d) => { const m = ctx.withSnapshot(M, d.refreshPrices ? null : d.pricingSnapshot); ctx.applyCountryDefaults(m, d); return { deal: d, evaluation: ctx.evaluateDeal(m, d) }; },
   apiSaveDeal: (d) => { const ex = d.dealId ? store.deals[d.dealId] : null; d = ctx.protectDealFields(d, ex ? JSON.parse(ex.input_json) : null, ex ? ex.status : null, ctx.pricingSnapshot(M)); ctx.applyCountryDefaults(M, d); if (!d.dealId) d.dealId = 'D-TEST-' + (++seq);
@@ -38,7 +38,7 @@ const api = {
       packages: q.packages.map((p) => ({ name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite, specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal })) }; }),
   apiDecideApproval: (aid, dec, comment) => { const a = store.approvals.find((x) => x.approvalId === aid); a.decision = dec; const r = store.deals[a.dealId]; r.approval_status = dec; r.status = dec === 'Approved' ? 'Approved' : 'Rejected';
     const gen = dec === 'Approved' ? api.apiGenerateDocs(a.dealId) : null; return { decision: dec, generation: gen }; },
-  apiDashboard: () => { const rows = Object.values(store.deals).map(ctx.dealSummary); return { stats: ctx.dashboardStats(rows, [{ email: 'varaprasad@optculture.com', name: 'Varaprasad SN' }], new Date(), { periodDays: (arguments[0] || {}).periodDays, staleDays: 60 }), deals: rows }; },
+  apiDashboard: () => { const rows = Object.values(store.deals).map(ctx.dealSummary); return { stats: ctx.dashboardStats(rows, [{ email: 'varaprasad@optculture.com', name: 'Varaprasad SN' }], new Date(), { periodDays: (arguments[0] || {}).periodDays, staleDays: 60, partners: [{ partner_id: 'P-1', name: 'Gulf Retail Advisors' }] }), deals: rows }; },
   apiAdminTabs: () => Object.keys(ctx.ADMIN_TABS),
   apiAdminGetTab: (tab) => ({ tab, headers: ctx.SEED[tab].headers, key: ctx.ADMIN_TABS[tab].key, rows: M[tab].map((r, i) => Object.assign({ _row: i + 2 }, r)) }),
   apiAdminSaveRow: (tab, rowNo, obj) => { const r = ctx.coerceAdminRow(tab, ctx.SEED[tab].headers, obj); if (!r.ok) throw new Error(r.errors.join('; '));
@@ -75,6 +75,8 @@ const api = {
   await p.selectOption('#country', 'Egypt');
   check('Currency is locked (fixed by country)', await p.isDisabled('#currency'));
   check('Country sets market/currency/partner', (await p.inputValue('#market')) === 'Emerging' && (await p.inputValue('#currency')) === 'USD' && (await p.inputValue('#entity')) === 'P-EG-CONGINEER');
+  check('Referral partner dropdown lists partners (internal)', (await p.textContent('#partner')).includes('Gulf Retail Advisors'));
+  await p.selectOption('#partner', 'P-1');
   await p.waitForTimeout(900);
   check('No pricing in summary before stores/packages', (await p.textContent('#side')).includes('Pricing appears once'));
   await p.click('#btnNext');
@@ -136,6 +138,8 @@ const api = {
   await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(500);
   check('Open restores special price', (await p.inputValue('input[data-map="commercial.specialPrices"][data-key="Loyalty"]')) === '70');
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
+  check('Processing overlay ends with a success dialog and Back to My Deals', (await p.isVisible('#busy')) && (await p.textContent('#busyBox')).includes('Back to My Deals'));
+  await p.click('#busyStay'); await p.waitForTimeout(200);
   const gr = await p.textContent('#genResult');
   check('Proposal draft only (no Order Form yet)', gr.includes('OC-P-2026-0001') && !gr.includes('OC-Q-2026-0001'));
   check('Status Pending approval', (await p.textContent('#dealStatus')).includes('Pending approval'));
@@ -149,6 +153,8 @@ const api = {
   await p.click('nav a[data-view="appr"]'); await p.waitForTimeout(400);
   check('Approval card shows proposed USD 70 and special discount', (await p.textContent('#appr')).includes('6.7%'));
   await p.click('[data-decide="Approved"]'); await p.waitForTimeout(700);
+  check('Approve shows the processing/success dialog', (await p.textContent('#busyBox')).includes('final documents created'));
+  await p.click('#busyStay'); await p.waitForTimeout(200);
   check('Proposal now final: status Proposal generated', store.deals['D-TEST-1'].status === 'Proposal generated');
 
   // ---------- Stage 2: convert to Order Form ----------
@@ -183,6 +189,16 @@ const api = {
   check('Stage 2 summary lists one-time lines separately', (await p.textContent('#side')).includes('Set-up and Training') && (await p.textContent('#side')).includes('Installation per store (× 46)') && (await p.textContent('#side')).includes('Installation per e-commerce site'));
   check('Generate button says Agreement (MSA + Order Form + DPA)', (await p.textContent('#btnGenerate')).includes('Agreement (MSA + Order Form + DPA)') && !(await p.isDisabled('#btnGenerate')));
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
+  await p.evaluate(() => { busyStart('Generating your documents…', ['Saving the deal', 'Reserving MSA, Order Form and DPA numbers', 'Creating the MSA, Order Form and DPA', 'Combining them into one Agreement', 'Converting to PDF', 'Saving to Drive, sharing and emailing the links']); });
+  await p.waitForTimeout(6500); await p.screenshot({ path: path.join(out, 'processing.png') });
+  check('Processing overlay shows spinner and step list', (await p.isVisible('.spinner')) && (await p.textContent('#busyBox')).includes('Reserving MSA'));
+  await p.evaluate(() => busyClose());
+  await p.click('#btnGenerate'); await p.waitForTimeout(800);
+  check('Agreement success dialog lists the documents', (await p.textContent('#busyBox')).includes('Documents created'));
+  await p.screenshot({ path: path.join(out, 'success-dialog.png') });
+  await p.click('#busyBack'); await p.waitForTimeout(400);
+  check('Back to My Deals returns to the list', await p.isVisible('#view-list') && !(await p.isVisible('#busy')));
+  await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(500);
   const g2 = await p.textContent('#genResult');
   check('Generated documents table has a Date column', (await p.textContent('#docList')).includes('Date') && (await p.textContent('#docList')).includes('15 Nov 2026'));
   check('Contract documents final (approval carried over)', g2.includes('Documents created') && g2.includes('OC-Q-2026-0001') && g2.includes('OC-DPA-2026-0001') && !g2.includes('OC-P-2026'));
@@ -197,6 +213,7 @@ const api = {
   check('Search filter works', (await p.textContent('#dealList')).includes('match the filter'));
   await p.fill('#fText', '');
   await p.click('nav a[data-view="dash"]'); await p.waitForTimeout(500);
+  check('Superadmin dashboard shows Partner performance', (await p.textContent('#dash')).includes('Partner performance') && (await p.textContent('#dash')).includes('Gulf Retail Advisors'));
   check('Dashboard shows Needs follow-up card with the idle deal', (await p.textContent('#dash')).includes('Needs follow-up') && (await p.textContent('#dash')).includes('75 days'));
   check('Dashboard shows tiles and breakdowns', (await p.textContent('#dash')).includes('Open pipeline') && (await p.textContent('#dash')).includes('Top open deals'));
   await p.screenshot({ path: path.join(out, 'dashboard.png'), fullPage: true });

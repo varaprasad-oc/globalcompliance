@@ -208,6 +208,13 @@ var SEED = {
     ]
   },
 
+  // Referral partners: INTERNAL ONLY (deal attribution + partner performance). Never printed in any document.
+  Partners: {
+    kind: 'master',
+    headers: ['partner_id', 'name', 'type', 'country', 'contact_name', 'contact_email', 'commission_pct', 'active', 'notes'],
+    rows: []
+  },
+
   SubProcessors: {
     kind: 'master',
     // To be completed by OC Tech (Sprint 0 input 0.9)

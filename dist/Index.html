@@ -64,6 +64,14 @@
     .wizard .form { flex:1; min-width:0; }
     .wizard .side { width:330px; flex-shrink:0; position:sticky; top:12px; }
     .bar { display:flex; gap:8px; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+    .busy { position:fixed; inset:0; background:rgba(30,20,60,.45); display:flex; align-items:center; justify-content:center; z-index:1000; padding:16px; }
+    .busy .box { background:#fff; border-radius:12px; padding:28px 30px; width:100%; max-width:560px; box-shadow:0 12px 40px rgba(0,0,0,.25); text-align:center; }
+    .busy .box table { text-align:left; margin-top:10px; }
+    .spinner { width:46px; height:46px; border:5px solid #e6dcfa; border-top-color:#7B3FE4; border-radius:50%; margin:0 auto 14px; animation:spin 0.9s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .busy ol { text-align:left; margin:14px auto 0; padding-left:22px; max-width:400px; color:#8a8f98; }
+    .busy ol li.done { color:#2e7d32; } .busy ol li.now { color:var(--ink); font-weight:bold; }
+    .busy .okmark { width:52px; height:52px; border-radius:50%; background:#2e7d32; color:#fff; font-size:30px; line-height:52px; margin:0 auto 12px; }
     .toast { position:fixed; bottom:20px; right:20px; background:var(--ink); color:#fff; padding:10px 16px; border-radius:6px; font-size:13px; }
     ul.tight { margin:4px 0; padding-left:18px; }
     @media (max-width:900px) { .wizard { flex-direction:column; } .wizard .side { width:100%; position:static; } }
@@ -115,6 +123,7 @@
               <h3>Contracting party</h3>
               <div class="grid">
                 <div class="wide"><label>OptCulture entity or local partner <span class="req">*</span> <span class="muted">(set from country; partners for countries without an OptCulture entity)</span></label><select data-f="entityId" id="entity"></select></div>
+                <div><label>Referral partner <span class="muted">(internal only – never shown in documents)</span></label><select data-f="referralPartnerId" id="partner"></select></div>
               </div>
               <div data-stage="CONTRACT">
                 <h3>Contract details</h3>
@@ -307,6 +316,7 @@
     </main>
   </div>
   <div id="toast" class="toast hidden"></div>
+  <div id="busy" class="busy hidden" role="dialog" aria-modal="true" aria-live="polite"><div class="box" id="busyBox"></div></div>
 
 <script>
   var APPROVAL = null, BOOT = null, LISTS = null, DEAL = null, STEP = 1, EVAL_TIMER = null, LAST = null;
@@ -316,6 +326,54 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function money(c, v) { return v === null || v === undefined ? '' : c + ' ' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
   function pct(v) { return (Math.round(v * 1000) / 10) + '%'; }
+  /* ---------- processing overlay: blocks the screen while documents are made, then shows the result ---------- */
+  var BUSY = { timer: null, tick: null, back: null };
+  function busyStart(title, steps) {
+    clearInterval(BUSY.timer); clearInterval(BUSY.tick); clearInterval(BUSY.back);
+    var t0 = Date.now(), i = 0;
+    function paint() {
+      $('busyBox').innerHTML = '<div class="spinner"></div><h2 style="margin:0">' + esc(title) + '</h2>' +
+        '<p class="muted" style="margin:6px 0 0">Please keep this tab open · <span id="busyElapsed">' + Math.floor((Date.now() - t0) / 1000) + 's</span></p>' +
+        '<ol>' + steps.map(function (st, k) { return '<li class="' + (k < i ? 'done' : k === i ? 'now' : '') + '">' + (k < i ? '✓ ' : '') + esc(st) + '</li>'; }).join('') + '</ol>';
+    }
+    paint();
+    $('busy').classList.remove('hidden');
+    BUSY.timer = setInterval(function () { if (i < steps.length - 1) { i++; paint(); } }, 6000);
+    BUSY.tick = setInterval(function () { var e = $('busyElapsed'); if (e) e.textContent = Math.floor((Date.now() - t0) / 1000) + 's'; }, 1000);
+  }
+  function busyClose() { clearInterval(BUSY.timer); clearInterval(BUSY.tick); clearInterval(BUSY.back); $('busy').classList.add('hidden'); }
+  /** Success: result + "Back to My Deals" (automatic after 10 s unless the user stays or opens a link). */
+  function busyDone(title, html, backTo) {
+    clearInterval(BUSY.timer); clearInterval(BUSY.tick); clearInterval(BUSY.back);
+    var left = 10;
+    $('busyBox').innerHTML = '<div class="okmark">✓</div><h2 style="margin:0">' + esc(title) + '</h2>' + html +
+      '<div class="bar" style="justify-content:center;margin-top:16px;gap:10px"><button class="secondary" id="busyStay">Stay on this deal</button>' +
+      '<button id="busyBack">Back to ' + (backTo === 'approvals' ? 'Approvals' : 'My Deals') + ' (<span id="busyLeft">' + left + '</span>)</button></div>';
+    function goBack() { busyClose(); show(backTo === 'approvals' ? 'appr' : 'list'); }
+    $('busyBack').onclick = goBack;
+    $('busyStay').onclick = busyClose;
+    qa('#busyBox a').forEach(function (a) { a.addEventListener('click', function () { clearInterval(BUSY.back); var b = $('busyBack'); if (b) b.textContent = 'Back to ' + (backTo === 'approvals' ? 'Approvals' : 'My Deals'); }); });
+    BUSY.back = setInterval(function () { left--; var l = $('busyLeft'); if (l) l.textContent = left; if (left <= 0) goBack(); }, 1000);
+  }
+  function busyFail(msg) {
+    clearInterval(BUSY.timer); clearInterval(BUSY.tick); clearInterval(BUSY.back);
+    $('busyBox').innerHTML = '<h2 style="margin:0" class="error">Could not finish</h2><p class="error">' + esc(msg) + '</p><p class="muted">Nothing was sent to the client. Fix the issue and try again.</p><button id="busyX">Close</button>';
+    $('busyX').onclick = busyClose;
+  }
+  function genSteps(deal) {
+    var com = stageOf(deal) === 'CONTRACT', agr = com && !(LAST && LAST.contract && LAST.contract.mode === 'ORDER_ONLY');
+    return ['Saving the deal'].concat(!com ? ['Creating the Proposal from the template', 'Filling prices, packages and features'] :
+      agr ? ['Reserving MSA, Order Form and DPA numbers', 'Creating the MSA, Order Form and DPA', 'Combining them into one Agreement'] : ['Creating the Quotation & Order Form', 'Filling prices and terms'])
+      .concat(['Converting to PDF', 'Saving to Drive, sharing and emailing the links']);
+  }
+  function resultsTable(g) {
+    return '<table><tr><th>Document</th><th>No.</th><th>Links</th></tr>' + g.results.map(function (r) {
+      return '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.docNo) + '</td><td>' + (r.error ? '<span class="error">' + esc(r.error) + '</span>' :
+        '<a href="' + esc(r.docUrl) + '" target="_blank">Google Doc</a>' + (r.pdfUrl ? ' · <a href="' + esc(r.pdfUrl) + '" target="_blank">PDF</a>' : '') +
+        (r.warnings && r.warnings.length ? '<br><span class="muted">' + r.warnings.length + ' warning(s): ' + esc(r.warnings.join('; ')) + '</span>' : '')) + '</td></tr>';
+    }).join('') + '</table>';
+  }
+
   function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.remove('hidden'); setTimeout(function () { t.classList.add('hidden'); }, 3000); }
   function run(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -358,6 +416,7 @@
     $('market').innerHTML = opts(b.markets); $('currency').innerHTML = opts(b.currencies);
     $('cMarket').innerHTML = opts(b.markets); $('cCurrency').innerHTML = opts(b.currencies);
     buildCalcInputs(b);
+    $('partner').innerHTML = '<option value="">— None (direct deal) —</option>' + (LISTS.partners || []).map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name + (p.country ? ' (' + p.country + ')' : '')) + '</option>'; }).join('');
     $('entity').innerHTML = '<option value="">— select —</option>' + LISTS.entities.map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.name + (e.type === 'Partner' ? ' (partner – ' + e.country + ')' : ' (' + e.country + ')')) + '</option>'; }).join('');
     $('clientList').innerHTML = LISTS.clients.map(function (c) { return '<option value="' + esc(c.legalName) + '">'; }).join('');
     $('pkgs').innerHTML = b.packages.map(function (p) { return '<label><input type="checkbox" data-arr="commercial.packages" value="' + esc(p) + '"> ' + esc(p) + '</label>'; }).join('');
@@ -898,6 +957,13 @@
       }
       h += (role !== 'Rep' ? breakdown('By Rep', s.byRep) : breakdown('By Status', s.byStatus)) + '</div>';
       h += '<div class="two">' + breakdown('By Country', s.byCountry) + breakdown('By Package', s.byPackage) + '</div>';
+      if (s.byPartner) {
+        var pk = Object.keys(s.byPartner).sort(function (x, y) { return (s.byPartner[y].wonUsd + s.byPartner[y].pipelineUsd) - (s.byPartner[x].wonUsd + s.byPartner[x].pipelineUsd); });
+        h += '<div class="card"><h3 style="margin-top:0">Partner performance <span class="muted" style="font-weight:normal;font-size:13px">– referral partners (internal)</span></h3>' +
+          (pk.length ? '<table><tr><th>Partner</th><th class="num">Deals</th><th class="num">Open</th><th class="num">Won</th><th class="num">Lost</th><th class="num">Win rate</th><th class="num">Pipeline (USD)</th><th class="num">Won (USD)</th></tr>' +
+            pk.map(function (k) { var r = s.byPartner[k]; return '<tr><td>' + esc(k) + '</td><td class="num">' + r.deals + '</td><td class="num">' + r.open + '</td><td class="num">' + r.won + '</td><td class="num">' + r.lost + '</td><td class="num">' + (r.winRate === null ? '—' : Math.round(r.winRate * 100) + '%') + '</td><td class="num">' + usd(r.pipelineUsd) + '</td><td class="num">' + usd(r.wonUsd) + '</td></tr>'; }).join('') + '</table>'
+            : '<p class="muted">No partner-referred deals in this period. Add partners in Admin → Partners; reps pick them on the deal (step 1).</p>') + '</div>';
+      }
       h += '<p class="muted" style="font-size:12px">Values are the first-year total of the Order Form package, converted to USD at the Master Sheet rates.</p>';
       $('dash').innerHTML = h;
       qa('[data-dopen]').forEach(function (b) { b.onclick = function (e) { e.preventDefault(); run('apiGetDeal', b.dataset.dopen).then(function (r) { APPROVAL = r.summary && r.summary.approvalStatus; fill(r.deal); show('deal'); go(4); loadDocs(r.deal.dealId); }); }; });
@@ -932,10 +998,14 @@
         b.onclick = function () {
           var comment = document.querySelector('[data-comment="' + b.dataset.aid + '"]').value;
           b.disabled = true; b.textContent = b.dataset.decide === 'Approved' ? 'Approving and generating…' : 'Rejecting…';
+          var appr = b.dataset.decide === 'Approved';
+          if (appr) busyStart('Approving and generating final documents…', ['Recording your approval', 'Creating the final documents', 'Converting to PDF', 'Sharing and emailing the rep']);
           run('apiDecideApproval', b.dataset.aid, b.dataset.decide, comment).then(function (r) {
-            toast(r.decision + (r.generation && r.generation.error ? ' – generation failed: ' + r.generation.error : r.decision === 'Approved' ? ' – final documents generated' : ''));
+            if (appr && r.generation && r.generation.results) busyDone('Approved – final documents created', resultsTable(r.generation) + '<p class="muted" style="margin-bottom:0">The rep has been emailed the links and PDFs.</p>', 'approvals');
+            else if (appr && r.generation && r.generation.error) busyFail('Approved, but generation failed: ' + r.generation.error);
+            else { busyClose(); toast(r.decision); }
             loadApprovals();
-          }).catch(function () { b.disabled = false; b.textContent = b.dataset.decide; });
+          }).catch(function (e) { b.disabled = false; b.textContent = b.dataset.decide; if (appr) busyFail(e.message); });
         };
       });
     });
@@ -959,10 +1029,12 @@
     $('btnConvert').classList.toggle('hidden', !canConvert);
   }
   function convertDeal(dealId) {
+    busyStart('Converting to Order Form…', ['Loading the accepted proposal', 'Keeping the proposal prices as the baseline', 'Opening the Order Form stage']);
     run('apiConvertToContract', dealId).then(function (r) {
+      busyClose();
       APPROVAL = r.summary && r.summary.approvalStatus; fill(r.deal); show('deal'); go(1); $('genResult').innerHTML = ''; loadDocs(r.deal.dealId);
       toast('Converted – add contract details and Order Form terms');
-    });
+    }).catch(function (e) { busyFail(e.message); });
   }
 
   // ---------- AI on/off ----------
@@ -1053,7 +1125,8 @@
   // ---------- generation ----------
   function generate() {
     var d = collect();
-    $('btnGenerate').disabled = true; $('genResult').innerHTML = '<p class="muted">Saving and generating documents… this takes about 1–2 minutes.</p>';
+    $('btnGenerate').disabled = true; $('genResult').innerHTML = '';
+    busyStart('Generating your documents…', genSteps(d));
     run('apiSaveDeal', d).then(function (saved) {
       APPROVAL = saved.summary && saved.summary.approvalStatus; fill(saved.deal);
       return run('apiGenerateDocs', saved.deal.dealId);
@@ -1061,16 +1134,14 @@
       APPROVAL = g.summary && g.summary.approvalStatus; fill(g.deal);
       var h = '<h3>' + (g.mode === 'DRAFT' ? 'Draft documents created' : 'Documents created') + '</h3>';
       if (g.message) h += '<p><span class="badge warn">' + esc(g.message) + '</span></p>';
-      h += '<table><tr><th>Document</th><th>No.</th><th>Links</th></tr>' + g.results.map(function (r) {
-        return '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.docNo) + '</td><td>' + (r.error ? '<span class="error">' + esc(r.error) + '</span>' :
-          '<a href="' + esc(r.docUrl) + '" target="_blank">Google Doc</a>' + (r.pdfUrl ? ' · <a href="' + esc(r.pdfUrl) + '" target="_blank">PDF</a>' : '') +
-          (r.warnings && r.warnings.length ? '<br><span class="muted">' + r.warnings.length + ' warning(s): ' + esc(r.warnings.join('; ')) + '</span>' : '')) + '</td></tr>';
-      }).join('') + '</table><p class="muted">The links were also emailed to the deal owner.</p>';
+      h += resultsTable(g) + '<p class="muted">The links were also emailed to the deal owner.</p>';
       if (g.mode === 'FINAL' && stageOf(g.deal) === 'PROPOSAL') h += '<p><b>Next:</b> send the proposal to the client. When they accept, click <b>Convert to Order Form</b> (below or in My Deals).</p>';
       $('genResult').innerHTML = h;
-      applyStage(stageOf(g.deal));
-      toast(g.mode === 'DRAFT' ? 'Drafts created – approval requested' : 'Documents created');
-    }).catch(function (e) { $('genResult').innerHTML = '<p class="error">' + esc(e.message) + '</p>'; })
+      applyStage(stageOf(g.deal)); loadDocs(g.deal.dealId);
+      var failed = g.results.filter(function (r) { return r.error; }).length;
+      busyDone(failed ? 'Finished with ' + failed + ' error(s)' : g.mode === 'DRAFT' ? 'Drafts created – sent to Amith for approval' : 'Documents created',
+        (g.message ? '<p><span class="badge warn">' + esc(g.message) + '</span></p>' : '') + resultsTable(g) + '<p class="muted" style="margin-bottom:0">Links were also emailed to you.</p>', 'list');
+    }).catch(function (e) { $('genResult').innerHTML = '<p class="error">' + esc(e.message) + '</p>'; busyFail(e.message); })
       .finally(function () { $('btnGenerate').disabled = false; });
   }
 

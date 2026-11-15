@@ -63,3 +63,22 @@ test('Dashboard period filter, 12-month trend and stale follow-up list', () => {
   const all = C().dashboardStats(rows, [], now, {});
   eq([all.deals, all.months], [4, 12]);
 });
+
+test('Partner performance (Superadmin): deals, open pipeline, won value, win rate per referral partner', (c) => {
+  const now = new Date('2026-11-15T00:00:00Z');
+  const row = (id, status, usd, pid) => ({ dealId: id, status, valueUsd: usd, referralPartnerId: pid, createdAt: '2026-11-01', updatedAt: '2026-11-10', createdBy: 'a@optculture.com' });
+  const rows = [row('1', 'Won', 1000, 'P1'), row('2', 'Lost', 500, 'P1'), row('3', 'Sent', 700, 'P1'), row('4', 'Draft', 300, ''), row('5', 'Won', 200, 'P2')];
+  const s = c.dashboardStats(rows, [], now, { partners: [{ partner_id: 'P1', name: 'Gulf Retail Advisors' }, { partner_id: 'P2', name: 'Cairo Tech' }] });
+  eq(s.byPartner['Gulf Retail Advisors'], { deals: 3, open: 1, won: 1, lost: 1, pipelineUsd: 700, wonUsd: 1000, winRate: 0.5 });
+  eq(Object.keys(s.byPartner).length, 2);
+  eq(c.dashboardStats(rows, [], now, {}).byPartner, undefined, 'not computed for other roles');
+});
+
+test('Referral partner is internal only: not used by any document data', (c) => {
+  const { sampleDeal } = require('./fixtures');
+  const d = JSON.parse(JSON.stringify(sampleDeal)); d.referralPartnerId = 'P-SECRET';
+  ['PROPOSAL', 'ORDER_FORM', 'TOS', 'DPA'].forEach((t) => {
+    const data = c.buildDocData(t, global.M, d, c.evaluateDeal(global.M, d).quote, { docNo: 'X' });
+    if (JSON.stringify(data).includes('P-SECRET')) throw new Error(t + ' contains the partner');
+  });
+});

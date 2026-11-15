@@ -225,6 +225,7 @@ function dealSummary(rec) {
     createdBy: rec.created_by, createdAt: rec.created_at instanceof Date ? rec.created_at.toISOString() : String(rec.created_at || ''), updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
     lastGeneratedAt: d.lastGeneratedAt || '',
+    referralPartnerId: d.referralPartnerId || '',
     stage: d.stage || '',
     orderPackage: op ? op.package : '',
     value: value,
@@ -281,6 +282,22 @@ function dashboardStats(summaries, users, now, opts) {
     if (sm.status === 'Contract generated') s.actions.notSent.push(mini(sm));
     if (sm.status === 'Rejected') s.actions.rejected.push(mini(sm));
   });
+  // partner performance (Superadmin only: opts.partners is passed for Superadmin)
+  if (opts.partners) {
+    var pName = {};
+    opts.partners.forEach(function (p) { pName[p.partner_id] = p.name; });
+    s.byPartner = {};
+    summaries.forEach(function (sm) {
+      if (!sm.referralPartnerId) return;
+      var k = pName[sm.referralPartnerId] || sm.referralPartnerId;
+      var r = s.byPartner[k] = s.byPartner[k] || { deals: 0, open: 0, won: 0, lost: 0, pipelineUsd: 0, wonUsd: 0, winRate: null };
+      r.deals++;
+      if (sm.status === 'Won') { r.won++; r.wonUsd += sm.valueUsd || 0; }
+      else if (sm.status === 'Lost') r.lost++;
+      else { r.open++; r.pipelineUsd += sm.valueUsd || 0; }
+    });
+    Object.keys(s.byPartner).forEach(function (k) { var r = s.byPartner[k]; r.winRate = (r.won + r.lost) ? Math.round(r.won / (r.won + r.lost) * 1000) / 1000 : null; });
+  }
   s.avgDiscountPct = discN ? Math.round(discSum / discN * 1000) / 1000 : 0;
   s.winRate = (f.won + f.lost) ? Math.round(f.won / (f.won + f.lost) * 1000) / 1000 : null;
   var reachedProposal = f.proposal + f.contract + f.won + f.lost;
