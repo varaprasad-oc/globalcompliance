@@ -81,9 +81,9 @@ function apiSetDealStatus(dealId, status) {
   return dealSummary(rec);
 }
 
-/** Manager: own + team. Superadmin: everyone. */
+/** Dashboard for every role. Rep: own deals. Manager: own + team. Superadmin: everyone. */
 function apiDashboard() {
-  var user = requireUser_([CONFIG.ROLES.MANAGER, CONFIG.ROLES.SUPERADMIN]);
+  var user = requireUser_();  // everyone: rep = own, manager = team, superadmin = all
   var users = getMaster().Users;
   var rows = readRecords_('Deals').filter(function (r) { return canAccessDeal(user, r.created_by, users); }).map(dealSummary);
   return { stats: dashboardStats(rows, users), deals: rows };

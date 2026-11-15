@@ -38,7 +38,7 @@ const api = {
       packages: q.packages.map((p) => ({ name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite, specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal })) }; }),
   apiDecideApproval: (aid, dec, comment) => { const a = store.approvals.find((x) => x.approvalId === aid); a.decision = dec; const r = store.deals[a.dealId]; r.approval_status = dec; r.status = dec === 'Approved' ? 'Approved' : 'Rejected';
     const gen = dec === 'Approved' ? api.apiGenerateDocs(a.dealId) : null; return { decision: dec, generation: gen }; },
-  apiDashboard: () => { const rows = Object.values(store.deals).map(ctx.dealSummary); return { stats: ctx.dashboardStats(rows, [{ email: 'varaprasad@optculture.com', name: 'Varaprasad SN' }]), deals: rows }; },
+  apiDashboard: () => { const rows = Object.values(store.deals).map(ctx.dealSummary); return { stats: ctx.dashboardStats(rows, [{ email: 'varaprasad@optculture.com', name: 'Varaprasad SN' }], new Date()), deals: rows }; },
   apiAdminTabs: () => Object.keys(ctx.ADMIN_TABS),
   apiAdminGetTab: (tab) => ({ tab, headers: ctx.SEED[tab].headers, key: ctx.ADMIN_TABS[tab].key, rows: M[tab].map((r, i) => Object.assign({ _row: i + 2 }, r)) }),
   apiAdminSaveRow: (tab, rowNo, obj) => { const r = ctx.coerceAdminRow(tab, ctx.SEED[tab].headers, obj); if (!r.ok) throw new Error(r.errors.join('; '));
@@ -59,9 +59,13 @@ const api = {
     window.google = { script: { get run() { return mk(); } } };
   });
   await p.goto('file://' + path.join(__dirname, '..', 'src/ui/Index.html'), { waitUntil: 'domcontentloaded' });
-  await p.waitForSelector('#view-deal:not(.hidden)');
+  await p.waitForSelector('#view-dash:not(.hidden)');
   const check = (name, cond) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) process.exitCode = 1; };
 
+  check('Real logo in header', (await p.getAttribute('header img', 'src')).startsWith('data:image/png;base64,'));
+  await p.waitForTimeout(400);
+  check('Dashboard is the home page for a rep/manager', (await p.textContent('#dash')).includes('Open pipeline') && (await p.textContent('#dash')).includes('Deal funnel'));
+  await p.click('#navNew'); await p.waitForTimeout(300);
   // ---------- Stage 1: proposal ----------
   check('New deal opens in Stage 1 (Proposal)', (await p.textContent('#stageBanner')).includes('Stage 1 of 2'));
   check('Contract fields hidden in Stage 1', !(await p.isVisible('[data-f="client.address"]')) && !(await p.isVisible('[data-f="client.billingContact.email"]')));
@@ -124,7 +128,8 @@ const api = {
 
   // ---------- Amith approves the proposal pricing ----------
   USER = { ok: true, email: 'amith.lulla@optculture.com', name: 'Amith Lulla', role: 'Superadmin' };
-  await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForSelector('#view-deal:not(.hidden)'); await p.waitForTimeout(500);
+  await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForSelector('#view-dash:not(.hidden)'); await p.waitForTimeout(600);
+  check('Superadmin dashboard shows the pending approval as an action', (await p.textContent('#dash')).includes('Waiting for Amith'));
   check('Approvals menu shows 1 pending', (await p.textContent('#apprCount')).trim() === '1');
   await p.click('nav a[data-view="appr"]'); await p.waitForTimeout(400);
   check('Approval card shows proposed USD 70 and special discount', (await p.textContent('#appr')).includes('6.7%'));
@@ -164,7 +169,8 @@ const api = {
   check('Search filter works', (await p.textContent('#dealList')).includes('match the filter'));
   await p.fill('#fText', '');
   await p.click('nav a[data-view="dash"]'); await p.waitForTimeout(500);
-  check('Dashboard shows tiles and breakdowns', (await p.textContent('#dash')).includes('Open pipeline'));
+  check('Dashboard shows tiles and breakdowns', (await p.textContent('#dash')).includes('Open pipeline') && (await p.textContent('#dash')).includes('Top open deals'));
+  await p.screenshot({ path: path.join(out, 'dashboard.png'), fullPage: true });
   await p.click('nav a[data-view="admin"]'); await p.waitForTimeout(500);
   await p.selectOption('#admTab', 'Packages'); await p.waitForTimeout(400);
   await p.click('[data-adm="1"]'); await p.waitForTimeout(200);

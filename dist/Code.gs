@@ -1081,7 +1081,7 @@ function dealSummary(rec) {
   return {
     dealId: rec.deal_id, clientName: rec.client_name, country: rec.country, packages: rec.packages,
     currency: rec.currency, status: rec.status, needsApproval: isTrue(rec.needs_approval), approvalStatus: rec.approval_status,
-    createdBy: rec.created_by, updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
+    createdBy: rec.created_by, createdAt: rec.created_at instanceof Date ? rec.created_at.toISOString() : String(rec.created_at || ''), updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
     stage: d.stage || '',
     orderPackage: op ? op.package : '',
@@ -1098,20 +1098,23 @@ function canSetStatus(currentStatus, newStatus) {
   return PIPELINE_STATUSES.indexOf(newStatus) !== -1 && GENERATED_STATUSES.indexOf(currentStatus) !== -1;
 }
 
-/** Dashboard numbers from deal summaries (amounts in USD for comparability). */
-function dashboardStats(summaries, users) {
+/** Dashboard numbers from deal summaries (amounts in USD for comparability). now = Date for the monthly window. */
+function dashboardStats(summaries, users, now) {
   var nameOf = {};
   (users || []).forEach(function (u) { nameOf[String(u.email).toLowerCase()] = u.name; });
-  var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, byStatus: {}, byRep: {}, byCountry: {}, byPackage: {} };
+  var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, winRate: null, conversionRate: null,
+    byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], actions: { toConvert: [], pending: [], notSent: [], rejected: [] } };
   var discSum = 0, discN = 0;
   function add(map, key, sm) {
     key = key || '—';
     map[key] = map[key] || { count: 0, valueUsd: 0 };
     map[key].count++; map[key].valueUsd += sm.valueUsd || 0;
   }
+  var f = { draft: 0, proposal: 0, contract: 0, won: 0, lost: 0 };
+  var mini = function (sm) { return { dealId: sm.dealId, clientName: sm.clientName, valueUsd: sm.valueUsd, status: sm.status, owner: nameOf[String(sm.createdBy).toLowerCase()] || sm.createdBy }; };
   summaries.forEach(function (sm) {
-    var open = ['Lost'].indexOf(sm.status) === -1;
-    if (open && sm.status !== 'Won') s.pipelineUsd += sm.valueUsd || 0;
+    var open = sm.status !== 'Won' && sm.status !== 'Lost';
+    if (open) s.pipelineUsd += sm.valueUsd || 0;
     if (sm.status === 'Won') s.wonUsd += sm.valueUsd || 0;
     if (sm.approvalStatus === 'Pending') s.pendingApprovals++;
     if (sm.orderPackage) { discSum += sm.discountPct || 0; discN++; }
@@ -1119,8 +1122,36 @@ function dashboardStats(summaries, users) {
     add(s.byRep, nameOf[String(sm.createdBy).toLowerCase()] || sm.createdBy, sm);
     add(s.byCountry, sm.country, sm);
     add(s.byPackage, sm.orderPackage, sm);
+    var stage = sm.stage || 'PROPOSAL';
+    if (sm.status === 'Won') f.won++;
+    else if (sm.status === 'Lost') f.lost++;
+    else if (stage === 'CONTRACT') f.contract++;
+    else if (['Proposal generated', 'Sent', 'Generated'].indexOf(sm.status) !== -1) f.proposal++;
+    else f.draft++;
+    if (stage === 'PROPOSAL' && ['Proposal generated', 'Sent'].indexOf(sm.status) !== -1) s.actions.toConvert.push(mini(sm));
+    if (sm.approvalStatus === 'Pending') s.actions.pending.push(mini(sm));
+    if (sm.status === 'Contract generated') s.actions.notSent.push(mini(sm));
+    if (sm.status === 'Rejected') s.actions.rejected.push(mini(sm));
   });
   s.avgDiscountPct = discN ? Math.round(discSum / discN * 1000) / 1000 : 0;
+  s.winRate = (f.won + f.lost) ? Math.round(f.won / (f.won + f.lost) * 1000) / 1000 : null;
+  var reachedProposal = f.proposal + f.contract + f.won + f.lost;
+  s.conversionRate = reachedProposal ? Math.round((f.contract + f.won) / reachedProposal * 1000) / 1000 : null;
+  s.funnel = [['Proposal draft', f.draft], ['Proposal sent', f.proposal], ['Order Form stage', f.contract], ['Won', f.won], ['Lost', f.lost]]
+    .map(function (x) { return { label: x[0], count: x[1] }; });
+  // last 6 months by creation month
+  now = now ? new Date(now) : new Date();
+  for (var i = 5; i >= 0; i--) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    s.byMonth.push({ key: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2), label: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()], count: 0, valueUsd: 0 });
+  }
+  summaries.forEach(function (sm) {
+    var k = String(sm.createdAt || '').slice(0, 7);
+    var m = s.byMonth.filter(function (x) { return x.key === k; })[0];
+    if (m) { m.count++; m.valueUsd += sm.valueUsd || 0; }
+  });
+  s.topOpen = summaries.filter(function (sm) { return sm.status !== 'Won' && sm.status !== 'Lost' && sm.valueUsd; })
+    .sort(function (a, b) { return b.valueUsd - a.valueUsd; }).slice(0, 5).map(mini);
   return s;
 }
 
@@ -2305,9 +2336,9 @@ function apiSetDealStatus(dealId, status) {
   return dealSummary(rec);
 }
 
-/** Manager: own + team. Superadmin: everyone. */
+/** Dashboard for every role. Rep: own deals. Manager: own + team. Superadmin: everyone. */
 function apiDashboard() {
-  var user = requireUser_([CONFIG.ROLES.MANAGER, CONFIG.ROLES.SUPERADMIN]);
+  var user = requireUser_();  // everyone: rep = own, manager = team, superadmin = all
   var users = getMaster().Users;
   var rows = readRecords_('Deals').filter(function (r) { return canAccessDeal(user, r.created_by, users); }).map(dealSummary);
   return { stats: dashboardStats(rows, users), deals: rows };
