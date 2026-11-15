@@ -66,8 +66,11 @@ const api = {
   check('Country sets market/currency/partner', (await p.inputValue('#market')) === 'Emerging' && (await p.inputValue('#currency')) === 'USD' && (await p.inputValue('#entity')) === 'P-EG-CONGINEER');
   await p.fill('[data-f="client.address"]', 'Cairo, Egypt');
   await p.fill('[data-f="client.businessContact.email"]', 'buyer@frg.example');
+  await p.waitForTimeout(900);
+  check('No pricing in summary before stores/packages', (await p.textContent('#side')).includes('Pricing appears once') && !(await p.textContent('#side')).includes('AED') && !(await p.textContent('#side')).includes('USD'));
   await p.click('#btnNext');
   await p.fill('[data-f="commercial.stores"]', '46'); await p.fill('[data-f="commercial.ecomSites"]', '1');
+  await p.check('input[data-arr="commercial.packages"][value="Loyalty"]');
   await p.check('input[data-arr="commercial.packages"][value="Advanced"]');
   await p.fill('input[data-map="commercial.specialPrices"][data-key="Loyalty"]', '70');
   await p.check('input[data-arr="commercial.addOns"][value="GIFT_CARDS"]');

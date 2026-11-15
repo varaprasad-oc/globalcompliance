@@ -416,7 +416,7 @@
   }
 
   function newDeal() {
-    fill({ client: { businessContact: {}, billingContact: {} }, commercial: { stores: 1, ecomSites: 0, packages: ['Loyalty'], termMonths: 12, billingCycle: 'Annual', paymentMethod: 'Bank Transfer', autoRenew: true },
+    fill({ client: { businessContact: {}, billingContact: {} }, commercial: { stores: '', ecomSites: 0, packages: [], termMonths: 12, billingCycle: 'Annual', paymentMethod: 'Bank Transfer', autoRenew: true },
       docs: { PROPOSAL: true, ORDER_FORM: true, TOS: true, DPA: true }, language: 'EN', proposal: { showConsulting: true }, narrative: {}, dpa: {} });
     $('clientPick').value = ''; $('genResult').innerHTML = ''; $('docList').innerHTML = ''; go(1); $('side').innerHTML = '<span class="muted">Fill in the client and commercials…</span>';
   }
@@ -440,11 +440,18 @@
     return run('apiEvaluateDeal', d).then(function (r) { LAST = r.evaluation; renderSide(r.evaluation, d); if (forReview || STEP === 4) renderReview(r.evaluation, r.deal); });
   }
   function renderSide(ev, d) {
-    var h = '';
+    var h = '', com = d.commercial || {};
+    var sites = Number(com.stores || 0) + Number(com.ecomSites || 0);
+    if (!(com.packages || []).length || sites < 1) {
+      var clientIssues = ev.errors.filter(function (e) { return !/package|store|site/i.test(e); });
+      $('side').innerHTML = (clientIssues.length ? '<ul class="tight error">' + clientIssues.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' : '') +
+        '<p class="muted">Pricing appears once you enter stores and choose packages (step 2).</p>';
+      return;
+    }
     if (ev.errors.length) h += '<p><span class="badge err">' + ev.errors.length + ' issue(s)</span></p><ul class="tight error">' + ev.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>';
     var q = ev.quote;
     if (q) {
-      h += '<p>' + q.sites + ' sites · ' + esc(q.market) + ' ' + pct(q.discounts.marketPct) + ' · ' + esc(q.discounts.slabLabel) + ' ' + pct(q.discounts.slabPct) + '</p>';
+      h += '<p>' + q.sites + (q.sites === 1 ? ' site · ' : ' sites · ') + esc(q.market) + ' ' + pct(q.discounts.marketPct) + ' · ' + esc(q.discounts.slabLabel) + ' ' + pct(q.discounts.slabPct) + '</p>';
       h += '<table><tr><th></th>' + q.packages.map(function (p) { return '<th class="num">' + esc(p.package) + '</th>'; }).join('') + '</tr>';
       [['/ site / month', function (p) { return money(q.currency, p.finalPricePerSite); }], ['Recurring / yr', function (p) { return money(q.currency, p.recurringAnnual); }],
         ['One-time', function (p) { return money(q.currency, p.oneTimeTotal); }], ['First year', function (p) { return '<b>' + money(q.currency, p.firstYearTotal) + '</b>'; }]]
