@@ -376,3 +376,29 @@ function assertCellSizes(rec) {
     if (String(rec[k] || '').length > 49000) throw new Error('This deal is too large to save (' + k + '). Shorten the narrative or notes.');
   });
 }
+
+/**
+ * Superadmin delete (test clean-up): what to remove for the given deals.
+ * records = { Deals, Documents, Approvals, Clients } as read from the sheet (each row has _row).
+ * Clients are removed only when no remaining deal uses them.
+ * Returns { rows: { tab: [rowNumbers desc] }, fileIds: [...], dealIds: [...], clientIds: [...] }.
+ */
+function planDealDeletion(dealIds, records) {
+  var ids = {}; (dealIds || []).forEach(function (d) { ids[d] = true; });
+  var deals = (records.Deals || []).filter(function (r) { return ids[r.deal_id]; });
+  var docs = (records.Documents || []).filter(function (r) { return ids[r.deal_id]; });
+  var appr = (records.Approvals || []).filter(function (r) { return ids[r.deal_id]; });
+  var gone = {}; deals.forEach(function (r) { if (r.client_id) gone[r.client_id] = true; });
+  var stillUsed = {};
+  (records.Deals || []).forEach(function (r) { if (!ids[r.deal_id] && r.client_id) stillUsed[r.client_id] = true; });
+  var clients = (records.Clients || []).filter(function (c) { return gone[c.client_id] && !stillUsed[c.client_id]; });
+  var desc = function (list) { return list.map(function (r) { return r._row; }).sort(function (a, b) { return b - a; }); };
+  var files = [];
+  docs.forEach(function (d) { [d.doc_file_id, d.pdf_file_id].forEach(function (f) { if (f && files.indexOf(String(f)) === -1) files.push(String(f)); }); });
+  return {
+    dealIds: deals.map(function (r) { return r.deal_id; }),
+    clientIds: clients.map(function (c) { return c.client_id; }),
+    fileIds: files,
+    rows: { Deals: desc(deals), Documents: desc(docs), Approvals: desc(appr), Clients: desc(clients) }
+  };
+}

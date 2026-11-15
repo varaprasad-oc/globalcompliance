@@ -70,3 +70,17 @@ test('Short ids: deals D-2026-0001, clients C-0001 (perpetual CLIENT numbering r
   const row = c.SEED.Numbering.rows.filter((r) => r[0] === 'CLIENT')[0];
   eq([row[1], row[2]], ['C', '-']);
 });
+
+test('Superadmin delete plan: deal rows, documents, files, approvals; client only if unused', (c) => {
+  const rec = {
+    Deals: [{ deal_id: 'D1', client_id: 'C1', _row: 2 }, { deal_id: 'D2', client_id: 'C1', _row: 3 }, { deal_id: 'D3', client_id: 'C2', _row: 4 }],
+    Documents: [{ deal_id: 'D1', doc_file_id: 'f1', pdf_file_id: 'p1', _row: 2 }, { deal_id: 'D3', doc_file_id: 'f3', pdf_file_id: '', _row: 3 }, { deal_id: 'D1', doc_file_id: 'f1b', pdf_file_id: '', _row: 4 }],
+    Approvals: [{ deal_id: 'D1', _row: 2 }, { deal_id: 'D2', _row: 3 }],
+    Clients: [{ client_id: 'C1', _row: 2 }, { client_id: 'C2', _row: 3 }]
+  };
+  const p = c.planDealDeletion(['D1', 'D3'], rec);
+  eq(p.dealIds, ['D1', 'D3']);
+  eq(p.fileIds, ['f1', 'p1', 'f3', 'f1b']);
+  eq(p.rows, { Deals: [4, 2], Documents: [4, 3, 2], Approvals: [2], Clients: [3] }, 'C1 kept: D2 still uses it; rows bottom-up');
+  eq(c.planDealDeletion(['D1', 'D2'], rec).clientIds, ['C1']);
+});

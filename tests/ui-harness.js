@@ -28,6 +28,7 @@ const api = {
     if (plan.mode === 'DRAFT' && rec.approval_status !== 'Pending') { nr.approval_status = 'Pending'; store.approvals.push({ approvalId: 'A-1', dealId: id, reasons: ev.approvalReasons }); }
     store.deals[id] = nr;
     return { mode: plan.mode, message: plan.reason, deal: d, results: plan.docTypes.map((t) => ({ type: t, label: t, docNo: d.docNos[t], docUrl: 'https://docs.google.com/x', pdfUrl: plan.mode === 'FINAL' ? 'https://drive.google.com/y' : '', warnings: [] })) }; },
+  apiDeleteDeals: (ids, txt) => { if (USER.role !== 'Superadmin' || txt !== 'DELETE') throw new Error('no'); ids.forEach((i) => delete store.deals[i]); return { deals: ids.length, clients: 0, files: 2, folders: 1, failedFiles: 0 }; },
   apiDealDocuments: () => [{ docNo: 'OC-P-2026-0001', type: 'PROPOSAL', label: 'Proposal', version: 1, status: 'Final', docUrl: 'x', pdfUrl: 'y', createdAt: '2026-11-15T09:30:00.000Z' }],
   apiConvertToContract: (id) => { const r = store.deals[id]; const st = JSON.parse(r.input_json); if (!ctx.canConvertToContract(st, r.status)) throw new Error('not allowed');
     const d = ctx.convertToContract(st, ctx.evaluateDeal(ctx.withSnapshot(M, st.pricingSnapshot), st).quote); const ev = ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d); const nr = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), r); nr.status = d.status; store.deals[id] = nr;
@@ -252,6 +253,13 @@ const api = {
   check('Calculator lists one-time lines separately', cr.includes('Set-up and Training') && cr.includes('Installation per store') && cr.includes('Data migration'));
   check('Calculator shows add-ons, optional services and first-year total', cr.includes('Add-ons / year') && cr.includes('Optional services') && cr.includes('First-year total') && !cr.includes('Engagement'));
   await p.screenshot({ path: path.join(out, 'calculator.png'), fullPage: true });
+  await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
+  check('Superadmin sees Delete selected (disabled until a deal is ticked)', (await p.isVisible('#btnDelDeals')) && (await p.isDisabled('#btnDelDeals')));
+  await p.check('[data-sel="D-TEST-2"]');
+  check('Delete button counts the selection', (await p.textContent('#btnDelDeals')).includes('(1)'));
+  p.once('dialog', (d) => d.accept('DELETE'));
+  await p.click('#btnDelDeals'); await p.waitForTimeout(600);
+  check('Deleted deal disappears from My Deals', !store.deals['D-TEST-2'] && !(await p.textContent('#dealList')).includes('D-TEST-2') && (await p.textContent('#dealList')).includes('D-TEST-1'));
   check('No page errors', errors.length === 0); if (errors.length) console.log(errors);
   await b.close();
 })();

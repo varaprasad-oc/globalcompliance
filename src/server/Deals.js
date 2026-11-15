@@ -193,3 +193,51 @@ function apiConvertToContract(dealId) {
     lock.releaseLock();
   }
 }
+
+/**
+ * Superadmin only: permanently remove deals (test clean-up) – deal rows, their documents (Google Docs + PDFs moved to
+ * Drive trash, recoverable for 30 days), approvals, the client record if no other deal uses it, and client folders
+ * left empty. Document numbers are not reused. Audit log entries are kept.
+ */
+function apiDeleteDeals(dealIds, confirmText) {
+  var user = requireUser_([CONFIG.ROLES.SUPERADMIN]);
+  if (confirmText !== 'DELETE') throw new Error('Type DELETE to confirm.');
+  if (!dealIds || !dealIds.length) throw new Error('Select at least one deal.');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var records = {};
+    ['Deals', 'Documents', 'Approvals', 'Clients'].forEach(function (t) { records[t] = readRecords_(t); });
+    var plan = planDealDeletion(dealIds, records);
+    var protectedIds = {};
+    ['ROOT_FOLDER_ID', 'FOLDER_PROPOSALS', 'FOLDER_ORDER_FORMS', 'FOLDER_LEGAL', 'FOLDER_TEMPLATES', 'FOLDER_ARCHIVE'].forEach(function (k) { var v = getProp_(k); if (v) protectedIds[v] = true; });
+    var folders = {}, trashed = 0, failed = [];
+    plan.fileIds.forEach(function (id) {
+      try {
+        var f = DriveApp.getFileById(id);
+        var ps = f.getParents();
+        while (ps.hasNext()) { var p = ps.next(); if (!protectedIds[p.getId()]) folders[p.getId()] = p; }
+        f.setTrashed(true); trashed++;
+      } catch (e) { failed.push(id); }
+    });
+    var foldersRemoved = 0;
+    Object.keys(folders).forEach(function (id) {
+      try {
+        var p = folders[id];
+        if (!p.searchFiles('trashed = false').hasNext() && !p.searchFolders('trashed = false').hasNext()) { p.setTrashed(true); foldersRemoved++; }
+      } catch (e) { console.warn('folder clean-up ' + id + ': ' + e); }
+    });
+    var ss = getMasterSpreadsheet_();
+    Object.keys(plan.rows).forEach(function (tab) {
+      var sh = ss.getSheetByName(tab);
+      plan.rows[tab].forEach(function (r) {  // bottom-up, so row numbers stay valid
+        if (sh.getMaxRows() - sh.getFrozenRows() <= 1) sh.getRange(r, 1, 1, sh.getLastColumn()).clearContent();  // Sheets can't delete the last unfrozen row
+        else sh.deleteRow(r);
+      });
+    });
+    audit_('DEALS_DELETED', { deals: plan.dealIds, clients: plan.clientIds, files: trashed, folders: foldersRemoved, failedFiles: failed, by: user.email }, plan.dealIds.join(','));
+    return { deals: plan.dealIds.length, clients: plan.clientIds.length, files: trashed, folders: foldersRemoved, failedFiles: failed.length };
+  } finally {
+    lock.releaseLock();
+  }
+}

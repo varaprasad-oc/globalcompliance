@@ -64,6 +64,7 @@
     .wizard .form { flex:1; min-width:0; }
     .wizard .side { width:330px; flex-shrink:0; position:sticky; top:12px; }
     .bar { display:flex; gap:8px; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+    button.danger { background:#c62828; color:#fff; border-color:#c62828; } button.danger:disabled { opacity:.45; }
     .busy { position:fixed; inset:0; background:rgba(30,20,60,.45); display:flex; align-items:center; justify-content:center; z-index:1000; padding:16px; }
     .busy .box { background:#fff; border-radius:12px; padding:28px 30px; width:100%; max-width:560px; box-shadow:0 12px 40px rgba(0,0,0,.25); text-align:center; }
     .busy .box table { text-align:left; margin-top:10px; }
@@ -249,7 +250,8 @@
           <div class="bar" style="margin-top:10px;justify-content:flex-start"><input id="fText" placeholder="Search client or deal id" style="width:260px"> <select id="fStatus" style="width:auto"><option value="">All statuses</option><option>Draft</option><option>Pending approval</option><option>Approved</option><option>Rejected</option><option>Generated</option><option>Sent</option><option>Won</option><option>Lost</option></select>
             <select id="fRange" style="width:auto"><option value="">All time</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="year">This year</option><option value="custom">Custom range…</option></select>
             <span id="fCustom" class="hidden"><input type="date" id="fFrom" style="width:auto"> – <input type="date" id="fTo" style="width:auto"></span>
-            <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink);margin:0"><input type="checkbox" id="fStale" style="width:auto"> Needs follow-up only</label></div>
+            <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink);margin:0"><input type="checkbox" id="fStale" style="width:auto"> Needs follow-up only</label>
+            <button class="danger role-admin hidden" id="btnDelDeals" disabled title="Superadmin only">Delete selected</button></div>
           <div id="dealList" style="margin-top:10px">Loading…</div>
           <div id="dealPager" class="bar" style="margin-top:10px"></div>
         </div>
@@ -451,6 +453,7 @@
     $('calcBtn').onclick = calc;
     $('fText').oninput = function () { PAGE = 1; renderList(); }; $('fStatus').onchange = function () { PAGE = 1; renderList(); };
     $('fRange').onchange = function () { $('fCustom').classList.toggle('hidden', $('fRange').value !== 'custom'); PAGE = 1; renderList(); };
+    $('btnDelDeals').onclick = deleteSelected;
     $('fFrom').onchange = $('fTo').onchange = $('fStale').onchange = function () { PAGE = 1; renderList(); };
     $('dPeriod').onchange = loadDash;
     [$('language')].forEach(function (el) { el.addEventListener('change', langHint); });
@@ -843,7 +846,24 @@
   }
 
   // ---------- my deals ----------
-  var ROWS = [], PAGE = 1, PAGE_SIZE = 20;
+  var ROWS = [], PAGE = 1, PAGE_SIZE = 20, SELECTED = {};
+  function updDel() { var n = Object.keys(SELECTED).length; $('btnDelDeals').disabled = !n; $('btnDelDeals').textContent = n ? 'Delete selected (' + n + ')' : 'Delete selected'; }
+  function deleteSelected() {
+    var ids = Object.keys(SELECTED);
+    if (!ids.length) return;
+    var names = ROWS.filter(function (r) { return SELECTED[r.dealId]; }).map(function (r) { return r.dealId + ' – ' + r.clientName; });
+    var typed = window.prompt('Permanently delete ' + ids.length + ' deal(s)?\n\n' + names.slice(0, 15).join('\n') + (names.length > 15 ? '\n… +' + (names.length - 15) + ' more' : '') +
+      '\n\nThis removes the deals, their approvals, the client record (if no other deal uses it) and moves all their Google Docs, PDFs and empty client folders to the Drive trash (recoverable for 30 days).\n\nType DELETE to confirm:');
+    if (typed === null) return;
+    if (typed.trim() !== 'DELETE') { toast('Not deleted – you must type DELETE'); return; }
+    busyStart('Deleting ' + ids.length + ' deal(s)…', ['Moving Google Docs and PDFs to the Drive trash', 'Removing empty client folders', 'Removing deal, approval and client records']);
+    run('apiDeleteDeals', ids, 'DELETE').then(function (r) {
+      SELECTED = {}; updDel();
+      busyClose();
+      toast('Deleted ' + r.deals + ' deal(s), ' + r.files + ' file(s), ' + r.folders + ' folder(s)' + (r.clients ? ', ' + r.clients + ' client(s)' : '') + (r.failedFiles ? ' – ' + r.failedFiles + ' file(s) could not be trashed' : ''));
+      loadList();
+    }).catch(function (e) { busyFail(e.message); });
+  }
   function activityOf(r) { return r.lastGeneratedAt || r.updatedAt || r.createdAt || ''; }
   function daysAgo(iso) { var t = Date.parse(iso || ''); return isNaN(t) ? 0 : Math.floor((Date.now() - t) / 86400000); }
   function isStale(r) { return r.status !== 'Won' && r.status !== 'Lost' && daysAgo(r.updatedAt) >= ((LISTS && LISTS.staleDays) || 60); }
@@ -869,15 +889,22 @@
     rows = rows.slice(start, start + PAGE_SIZE);
     if (!rows.length) { $('dealList').innerHTML = '<p class="muted">No deals' + (ROWS.length ? ' match the filter' : ' yet') + '.</p>'; return; }
     var mine = BOOT.user.email, showOwner = BOOT.user.role !== 'Rep';
-    $('dealList').innerHTML = '<table><tr><th>Client</th><th>Country</th><th>Package</th><th class="num">First-year value</th><th>Status</th><th>Approval</th><th>Last activity</th>' +
+    var isSA = BOOT.user.role === 'Superadmin';
+    $('dealList').innerHTML = '<table><tr>' + (isSA ? '<th style="width:28px"><input type="checkbox" id="selAllDeals" style="width:auto" title="Select all on this page"></th>' : '') + '<th>Client</th><th>Country</th><th>Package</th><th class="num">First-year value</th><th>Status</th><th>Approval</th><th>Last activity</th>' +
       (showOwner ? '<th>Owner</th>' : '') + '<th></th></tr>' + rows.map(function (r) {
-        return '<tr><td><a href="#" class="dealname" data-open="' + esc(r.dealId) + '">' + esc(r.clientName) + '</a><br><span class="muted">' + esc(r.dealId) + ' · v' + r.version + ' · ' + ((r.stage || 'PROPOSAL') === 'CONTRACT' ? 'Order Form stage' : 'Proposal stage') + '</span></td><td>' + esc(r.country) + '</td><td>' + esc(r.orderPackage || r.packages) + '</td>' +
+        return '<tr>' + (isSA ? '<td><input type="checkbox" data-sel="' + esc(r.dealId) + '" style="width:auto"' + (SELECTED[r.dealId] ? ' checked' : '') + '></td>' : '') + '<td><a href="#" class="dealname" data-open="' + esc(r.dealId) + '">' + esc(r.clientName) + '</a><br><span class="muted">' + esc(r.dealId) + ' · v' + r.version + ' · ' + ((r.stage || 'PROPOSAL') === 'CONTRACT' ? 'Order Form stage' : 'Proposal stage') + '</span></td><td>' + esc(r.country) + '</td><td>' + esc(r.orderPackage || r.packages) + '</td>' +
           '<td class="num">' + (r.value ? money(r.currency, r.value) : '') + '</td><td>' + esc(r.status) + (isStale(r) ? '<br><span class="badge warn">⚠ No update ' + daysAgo(r.updatedAt) + ' days</span>' : '') + '</td><td>' +
           (r.needsApproval ? '<span class="badge ' + (r.approvalStatus === 'Approved' ? 'ok' : r.approvalStatus === 'Rejected' ? 'err' : 'warn') + '">' + esc(r.approvalStatus) + '</span>' : '<span class="badge ok">Not required</span>') +
           '</td><td>' + esc(String(activityOf(r)).slice(0, 10)) + '<br><span class="muted" style="font-size:12px">' + (r.lastGeneratedAt ? 'generated' : 'updated') + '</span></td>' + (showOwner ? '<td>' + esc(r.createdBy === mine ? 'Me' : r.createdBy) + '</td>' : '') +
           '<td style="text-align:right">' + rowMenu(r) + '</td></tr>';
       }).join('') + '</table>';
     wireMenus();
+    if (isSA) {
+      qa('[data-sel]').forEach(function (c) { c.onchange = function () { if (c.checked) SELECTED[c.dataset.sel] = true; else delete SELECTED[c.dataset.sel]; updDel(); }; });
+      $('selAllDeals').checked = rows.length > 0 && rows.every(function (r) { return SELECTED[r.dealId]; });
+      $('selAllDeals').onchange = function () { var on = $('selAllDeals').checked; rows.forEach(function (r) { if (on) SELECTED[r.dealId] = true; else delete SELECTED[r.dealId]; }); qa('[data-sel]').forEach(function (c) { c.checked = on; }); updDel(); };
+      updDel();
+    }
     qa('[data-open]').forEach(function (b) { b.onclick = function (e) { if (e) e.preventDefault(); run('apiGetDeal', b.dataset.open).then(function (r) { APPROVAL = r.summary && r.summary.approvalStatus; fill(r.deal); show('deal'); go(4); loadDocs(r.deal.dealId); }); }; });
     qa('[data-clone]').forEach(function (b) { b.onclick = function () { run('apiCloneDeal', b.dataset.clone).then(function (r) { APPROVAL = null; fill(r.deal); show('deal'); go(1); toast('Cloned as ' + r.deal.dealId); }); }; });
     qa('[data-convert]').forEach(function (b) { b.onclick = function () { convertDeal(b.dataset.convert); }; });

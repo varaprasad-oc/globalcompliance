@@ -58,3 +58,8 @@
 ## 27. Step 2 order + subscription special price as a table
 - Order (Varaprasad's choice): Pricing basis → One-time fees (current & special) → Optional one-time services → Packages to quote → What's included & add-ons → **Subscription price – current & special** (table: Package | Standard / site / month | Special price | "Needs approval" badge, rows only for ticked packages) → Platform messaging.
 - Harness checks the section order, the standard price (USD 75) and the approval badge.
+
+## 28. Superadmin delete (test clean-up)
+- My Deals (Superadmin only): tick boxes per deal + "select all on this page", "Delete selected (N)" button, confirm by typing DELETE.
+- Server `apiDeleteDeals` (Superadmin only, re-checks role and the DELETE confirmation): moves every Google Doc and PDF of the deals (incl. archived versions) to the Drive trash (recoverable 30 days), trashes client folders left empty (never the root/type folders), deletes Deals, Documents and Approvals rows, and the Clients row if no other deal uses that client. Audit log keeps a DEALS_DELETED entry; document numbers are not reused.
+- Tests: planner unit test (rows bottom-up, client kept when still used); harness: button visible for Superadmin, selection count, deal removed.
