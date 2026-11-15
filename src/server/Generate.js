@@ -53,6 +53,7 @@ function generateForDeal_(dealId, user) {
 
   // save deal: numbers, status, approval request
   deal.status = plan.status;
+  deal.lastGeneratedAt = new Date().toISOString();
   var approval = rec.approval_status;
   if (plan.mode === 'DRAFT' && approval !== 'Pending') {
     appendRecord_('Approvals', { approval_id: newId_('A'), deal_id: dealId, version: deal.version, requested_by: user.email, requested_at: new Date(),

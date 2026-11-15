@@ -193,6 +193,7 @@ function dealSummary(rec) {
     currency: rec.currency, status: rec.status, needsApproval: isTrue(rec.needs_approval), approvalStatus: rec.approval_status,
     createdBy: rec.created_by, createdAt: rec.created_at instanceof Date ? rec.created_at.toISOString() : String(rec.created_at || ''), updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
+    lastGeneratedAt: d.lastGeneratedAt || '',
     stage: d.stage || '',
     orderPackage: op ? op.package : '',
     value: value,
@@ -209,11 +210,17 @@ function canSetStatus(currentStatus, newStatus) {
 }
 
 /** Dashboard numbers from deal summaries (amounts in USD for comparability). now = Date for the monthly window. */
-function dashboardStats(summaries, users, now) {
+function dashboardStats(summaries, users, now, opts) {
+  opts = opts || {};
+  now = now ? new Date(now) : new Date();
+  var staleDays = Number(opts.staleDays || 60), periodDays = Number(opts.periodDays || 0);
+  var daysSince = function (iso) { var t = Date.parse(iso || ''); return isNaN(t) ? 0 : Math.floor((now - t) / 86400000); };
+  var allRows = summaries;
+  if (periodDays) summaries = summaries.filter(function (sm) { return daysSince(sm.lastGeneratedAt || sm.updatedAt || sm.createdAt) <= periodDays; });
   var nameOf = {};
   (users || []).forEach(function (u) { nameOf[String(u.email).toLowerCase()] = u.name; });
   var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, winRate: null, conversionRate: null,
-    byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], actions: { toConvert: [], pending: [], notSent: [], rejected: [] } };
+    byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], stale: [], staleDays: staleDays, periodDays: periodDays, actions: { toConvert: [], pending: [], notSent: [], rejected: [] } };
   var discSum = 0, discN = 0;
   function add(map, key, sm) {
     key = key || '—';
@@ -249,9 +256,10 @@ function dashboardStats(summaries, users, now) {
   s.conversionRate = reachedProposal ? Math.round((f.contract + f.won) / reachedProposal * 1000) / 1000 : null;
   s.funnel = [['Proposal draft', f.draft], ['Proposal sent', f.proposal], ['Order Form stage', f.contract], ['Won', f.won], ['Lost', f.lost]]
     .map(function (x) { return { label: x[0], count: x[1] }; });
-  // last 6 months by creation month
-  now = now ? new Date(now) : new Date();
-  for (var i = 5; i >= 0; i--) {
+  // monthly trend: 6 months, or 12 for long periods
+  var months = !periodDays || periodDays > 180 ? 12 : 6;
+  s.months = months;
+  for (var i = months - 1; i >= 0; i--) {
     var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     s.byMonth.push({ key: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2), label: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()], count: 0, valueUsd: 0 });
   }
@@ -262,6 +270,10 @@ function dashboardStats(summaries, users, now) {
   });
   s.topOpen = summaries.filter(function (sm) { return sm.status !== 'Won' && sm.status !== 'Lost' && sm.valueUsd; })
     .sort(function (a, b) { return b.valueUsd - a.valueUsd; }).slice(0, 5).map(mini);
+  // follow-up: open deals with no update for staleDays+ (regardless of the period filter)
+  s.stale = allRows.filter(function (sm) { return sm.status !== 'Won' && sm.status !== 'Lost' && daysSince(sm.updatedAt) >= staleDays; })
+    .map(function (sm) { var x = mini(sm); x.days = daysSince(sm.updatedAt); x.stage = sm.stage || 'PROPOSAL'; return x; })
+    .sort(function (a, b) { return b.days - a.days; });
   return s;
 }
 

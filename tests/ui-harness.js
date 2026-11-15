@@ -12,7 +12,7 @@ const api = {
   apiBootstrap: () => ({ user: USER, lists: { features: ctx.featureMatrix(M, M.Packages.map((r) => r.package)), markets: M.Markets.map((r) => r.market), currencies: M.Currencies.map((r) => r.code), packages: M.Packages.map((r) => r.package), countries: M.Countries,
     addOns: M.PriceItems.filter((r) => r.category === 'ADDON').map((r) => ({ id: r.item_id, label: r.label, packages: r.packages })),
     oneTimeItems: M.PriceItems.filter((r) => r.category === 'ONE_TIME' && r.item_id !== 'STORE_INSTALL').map((r) => ({ id: r.item_id, label: r.label, unit: r.unit })) } }),
-  apiFormLists: () => ({ aiEnabled: true, languages: ctx.availableLanguages(M), countries: M.Countries, entities: M.Entities.map((e) => ({ id: e.entity_id, name: e.legal_name, type: e.type, country: e.country })),
+  apiFormLists: () => ({ staleDays: 60, aiEnabled: true, languages: ctx.availableLanguages(M), countries: M.Countries, entities: M.Entities.map((e) => ({ id: e.entity_id, name: e.legal_name, type: e.type, country: e.country })),
     commsTiers: M.CommsTiers.map((t) => ({ id: t.tier_id, messages: t.messages, label: t.label })), clients: store.clients }),
   apiEvaluateDeal: (d) => { const m = ctx.withSnapshot(M, d.refreshPrices ? null : d.pricingSnapshot); ctx.applyCountryDefaults(m, d); return { deal: d, evaluation: ctx.evaluateDeal(m, d) }; },
   apiSaveDeal: (d) => { const ex = d.dealId ? store.deals[d.dealId] : null; d = ctx.protectDealFields(d, ex ? JSON.parse(ex.input_json) : null, ex ? ex.status : null, ctx.pricingSnapshot(M)); ctx.applyCountryDefaults(M, d); if (!d.dealId) d.dealId = 'D-TEST-' + (++seq);
@@ -38,7 +38,7 @@ const api = {
       packages: q.packages.map((p) => ({ name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite, specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal })) }; }),
   apiDecideApproval: (aid, dec, comment) => { const a = store.approvals.find((x) => x.approvalId === aid); a.decision = dec; const r = store.deals[a.dealId]; r.approval_status = dec; r.status = dec === 'Approved' ? 'Approved' : 'Rejected';
     const gen = dec === 'Approved' ? api.apiGenerateDocs(a.dealId) : null; return { decision: dec, generation: gen }; },
-  apiDashboard: () => { const rows = Object.values(store.deals).map(ctx.dealSummary); return { stats: ctx.dashboardStats(rows, [{ email: 'varaprasad@optculture.com', name: 'Varaprasad SN' }], new Date()), deals: rows }; },
+  apiDashboard: () => { const rows = Object.values(store.deals).map(ctx.dealSummary); return { stats: ctx.dashboardStats(rows, [{ email: 'varaprasad@optculture.com', name: 'Varaprasad SN' }], new Date(), { periodDays: (arguments[0] || {}).periodDays, staleDays: 60 }), deals: rows }; },
   apiAdminTabs: () => Object.keys(ctx.ADMIN_TABS),
   apiAdminGetTab: (tab) => ({ tab, headers: ctx.SEED[tab].headers, key: ctx.ADMIN_TABS[tab].key, rows: M[tab].map((r, i) => Object.assign({ _row: i + 2 }, r)) }),
   apiAdminSaveRow: (tab, rowNo, obj) => { const r = ctx.coerceAdminRow(tab, ctx.SEED[tab].headers, obj); if (!r.ok) throw new Error(r.errors.join('; '));
@@ -124,7 +124,15 @@ const api = {
   check('My Deals lists the deal in Proposal stage', (await p.textContent('#dealList')).includes('Proposal stage'));
   await menu('D-TEST-1', '[data-clone="D-TEST-1"]'); await p.waitForTimeout(400);
   check('Clone opens a new draft', (await p.textContent('#dealTitle')).includes('D-TEST-2'));
+  store.deals['D-TEST-2'].updated_at = new Date(Date.now() - 75 * 86400000).toISOString(); store.deals['D-TEST-2'].created_at = store.deals['D-TEST-2'].updated_at;
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(300);
+  check('Stale deal highlighted with days idle', (await p.textContent('#dealList')).includes('No update 75 days'));
+  check('Newest activity first', (await p.$$eval('#dealList a.dealname', (a) => a.map((x) => x.textContent)))[0] === 'Fashion Retail Group S.A.E.' && (await p.textContent('#dealList')).indexOf('D-TEST-1') < (await p.textContent('#dealList')).indexOf('D-TEST-2'));
+  await p.selectOption('#fRange', '30'); await p.waitForTimeout(200);
+  check('Date range hides the 75-day-old deal', !(await p.textContent('#dealList')).includes('D-TEST-2'));
+  await p.selectOption('#fRange', ''); await p.check('#fStale'); await p.waitForTimeout(200);
+  check('Needs follow-up filter shows only the stale deal', (await p.textContent('#dealList')).includes('D-TEST-2') && !(await p.textContent('#dealList')).includes('D-TEST-1 '));
+  await p.uncheck('#fStale');
   await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(500);
   check('Open restores special price', (await p.inputValue('input[data-map="commercial.specialPrices"][data-key="Loyalty"]')) === '70');
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
@@ -185,6 +193,7 @@ const api = {
   check('Search filter works', (await p.textContent('#dealList')).includes('match the filter'));
   await p.fill('#fText', '');
   await p.click('nav a[data-view="dash"]'); await p.waitForTimeout(500);
+  check('Dashboard shows Needs follow-up card with the idle deal', (await p.textContent('#dash')).includes('Needs follow-up') && (await p.textContent('#dash')).includes('75 days'));
   check('Dashboard shows tiles and breakdowns', (await p.textContent('#dash')).includes('Open pipeline') && (await p.textContent('#dash')).includes('Top open deals'));
   await p.screenshot({ path: path.join(out, 'dashboard.png'), fullPage: true });
   await p.click('nav a[data-view="admin"]'); await p.waitForTimeout(500);

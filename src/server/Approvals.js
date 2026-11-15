@@ -82,11 +82,11 @@ function apiSetDealStatus(dealId, status) {
 }
 
 /** Dashboard for every role. Rep: own deals. Manager: own + team. Superadmin: everyone. */
-function apiDashboard() {
+function apiDashboard(opts) {
   var user = requireUser_();  // everyone: rep = own, manager = team, superadmin = all
   var users = getMaster().Users;
   var rows = readRecords_('Deals').filter(function (r) { return canAccessDeal(user, r.created_by, users); }).map(dealSummary);
-  return { stats: dashboardStats(rows, users), deals: rows };
+  return { stats: dashboardStats(rows, users, new Date(), { periodDays: (opts || {}).periodDays || 0, staleDays: staleDaysSetting_() }), deals: rows };
 }
 
 /** Superadmin tool: re-apply file sharing (owner + current manager) on every final/draft document, e.g. after a team change. */
@@ -103,4 +103,9 @@ function apiResyncSharing() {
   });
   audit_('SHARING_RESYNC', { documents: n });
   return n;
+}
+
+function staleDaysSetting_() {
+  var r = (getMaster().CommercialTerms || []).filter(function (x) { return x.key === 'stale_days'; })[0];
+  return r && Number(r.value) > 0 ? Number(r.value) : 60;
 }

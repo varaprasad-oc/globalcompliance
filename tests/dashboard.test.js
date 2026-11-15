@@ -46,8 +46,20 @@ test('Dashboard funnel, win/conversion rates, monthly trend, top deals and actio
   eq(s.funnel.map((f) => f.count), [2, 1, 1, 1, 1], 'draft incl. pending, sent, contract, won, lost');
   eq(s.winRate, 0.5);
   eq(s.conversionRate, 0.5, '(contract + won) / reached proposal = 2/4');
-  eq(s.byMonth.map((m) => m.label), ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov']);
-  eq(s.byMonth[5].count, 3);
+  eq(s.byMonth.slice(-6).map((m) => m.label), ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov']);
+  eq(s.byMonth[s.byMonth.length - 1].count, 3);
   eq(s.topOpen.map((t) => t.dealId), ['C', 'B', 'F']);
   eq([s.actions.toConvert.map((x) => x.dealId), s.actions.pending.map((x) => x.dealId), s.actions.notSent.map((x) => x.dealId)], [['B'], ['F'], ['C']]);
+});
+
+test('Dashboard period filter, 12-month trend and stale follow-up list', () => {
+  const mk = (id, status, updated, gen) => ({ dealId: id, clientName: id, status, stage: 'PROPOSAL', valueUsd: 1000, createdAt: updated, updatedAt: updated, lastGeneratedAt: gen || '', approvalStatus: 'Not required', createdBy: 'r@optculture.com', orderPackage: 'Loyalty', discountPct: 0 });
+  const rows = [mk('NEW', 'Proposal generated', '2026-11-10'), mk('OLD', 'Proposal generated', '2026-08-01'), mk('WON', 'Won', '2026-06-01'), mk('MID', 'Draft', '2026-09-20')];
+  const now = new Date('2026-11-15');
+  const s30 = C().dashboardStats(rows, [], now, { periodDays: 30, staleDays: 60 });
+  eq(s30.deals, 1, 'only NEW in last 30 days');
+  eq(s30.months, 6);
+  eq(s30.stale.map((x) => [x.dealId, x.days]), [['OLD', 106]], 'stale ignores period; won excluded; 56-day MID not yet stale');
+  const all = C().dashboardStats(rows, [], now, {});
+  eq([all.deals, all.months], [4, 12]);
 });

@@ -284,6 +284,7 @@ var SEED = {
       ['default_hosting_region', '', 'DPA hosting region (to be confirmed by OC Tech)'],
       ['brand_table_header_bg', '#7B3FE4', 'Table header background (white bold text) – all documents'],
       ['brand_heading_color', '#B6262B', 'Heading colour (OptCulture red)'],
+      ['stale_days', 60, 'Open deals with no update for this many days are highlighted for follow-up'],
       ['optculture_logo_file_id', '1dURALQP4yA58Fp5eSZY509NrB3gqagb9', 'OptCulture logo (PNG in _Templates) – {{IMAGE:OptCultureLogo}}']
     ]
   },
@@ -1111,6 +1112,7 @@ function dealSummary(rec) {
     currency: rec.currency, status: rec.status, needsApproval: isTrue(rec.needs_approval), approvalStatus: rec.approval_status,
     createdBy: rec.created_by, createdAt: rec.created_at instanceof Date ? rec.created_at.toISOString() : String(rec.created_at || ''), updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
+    lastGeneratedAt: d.lastGeneratedAt || '',
     stage: d.stage || '',
     orderPackage: op ? op.package : '',
     value: value,
@@ -1127,11 +1129,17 @@ function canSetStatus(currentStatus, newStatus) {
 }
 
 /** Dashboard numbers from deal summaries (amounts in USD for comparability). now = Date for the monthly window. */
-function dashboardStats(summaries, users, now) {
+function dashboardStats(summaries, users, now, opts) {
+  opts = opts || {};
+  now = now ? new Date(now) : new Date();
+  var staleDays = Number(opts.staleDays || 60), periodDays = Number(opts.periodDays || 0);
+  var daysSince = function (iso) { var t = Date.parse(iso || ''); return isNaN(t) ? 0 : Math.floor((now - t) / 86400000); };
+  var allRows = summaries;
+  if (periodDays) summaries = summaries.filter(function (sm) { return daysSince(sm.lastGeneratedAt || sm.updatedAt || sm.createdAt) <= periodDays; });
   var nameOf = {};
   (users || []).forEach(function (u) { nameOf[String(u.email).toLowerCase()] = u.name; });
   var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, winRate: null, conversionRate: null,
-    byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], actions: { toConvert: [], pending: [], notSent: [], rejected: [] } };
+    byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], stale: [], staleDays: staleDays, periodDays: periodDays, actions: { toConvert: [], pending: [], notSent: [], rejected: [] } };
   var discSum = 0, discN = 0;
   function add(map, key, sm) {
     key = key || '—';
@@ -1167,9 +1175,10 @@ function dashboardStats(summaries, users, now) {
   s.conversionRate = reachedProposal ? Math.round((f.contract + f.won) / reachedProposal * 1000) / 1000 : null;
   s.funnel = [['Proposal draft', f.draft], ['Proposal sent', f.proposal], ['Order Form stage', f.contract], ['Won', f.won], ['Lost', f.lost]]
     .map(function (x) { return { label: x[0], count: x[1] }; });
-  // last 6 months by creation month
-  now = now ? new Date(now) : new Date();
-  for (var i = 5; i >= 0; i--) {
+  // monthly trend: 6 months, or 12 for long periods
+  var months = !periodDays || periodDays > 180 ? 12 : 6;
+  s.months = months;
+  for (var i = months - 1; i >= 0; i--) {
     var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     s.byMonth.push({ key: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2), label: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()], count: 0, valueUsd: 0 });
   }
@@ -1180,6 +1189,10 @@ function dashboardStats(summaries, users, now) {
   });
   s.topOpen = summaries.filter(function (sm) { return sm.status !== 'Won' && sm.status !== 'Lost' && sm.valueUsd; })
     .sort(function (a, b) { return b.valueUsd - a.valueUsd; }).slice(0, 5).map(mini);
+  // follow-up: open deals with no update for staleDays+ (regardless of the period filter)
+  s.stale = allRows.filter(function (sm) { return sm.status !== 'Won' && sm.status !== 'Lost' && daysSince(sm.updatedAt) >= staleDays; })
+    .map(function (sm) { var x = mini(sm); x.days = daysSince(sm.updatedAt); x.stage = sm.stage || 'PROPOSAL'; return x; })
+    .sort(function (a, b) { return b.days - a.days; });
   return s;
 }
 
@@ -1677,6 +1690,7 @@ function apiFormLists() {
     entities: m.Entities.filter(function (e) { return isTrue(e.active); }).map(function (e) { return { id: e.entity_id, name: e.legal_name, type: e.type, country: e.country }; }),
     languages: availableLanguages(m),
     aiEnabled: !!getProp_('GCP_PROJECT_ID'),
+    staleDays: staleDaysSetting_(),
     commsTiers: (m.CommsTiers || []).filter(function (t) { return isTrue(t.active); }).map(function (t) { return { id: t.tier_id, messages: t.messages, label: t.label }; }),
     clients: readRecords_('Clients').filter(function (r) { return canAccessDeal(user, r.owner_email, m.Users); }).map(function (r) {
       return { clientId: r.client_id, legalName: r.legal_name, shortName: r.short_name, country: r.country, address: r.address,
@@ -2266,6 +2280,7 @@ function generateForDeal_(dealId, user) {
 
   // save deal: numbers, status, approval request
   deal.status = plan.status;
+  deal.lastGeneratedAt = new Date().toISOString();
   var approval = rec.approval_status;
   if (plan.mode === 'DRAFT' && approval !== 'Pending') {
     appendRecord_('Approvals', { approval_id: newId_('A'), deal_id: dealId, version: deal.version, requested_by: user.email, requested_at: new Date(),
@@ -2420,11 +2435,11 @@ function apiSetDealStatus(dealId, status) {
 }
 
 /** Dashboard for every role. Rep: own deals. Manager: own + team. Superadmin: everyone. */
-function apiDashboard() {
+function apiDashboard(opts) {
   var user = requireUser_();  // everyone: rep = own, manager = team, superadmin = all
   var users = getMaster().Users;
   var rows = readRecords_('Deals').filter(function (r) { return canAccessDeal(user, r.created_by, users); }).map(dealSummary);
-  return { stats: dashboardStats(rows, users), deals: rows };
+  return { stats: dashboardStats(rows, users, new Date(), { periodDays: (opts || {}).periodDays || 0, staleDays: staleDaysSetting_() }), deals: rows };
 }
 
 /** Superadmin tool: re-apply file sharing (owner + current manager) on every final/draft document, e.g. after a team change. */
@@ -2441,6 +2456,11 @@ function apiResyncSharing() {
   });
   audit_('SHARING_RESYNC', { documents: n });
   return n;
+}
+
+function staleDaysSetting_() {
+  var r = (getMaster().CommercialTerms || []).filter(function (x) { return x.key === 'stale_days'; })[0];
+  return r && Number(r.value) > 0 ? Number(r.value) : 60;
 }
 
 // ===================== Admin.js =====================

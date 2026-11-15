@@ -239,14 +239,20 @@
       <div id="view-list" class="hidden">
         <div class="card">
           <div class="bar"><h2 style="margin:0">My Deals</h2><button id="btnNew2">+ New deal</button></div>
-          <div class="bar" style="margin-top:10px;justify-content:flex-start"><input id="fText" placeholder="Search client or deal id" style="width:260px"> <select id="fStatus" style="width:auto"><option value="">All statuses</option><option>Draft</option><option>Pending approval</option><option>Approved</option><option>Rejected</option><option>Generated</option><option>Sent</option><option>Won</option><option>Lost</option></select></div>
+          <div class="bar" style="margin-top:10px;justify-content:flex-start"><input id="fText" placeholder="Search client or deal id" style="width:260px"> <select id="fStatus" style="width:auto"><option value="">All statuses</option><option>Draft</option><option>Pending approval</option><option>Approved</option><option>Rejected</option><option>Generated</option><option>Sent</option><option>Won</option><option>Lost</option></select>
+            <select id="fRange" style="width:auto"><option value="">All time</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="year">This year</option><option value="custom">Custom range…</option></select>
+            <span id="fCustom" class="hidden"><input type="date" id="fFrom" style="width:auto"> – <input type="date" id="fTo" style="width:auto"></span>
+            <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink);margin:0"><input type="checkbox" id="fStale" style="width:auto"> Needs follow-up only</label></div>
           <div id="dealList" style="margin-top:10px">Loading…</div>
+          <div id="dealPager" class="bar" style="margin-top:10px"></div>
         </div>
       </div>
 
       <!-- ===================== DASHBOARD ===================== -->
       <div id="view-dash" class="hidden">
-        <div class="card"><h2>Dashboard <span class="muted" id="dashScope" style="font-size:13px;font-weight:normal"></span></h2><div id="dash">Loading…</div></div>
+        <div class="card"><div class="bar"><h2 style="margin:0">Dashboard <span class="muted" id="dashScope" style="font-size:13px;font-weight:normal"></span></h2>
+          <select id="dPeriod" style="width:auto"><option value="30">Last 30 days</option><option value="60">Last 60 days</option><option value="90" selected>Last 90 days</option><option value="180">Last 6 months</option><option value="365">Last 12 months</option><option value="0">All time</option></select></div>
+          <div id="dash" style="margin-top:12px">Loading…</div></div>
       </div>
 
       <!-- ===================== APPROVALS ===================== -->
@@ -384,7 +390,10 @@
     $('btnSave').onclick = save; $('btnSave2').onclick = save;
     $('btnNew2').onclick = function () { newDeal(); show('deal'); };
     $('calcBtn').onclick = calc;
-    $('fText').oninput = renderList; $('fStatus').onchange = renderList;
+    $('fText').oninput = function () { PAGE = 1; renderList(); }; $('fStatus').onchange = function () { PAGE = 1; renderList(); };
+    $('fRange').onchange = function () { $('fCustom').classList.toggle('hidden', $('fRange').value !== 'custom'); PAGE = 1; renderList(); };
+    $('fFrom').onchange = $('fTo').onchange = $('fStale').onchange = function () { PAGE = 1; renderList(); };
+    $('dPeriod').onchange = loadDash;
     qa('[data-f^="docs."]').concat([$('language')]).forEach(function (el) { el.addEventListener('change', langHint); });
     $('admTab').onchange = function () { admLoad($('admTab').value); };
     $('admAdd').onclick = function () { admEdit(null); };
@@ -750,22 +759,38 @@
   }
 
   // ---------- my deals ----------
-  var ROWS = [];
+  var ROWS = [], PAGE = 1, PAGE_SIZE = 20;
+  function activityOf(r) { return r.lastGeneratedAt || r.updatedAt || r.createdAt || ''; }
+  function daysAgo(iso) { var t = Date.parse(iso || ''); return isNaN(t) ? 0 : Math.floor((Date.now() - t) / 86400000); }
+  function isStale(r) { return r.status !== 'Won' && r.status !== 'Lost' && daysAgo(r.updatedAt) >= ((LISTS && LISTS.staleDays) || 60); }
   function loadList() {
     $('dealList').innerHTML = 'Loading…';
     run('apiListDeals').then(function (rows) { ROWS = rows; renderList(); });
   }
   function renderList() {
-    var t = $('fText').value.toLowerCase(), st = $('fStatus').value;
-    var rows = ROWS.filter(function (r) { return (!st || r.status === st) && (!t || (r.clientName + ' ' + r.dealId).toLowerCase().indexOf(t) !== -1); });
+    var t = $('fText').value.toLowerCase(), st = $('fStatus').value, range = $('fRange').value, from = null, to = null;
+    if (range === 'year') from = new Date(new Date().getFullYear(), 0, 1);
+    else if (range === 'custom') { from = $('fFrom').value ? new Date($('fFrom').value) : null; to = $('fTo').value ? new Date($('fTo').value + 'T23:59:59') : null; }
+    else if (range) from = new Date(Date.now() - Number(range) * 86400000);
+    var rows = ROWS.filter(function (r) {
+      var a = new Date(activityOf(r));
+      return (!st || r.status === st) && (!t || (r.clientName + ' ' + r.dealId).toLowerCase().indexOf(t) !== -1) &&
+        (!from || a >= from) && (!to || a <= to) && (!$('fStale').checked || isStale(r));
+    }).sort(function (a, b) { return activityOf(a) < activityOf(b) ? 1 : -1; });
+    var total = rows.length, pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (PAGE > pages) PAGE = pages;
+    var start = (PAGE - 1) * PAGE_SIZE;
+    $('dealPager').innerHTML = total > PAGE_SIZE ? '<span class="muted">Showing ' + (start + 1) + '–' + Math.min(start + PAGE_SIZE, total) + ' of ' + total + '</span><span><button class="secondary" id="pgPrev"' + (PAGE === 1 ? ' disabled' : '') + '>← Newer</button> <span class="muted">Page ' + PAGE + ' of ' + pages + '</span> <button class="secondary" id="pgNext"' + (PAGE === pages ? ' disabled' : '') + '>Older →</button></span>' : (total ? '<span class="muted">' + total + ' deal(s)</span>' : '');
+    if ($('pgPrev')) { $('pgPrev').onclick = function () { PAGE--; renderList(); }; $('pgNext').onclick = function () { PAGE++; renderList(); }; }
+    rows = rows.slice(start, start + PAGE_SIZE);
     if (!rows.length) { $('dealList').innerHTML = '<p class="muted">No deals' + (ROWS.length ? ' match the filter' : ' yet') + '.</p>'; return; }
     var mine = BOOT.user.email, showOwner = BOOT.user.role !== 'Rep';
-    $('dealList').innerHTML = '<table><tr><th>Client</th><th>Country</th><th>Package</th><th class="num">First-year value</th><th>Status</th><th>Approval</th><th>Updated</th>' +
+    $('dealList').innerHTML = '<table><tr><th>Client</th><th>Country</th><th>Package</th><th class="num">First-year value</th><th>Status</th><th>Approval</th><th>Last activity</th>' +
       (showOwner ? '<th>Owner</th>' : '') + '<th></th></tr>' + rows.map(function (r) {
         return '<tr><td><a href="#" class="dealname" data-open="' + esc(r.dealId) + '">' + esc(r.clientName) + '</a><br><span class="muted">' + esc(r.dealId) + ' · v' + r.version + ' · ' + ((r.stage || 'PROPOSAL') === 'CONTRACT' ? 'Order Form stage' : 'Proposal stage') + '</span></td><td>' + esc(r.country) + '</td><td>' + esc(r.orderPackage || r.packages) + '</td>' +
-          '<td class="num">' + (r.value ? money(r.currency, r.value) : '') + '</td><td>' + esc(r.status) + '</td><td>' +
+          '<td class="num">' + (r.value ? money(r.currency, r.value) : '') + '</td><td>' + esc(r.status) + (isStale(r) ? '<br><span class="badge warn">⚠ No update ' + daysAgo(r.updatedAt) + ' days</span>' : '') + '</td><td>' +
           (r.needsApproval ? '<span class="badge ' + (r.approvalStatus === 'Approved' ? 'ok' : r.approvalStatus === 'Rejected' ? 'err' : 'warn') + '">' + esc(r.approvalStatus) + '</span>' : '<span class="badge ok">Not required</span>') +
-          '</td><td>' + esc(String(r.updatedAt).slice(0, 10)) + '</td>' + (showOwner ? '<td>' + esc(r.createdBy === mine ? 'Me' : r.createdBy) + '</td>' : '') +
+          '</td><td>' + esc(String(activityOf(r)).slice(0, 10)) + '<br><span class="muted" style="font-size:12px">' + (r.lastGeneratedAt ? 'generated' : 'updated') + '</span></td>' + (showOwner ? '<td>' + esc(r.createdBy === mine ? 'Me' : r.createdBy) + '</td>' : '') +
           '<td style="text-align:right">' + rowMenu(r) + '</td></tr>';
       }).join('') + '</table>';
     wireMenus();
@@ -811,7 +836,7 @@
     $('dash').innerHTML = 'Loading…';
     var role = BOOT.user.role;
     $('dashScope').textContent = role === 'Superadmin' ? '(all deals)' : role === 'Manager' ? '(you and your team)' : '(your deals)';
-    run('apiDashboard').then(function (r) {
+    run('apiDashboard', { periodDays: Number($('dPeriod').value) }).then(function (r) {
       var s = r.stats, usd = function (v) { return money('USD', Math.round(v || 0)); };
       var rate = function (v) { return v === null ? '—' : pct(v); };
       function tile(k, v, sub) { return '<div class="tile"><div class="k">' + k + '</div><div class="v">' + v + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>'; }
@@ -833,6 +858,12 @@
           var btn = x[2] === 'convert' ? '<button data-dconvert="' + esc(x[1].dealId) + '">Convert</button>' : x[2] === 'open' ? '<button class="secondary" data-dopen="' + esc(x[1].dealId) + '">Open</button>' : x[2] === 'appr' ? '<button class="secondary" data-dappr="1">Review</button>' : '';
           return '<tr><td>' + esc(x[0]) + '</td><td>' + esc(x[1].clientName) + '</td><td class="num">' + (x[1].valueUsd ? usd(x[1].valueUsd) : '—') + '</td>' + (role !== 'Rep' ? '<td>' + esc(x[1].owner) + '</td>' : '') + '<td>' + btn + '</td></tr>';
         }).join('') + '</table>' + (acts.length > 8 ? '<p class="muted">+' + (acts.length - 8) + ' more in My Deals</p>' : '') : '<p class="muted">Nothing waiting – all caught up.</p>') + '</div>';
+      // follow-up: stale open deals (any age)
+      h += '<div class="card" style="border-color:#f0d3b4"><h3 style="margin-top:0">Needs follow-up <span class="muted" style="font-weight:normal;font-size:13px">– open deals with no update for ' + s.staleDays + '+ days</span></h3>' +
+        (s.stale.length ? '<table><tr><th>Client</th><th>Status</th><th class="num">Idle</th><th class="num">Value (USD)</th>' + (role !== 'Rep' ? '<th>Owner</th>' : '') + '<th></th></tr>' +
+          s.stale.slice(0, 10).map(function (x) { return '<tr><td>' + esc(x.clientName) + '</td><td>' + esc(x.status) + '</td><td class="num"><span class="badge warn">' + x.days + ' days</span></td><td class="num">' + (x.valueUsd ? usd(x.valueUsd) : '—') + '</td>' + (role !== 'Rep' ? '<td>' + esc(x.owner) + '</td>' : '') + '<td><button class="secondary" data-dopen="' + esc(x.dealId) + '">Open</button></td></tr>'; }).join('') + '</table>' +
+          (s.stale.length > 10 ? '<p class="muted">+' + (s.stale.length - 10) + ' more – My Deals → "Needs follow-up only"</p>' : '')
+          : '<p class="muted">No idle deals – every open deal has had activity in the last ' + s.staleDays + ' days.</p>') + '</div>';
       // funnel + monthly trend
       var fmax = Math.max.apply(null, s.funnel.map(function (f) { return f.count; }).concat([1]));
       var funnel = s.funnel.map(function (f) {
@@ -843,7 +874,7 @@
         return '<div class="c" title="' + esc(m.label) + ': ' + m.count + ' new deal(s), ' + usd(m.valueUsd) + '"><div class="n">' + (m.count ? m.count : '') + '</div><div class="fill" style="height:' + Math.round(m.valueUsd / mmax * 100) + '%"></div></div>';
       }).join('') + '</div><div class="colsx">' + s.byMonth.map(function (m) { return '<div>' + esc(m.label) + '</div>'; }).join('') + '</div>';
       h += '<div class="two"><div class="card"><h3 style="margin-top:0">Deal funnel</h3>' + funnel + '<p class="muted" style="font-size:12px">Deals by where they are now.</p></div>' +
-        '<div class="card"><h3 style="margin-top:0">New deals – last 6 months</h3>' + cols + '<p class="muted" style="font-size:12px">Bar = first-year value (USD) of deals created that month; number = count. Hover for details.</p></div></div>';
+        '<div class="card"><h3 style="margin-top:0">New deals – last ' + s.months + ' months</h3>' + cols + '<p class="muted" style="font-size:12px">Bar = first-year value (USD) of deals created that month; number = count. Hover for details.</p></div></div>';
       // top open deals + breakdowns
       h += '<div class="two"><div class="card"><h3 style="margin-top:0">Top open deals</h3>' + (s.topOpen.length ? '<table><tr><th>Client</th><th>Status</th><th class="num">Value (USD)</th>' + (role !== 'Rep' ? '<th>Owner</th>' : '') + '</tr>' +
         s.topOpen.map(function (t) { return '<tr><td><a href="#" data-dopen="' + esc(t.dealId) + '">' + esc(t.clientName) + '</a></td><td>' + esc(t.status) + '</td><td class="num">' + usd(t.valueUsd) + '</td>' + (role !== 'Rep' ? '<td>' + esc(t.owner) + '</td>' : '') + '</tr>'; }).join('') + '</table>' : '<p class="muted">No open deals with a value yet.</p>') + '</div>';

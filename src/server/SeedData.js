@@ -192,6 +192,7 @@ var SEED = {
       ['default_hosting_region', '', 'DPA hosting region (to be confirmed by OC Tech)'],
       ['brand_table_header_bg', '#7B3FE4', 'Table header background (white bold text) – all documents'],
       ['brand_heading_color', '#B6262B', 'Heading colour (OptCulture red)'],
+      ['stale_days', 60, 'Open deals with no update for this many days are highlighted for follow-up'],
       ['optculture_logo_file_id', '1dURALQP4yA58Fp5eSZY509NrB3gqagb9', 'OptCulture logo (PNG in _Templates) – {{IMAGE:OptCultureLogo}}']
     ]
   },
