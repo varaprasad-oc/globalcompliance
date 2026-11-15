@@ -217,6 +217,30 @@ function buildDocData(docType, master, deal, quote, ctx) {
     lists.OneTimeLines = op.oneTime.concat(quote.optionalOneTime).map(function (l) {
       return { description: l.label, scope: l.qty > 1 ? l.qty + ' × ' + m(l.unitPrice) : (l.unit || ''), amount: l.text || m(l.total) };
     });
+
+    // Top-up Order Form: only the added items, under the parent Order Form and MSA
+    flags.IsTopUp = !!quote.topup;
+    fields.ParentOrderFormNo = ''; fields.ParentDealId = '';
+    if (quote.topup) {
+      var top = deal.topupOf || {}, tq = quote.topup;
+      fields.ParentOrderFormNo = _v(top.orderFormNo || 'the original Order Form');
+      fields.ParentDealId = _v(top.dealId);
+      fields.FirstYearTotal = m(op.firstYearTotal + quote.optionalOneTimeTotal);
+      lists.SubscriptionLines = (tq.addedSites ? [{
+        product: 'Additional licences – OptCulture ' + op.package + ' Plan',
+        scope: tq.addedSites + (tq.addedSites === 1 ? ' site (' : ' sites (') + (tq.addStores ? tq.addStores + (tq.addStores === 1 ? ' store' : ' stores') : '') +
+          (tq.addStores && tq.addEcomSites ? ' + ' : '') + (tq.addEcomSites ? tq.addEcomSites + ' e-commerce' : '') + ') @ ' + m(op.finalPricePerSite) + ' / site / month',
+        billing: fields.BillingCycle + ', in advance', amount: m(op.licenceAnnual) + ' / year'
+      }] : []).concat(op.addOns.map(function (a) {
+        return { product: a.label, scope: 'New add-on', billing: fields.BillingCycle + ', in advance', amount: a.text ? a.text : m(a.total * 12) + ' / year' };
+      })).concat(tq.comms.map(function (c) {
+        return { product: 'Platform messaging – up to ' + Number(c.messages).toLocaleString('en-US') + ' / month', scope: 'Communication pack', billing: fields.BillingCycle + ', in advance', amount: m(c.total * 12) + ' / year' };
+      }));
+      lists.OneTimeLines = op.oneTime.concat(quote.optionalOneTime).map(function (l) {
+        var credits = /^WA_/.test(l.id);
+        return { description: l.label, scope: credits ? Number(l.qty).toLocaleString('en-US') + ' credits × ' + m(l.unitPrice) : (l.qty > 1 ? l.qty + ' × ' + m(l.unitPrice) : (l.unit || '')), amount: l.text || m(l.total) };
+      });
+    }
   }
 
   // Online documents incorporated by the MSA (editable in CommercialTerms) – also cited by the Order Form

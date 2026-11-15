@@ -106,11 +106,14 @@ function existingMsa(deal) {
   var msa = deal.msa || {}, ref = String((deal.commercial || {}).msaRef || '').trim();
   if (msa.no && msa.dealId !== deal.dealId) return { no: msa.no, dpaNo: msa.dpaNo || '', dealId: msa.dealId || '', date: msa.date || '', source: 'client' };
   if (ref && ref !== (deal.docNos || {}).MSA) return { no: ref, dpaNo: '', dealId: '', date: '', source: 'manual' };
+  var top = deal.topupOf || {};
+  if (deal.dealType === 'TOPUP' && top.msaNo) return { no: top.msaNo, dpaNo: '', dealId: top.dealId || '', date: '', source: 'parent' };
   return null;
 }
 
 function contractMode(deal) {
   if (deal.stage !== 'CONTRACT') return null;
+  if (deal.dealType === 'TOPUP') return 'ORDER_ONLY';  // a top-up is always an Order Form under the existing MSA
   return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'NEW_MSA';
 }
 
@@ -152,7 +155,7 @@ function evaluateDeal(master, deal) {
   var c1 = c.businessContact || {}, c2 = c.billingContact || {};
   [c1.email, c2.email].forEach(function (e) { if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) errors.push('Invalid email: ' + e); });
 
-  var quote = buildQuote(master, com);
+  var quote = deal.dealType === 'TOPUP' ? buildTopupQuote(master, topupInput(deal)) : buildQuote(master, com);
   if (!quote.ok) errors = errors.concat(quote.errors);
 
   var missing = {};
@@ -239,6 +242,7 @@ function dealSummary(rec) {
     createdBy: rec.created_by, createdAt: rec.created_at instanceof Date ? rec.created_at.toISOString() : String(rec.created_at || ''), updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
     lastGeneratedAt: d.lastGeneratedAt || '',
+    dealType: d.dealType || '', parentDealId: (d.topupOf || {}).dealId || '',
     referralPartnerId: d.referralPartnerId || '',
     stage: d.stage || '',
     orderPackage: op ? op.package : '',
@@ -266,6 +270,7 @@ function dashboardStats(summaries, users, now, opts) {
   var nameOf = {};
   (users || []).forEach(function (u) { nameOf[String(u.email).toLowerCase()] = u.name; });
   var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, winRate: null, conversionRate: null,
+    topups: { count: 0, openUsd: 0, wonUsd: 0 },
     byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], stale: [], staleDays: staleDays, periodDays: periodDays, actions: { toConvert: [], pending: [], notSent: [], rejected: [] } };
   var discSum = 0, discN = 0;
   function add(map, key, sm) {
@@ -279,6 +284,7 @@ function dashboardStats(summaries, users, now, opts) {
     var open = sm.status !== 'Won' && sm.status !== 'Lost';
     if (open) s.pipelineUsd += sm.valueUsd || 0;
     if (sm.status === 'Won') s.wonUsd += sm.valueUsd || 0;
+    if (sm.dealType === 'TOPUP') { s.topups.count++; if (sm.status === 'Won') s.topups.wonUsd += sm.valueUsd || 0; else if (open) s.topups.openUsd += sm.valueUsd || 0; }
     if (sm.approvalStatus === 'Pending') s.pendingApprovals++;
     if (sm.orderPackage) { discSum += sm.discountPct || 0; discN++; }
     add(s.byStatus, sm.status, sm);
@@ -347,7 +353,7 @@ function cloneDeal(deal, newId) {
   c.status = DEAL_STATUS.DRAFT;
   c.client = c.client || {};
   delete c.docNos; delete c.pricingSnapshot; delete c.approvalNote; delete c.aiDraft;  // a clone gets new numbers and today's prices
-  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true }; delete c.proposalBaseline;
+  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true }; delete c.proposalBaseline; delete c.dealType; delete c.topupOf; delete c.topup;
   return c;
 }
 
@@ -360,7 +366,7 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   var refresh = !!d.refreshPrices;
   delete d.refreshPrices;
   if (!stored) {
-    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT;
+    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT; delete d.dealType; delete d.topupOf;
     delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId; delete d.proposalBaseline;
     d.stage = 'PROPOSAL'; d.docs = { PROPOSAL: true };
     return d;
@@ -369,6 +375,8 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   d.docNos = stored.docNos;
   d.proposalBaseline = stored.proposalBaseline;
   d.clientId = stored.clientId;
+  if (stored.dealType) d.dealType = stored.dealType; else delete d.dealType;
+  if (stored.topupOf) d.topupOf = stored.topupOf; else delete d.topupOf;
   d.pricingSnapshot = refresh || !stored.pricingSnapshot ? freshSnapshot : stored.pricingSnapshot;
   d.stage = stored.stage;
   if (d.stage) {
@@ -414,5 +422,47 @@ function planDealDeletion(dealIds, records) {
     clientIds: clients.map(function (c) { return c.client_id; }),
     fileIds: files,
     rows: { Deals: desc(deals), Documents: desc(docs), Approvals: desc(appr), Clients: desc(clients) }
+  };
+}
+
+/** Pricing input of a top-up deal: contracted terms from the parent (deal.topupOf, server-owned) + the rep's additions (deal.topup). */
+function topupInput(deal) {
+  var com = deal.commercial || {}, top = deal.topupOf || {}, t = deal.topup || {};
+  return {
+    market: com.market, currency: com.currency, termMonths: com.termMonths, package: top.package,
+    contractedPricePerSite: top.contractedPricePerSite, baseSites: top.baseSites,
+    addStores: t.addStores, addEcomSites: t.addEcomSites, licencePrice: t.licencePrice, addOns: t.addOns || [],
+    specialInstall: (com.specialOneTime || {})[top.package] || t.specialInstall || {}, commsTiers: t.commsTiers || [], specialComms: com.specialComms || {},
+    whatsapp: t.whatsapp || [], oneTimeItems: com.oneTimeItems || [], specialOptional: com.specialOptional || {}
+  };
+}
+
+/** Top-up is offered on Won deals that are not themselves top-ups. */
+function canTopUp(deal, status) {
+  return status === DEAL_STATUS.WON && deal.dealType !== 'TOPUP' && (deal.stage === 'CONTRACT');
+}
+
+/**
+ * New top-up deal from a Won parent: same client, entity, market, currency and price snapshot; contracted package price
+ * and slab locked; contract stage directly (Order Form only, under the parent's MSA). Own term (defaults 12 months).
+ */
+function makeTopUp(parent, parentQuote) {
+  var com = parent.commercial || {}, pkg = com.orderPackage || (com.packages || [])[0];
+  var op = ((parentQuote && parentQuote.packages) || []).filter(function (p) { return p.package === pkg; })[0] || {};
+  var msaNo = (parent.msa && parent.msa.no) || (parent.docNos || {}).MSA || com.msaRef || '';
+  return {
+    dealType: 'TOPUP', stage: 'CONTRACT', status: DEAL_STATUS.CONTRACT_DRAFT, version: 1,
+    client: JSON.parse(JSON.stringify(parent.client || {})), clientId: parent.clientId, entityId: parent.entityId,
+    language: parent.language, referralPartnerId: parent.referralPartnerId || '',
+    pricingSnapshot: parent.pricingSnapshot,
+    topupOf: { dealId: parent.dealId, orderFormNo: (parent.docNos || {}).ORDER_FORM || '', msaNo: msaNo, package: pkg,
+      contractedPricePerSite: op.finalPricePerSite || null, baseSites: Number(com.stores || 0) + Number(com.ecomSites || 0),
+      baseStores: Number(com.stores || 0), baseEcomSites: Number(com.ecomSites || 0),
+      existingAddOns: ((com.addOnsByPackage || {})[pkg] || com.addOns || []).slice() },
+    topup: { addStores: 0, addEcomSites: 0, addOns: [], commsTiers: [], whatsapp: [] },
+    commercial: { market: com.market, currency: com.currency, packages: [pkg], orderPackage: pkg, stores: 0, ecomSites: 0,
+      termMonths: 12, billingCycle: com.billingCycle || 'Annual', paymentMethod: com.paymentMethod || 'Bank Transfer', autoRenew: com.autoRenew !== false,
+      oneTimeItems: [] },
+    docs: { ORDER_FORM: true }
   };
 }

@@ -65,7 +65,7 @@ function validateQuoteInput(master, input) {
   if (!markets[input.market]) errs.push('Unknown market: ' + input.market);
   if (!currencies[input.currency]) errs.push('Unknown currency: ' + input.currency);
   var stores = Number(input.stores || 0), ecom = Number(input.ecomSites || 0);
-  if (stores < 0 || ecom < 0 || (stores + ecom) < 1) errs.push('Enter at least 1 store or e-commerce site');
+  if (stores < 0 || ecom < 0 || (!input.allowZeroSites && (stores + ecom) < 1)) errs.push('Enter at least 1 store or e-commerce site');
   if (!input.packages || !input.packages.length) errs.push('Select at least one package');
   (input.packages || []).forEach(function (p) { if (!packages[p]) errs.push('Unknown package: ' + p); });
   Object.keys(input.specialPrices || {}).forEach(function (p) {
@@ -94,7 +94,7 @@ function buildQuote(master, input) {
   var stores = Number(input.stores || 0);
   var ecomSites = Number(input.ecomSites || 0);
   var sites = stores + ecomSites;
-  var slab = findSlab(master, sites);
+  var slab = findSlab(master, input.slabSites !== undefined ? Number(input.slabSites) : sites);  // top-ups keep the contracted slab
 
   var fx = Number(cur.fx_rate);
   var marketDisc = Number(mkt.discount);
@@ -261,4 +261,72 @@ function featureMatrix(master, packageNames) {
       packageNames.forEach(function (p) { v[p] = f[p]; });
       return { feature: f.feature, values: v, description: f.description_en, descriptionAr: f.description_ar, addonItemId: f.addon_item_id || '' };
     });
+}
+
+/** WhatsApp credit types offered in top-ups (Meta categories). */
+var WHATSAPP_CREDIT_TYPES = ['Transactional', 'Promotional', 'Authentication'];
+
+/**
+ * Top-up quote for a Won deal (decision 2026-11-15): only the added items, at the CONTRACTED prices of the original deal
+ * (its price snapshot, market, currency and slab; licence = its final per-site price). Own term.
+ * input = { market, currency, termMonths, package, contractedPricePerSite, baseSites, addStores, addEcomSites,
+ *           licencePrice, addOns:[ids], oneTimeItems, specialOptional, specialInstall:{STORE_INSTALL, ECOM_INSTALL},
+ *           commsTiers:[ids], specialComms:{id: price}, whatsapp:[{type, credits, pricePerCredit}] }
+ * Returns a quote with the same shape the Order Form uses (packages[0], optionalOneTime, usage, …) plus .topup.
+ */
+function buildTopupQuote(master, input) {
+  var addStores = Number(input.addStores || 0), addEcom = Number(input.addEcomSites || 0), added = addStores + addEcom;
+  var tiers = input.commsTiers || [];
+  var specialComms = {};
+  tiers.forEach(function (id) { if ((input.specialComms || {})[id] !== undefined) specialComms[id] = input.specialComms[id]; });
+  var q = buildQuote(master, {
+    market: input.market, currency: input.currency, stores: addStores, ecomSites: addEcom, allowZeroSites: true,
+    slabSites: Number(input.baseSites || 0) || added, packages: [input.package],
+    addOnsByPackage: (function () { var o = {}; o[input.package] = input.addOns || []; return o; })(),
+    oneTimeItems: input.oneTimeItems || [], specialOptional: input.specialOptional || {},
+    specialOneTime: (function () { var o = {}; o[input.package] = input.specialInstall || {}; return o; })(),
+    specialComms: specialComms
+  });
+  if (!q.ok) return q;
+  var cur = input.currency, errors = [], reasons = q.approvalReasons.slice();
+  var p = q.packages[0];
+  var contracted = Number(input.contractedPricePerSite || p.standardPricePerSite);
+  var lp = input.licencePrice;
+  var licencePrice = (lp === '' || lp === null || lp === undefined) ? contracted : Number(lp);
+  if (added > 0 && licencePrice < contracted) {
+    reasons.push('Top-up licence: ' + formatMoney(cur, licencePrice) + ' vs contracted ' + formatMoney(cur, contracted) + ' per site/month');
+  }
+  var licenceMonthly = added > 0 ? licencePrice * added : 0;
+  var installs = p.oneTime.filter(function (l) { return l.id !== 'SETUP'; });  // no set-up fee on a top-up
+  var comms = q.comms.filter(function (c) { return tiers.indexOf(c.id) !== -1; });
+  var commsMonthly = comms.reduce(function (s, c) { return s + (c.total || 0); }, 0);
+  var whatsapp = (input.whatsapp || []).filter(function (w) { return w && (Number(w.credits) > 0 || Number(w.pricePerCredit) > 0); }).map(function (w) {
+    var credits = Number(w.credits || 0), ppc = Number(w.pricePerCredit || 0);
+    if (WHATSAPP_CREDIT_TYPES.indexOf(w.type) === -1) errors.push('WhatsApp credit type must be one of ' + WHATSAPP_CREDIT_TYPES.join(', '));
+    if (!(credits > 0) || !(ppc > 0)) errors.push('WhatsApp ' + (w.type || '') + ' credits: enter credit count and price per credit');
+    var total = Math.round(credits * ppc * 100) / 100;
+    reasons.push('WhatsApp ' + w.type + ' credits: ' + credits.toLocaleString('en-US') + ' × ' + formatMoney(cur, ppc) + ' = ' + formatMoney(cur, total));
+    return { id: 'WA_' + String(w.type).toUpperCase(), label: 'WhatsApp ' + w.type + ' credits', unit: 'per credit', qty: credits, unitPrice: ppc, total: total, text: '', credits: credits };
+  });
+  var oneTime = installs.concat(whatsapp);
+  var oneTimeTotal = oneTime.reduce(function (s, l) { return s + (l.total || 0); }, 0);
+  var recurringMonthly = licenceMonthly + p.addOnsMonthly + commsMonthly;
+  if (!added && !p.addOns.length && !comms.length && !whatsapp.length && !q.optionalOneTime.length) errors.push('Add at least one item to the top-up');
+  if (errors.length) return { ok: false, errors: errors };
+  var term = Number(input.termMonths || 12);
+  var pkg = {
+    package: p.package, standardPricePerSite: contracted, contractedPricePerSite: contracted, specialPricePerSite: licencePrice === contracted ? null : licencePrice,
+    finalPricePerSite: licencePrice, listPricePerSite: p.listPricePerSite, effectiveDiscountPct: p.listPricePerSite ? Math.round((1 - licencePrice / p.listPricePerSite) * 10000) / 10000 : 0,
+    specialDiscountPct: licencePrice < contracted ? Math.round((1 - licencePrice / contracted) * 10000) / 10000 : 0,
+    sites: added, licenceMonthly: licenceMonthly, licenceAnnual: licenceMonthly * 12, addOns: p.addOns, addOnsMonthly: p.addOnsMonthly,
+    commsMonthly: commsMonthly, recurringMonthly: recurringMonthly, recurringAnnual: recurringMonthly * 12,
+    overagePer1000: p.overagePer1000, receiptsIncludedPerSite: p.receiptsIncludedPerSite,
+    oneTime: oneTime, oneTimeTotal: oneTimeTotal, firstYearTotal: oneTimeTotal + recurringMonthly * 12,
+    termTotal: oneTimeTotal + q.optionalOneTimeTotal + recurringMonthly * term
+  };
+  return Object.assign({}, q, {
+    packages: [pkg], needsApproval: reasons.length > 0, approvalReasons: reasons,
+    topup: { addStores: addStores, addEcomSites: addEcom, addedSites: added, baseSites: Number(input.baseSites || 0), contractedPricePerSite: contracted,
+      comms: comms, whatsapp: whatsapp, termMonths: term }
+  });
 }

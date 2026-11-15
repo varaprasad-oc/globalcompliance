@@ -29,6 +29,9 @@ const api = {
     store.deals[id] = nr;
     return { mode: plan.mode, message: plan.reason, deal: d, results: plan.docTypes.map((t) => ({ type: t, label: t, docNo: d.docNos[t], docUrl: 'https://docs.google.com/x', pdfUrl: plan.mode === 'FINAL' ? 'https://drive.google.com/y' : '', warnings: [] })) }; },
   apiDeleteDeals: (ids, txt) => { if (USER.role !== 'Superadmin' || txt !== 'DELETE') throw new Error('no'); ids.forEach((i) => delete store.deals[i]); return { deals: ids.length, clients: 0, files: 2, folders: 1, failedFiles: 0 }; },
+  apiCreateTopUp: (id) => { const r = store.deals[id]; const parent = JSON.parse(r.input_json); if (!ctx.canTopUp(parent, r.status)) throw new Error('not Won');
+    const deal = ctx.makeTopUp(parent, ctx.evaluateDeal(M, parent).quote); deal.dealId = 'D-TEST-9'; const ev = ctx.evaluateDeal(M, deal);
+    const nr = ctx.dealRecord(deal, ev, USER.email, new Date().toISOString(), null); nr.status = deal.status; store.deals['D-TEST-9'] = nr; return { deal, evaluation: ev, summary: ctx.dealSummary(nr) }; },
   apiDealDocuments: () => [{ docNo: 'OC-P-2026-0001', type: 'PROPOSAL', label: 'Proposal', version: 1, status: 'Final', docUrl: 'x', pdfUrl: 'y', createdAt: '2026-11-15T09:30:00.000Z' }],
   apiConvertToContract: (id) => { const r = store.deals[id]; const st = JSON.parse(r.input_json); if (!ctx.canConvertToContract(st, r.status)) throw new Error('not allowed');
     const d = ctx.convertToContract(st, ctx.evaluateDeal(ctx.withSnapshot(M, st.pricingSnapshot), st).quote); const ev = ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d); const nr = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), r); nr.status = d.status; store.deals[id] = nr;
@@ -257,6 +260,28 @@ const api = {
   check('Calculator lists one-time lines separately', cr.includes('Set-up and Training') && cr.includes('Installation per store') && cr.includes('Data migration'));
   check('Calculator shows add-ons, optional services and first-year total', cr.includes('Add-ons / year') && cr.includes('Optional services') && cr.includes('First-year total') && !cr.includes('Engagement'));
   await p.screenshot({ path: path.join(out, 'calculator.png'), fullPage: true });
+  // ---------- Top-up of a Won deal ----------
+  store.deals['D-TEST-1'].status = 'Won';
+  await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
+  await p.click('[data-menu="D-TEST-1"]');
+  check('Won deal menu offers Top-up', await p.isVisible('.menu:not(.hidden) [data-topup="D-TEST-1"]'));
+  await p.click('.menu:not(.hidden) [data-topup="D-TEST-1"]'); await p.waitForTimeout(800);
+  const tb = await p.textContent('#topupBox');
+  check('Top-up box shows parent, Order Form, MSA and contracted price; normal package sections hidden', tb.includes('D-TEST-1') && tb.includes('OC-Q-2026-0001') && tb.includes('OC-MSA-2026-0001') && tb.includes('USD 70') && !(await p.isVisible('#pkgs')) && !(await p.isVisible('#matrix')));
+  await p.fill('[data-f="topup.addStores"]', '3');
+  await p.click('#waAdd'); await p.selectOption('#waTable tr.wa-row [data-wa="type"]', 'Promotional');
+  await p.fill('#waTable tr.wa-row [data-wa="credits"]', '10000'); await p.fill('#waTable tr.wa-row [data-wa="price"]', '0.05'); await p.waitForTimeout(1100);
+  const ts = await p.textContent('#side');
+  check('Top-up summary: +3 site licences at contracted price, WhatsApp credits USD 500, approval needed', ts.includes('Licences +3 sites') && ts.includes('USD 210') && ts.includes('WhatsApp Promotional credits') && ts.includes('USD 500') && ts.includes('Needs Amith'));
+  await p.screenshot({ path: path.join(out, 'topup.png'), fullPage: true });
+  check('WhatsApp row shows the amount', (await p.textContent('#waTable tr.wa-row [data-wa="amount"]')).includes('USD 500'));
+  await p.click('#steps div[data-step="3"]'); await p.waitForTimeout(300);
+  check('Top-up step 3: Order Form only, no MSA box', (await p.textContent('#contractPack')).includes('Top-up Quotation') && !(await p.isVisible('#msaBox')) && (await p.textContent('#btnGenerate')).includes('Top-up Order Form'));
+  await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(800);
+  await p.click('#btnGenerate'); await p.waitForTimeout(900);
+  check('Top-up generates a draft Order Form (WhatsApp credits need approval)', (await p.textContent('#busyBox')).includes('Drafts') && store.deals['D-TEST-9'].status === 'Pending approval');
+  await p.click('#busyBack'); await p.waitForTimeout(400);
+  check('My Deals marks the top-up', (await p.textContent('#dealList')).includes('Top-up of D-TEST-1'));
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
   check('Superadmin sees Delete selected (disabled until a deal is ticked)', (await p.isVisible('#btnDelDeals')) && (await p.isDisabled('#btnDelDeals')));
   await p.check('[data-sel="D-TEST-2"]');

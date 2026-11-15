@@ -65,6 +65,8 @@
     .wizard .side { width:330px; flex-shrink:0; position:sticky; top:12px; }
     .bar { display:flex; gap:8px; justify-content:space-between; align-items:center; flex-wrap:wrap; }
     button.danger { background:#c62828; color:#fff; border-color:#c62828; } button.danger:disabled { opacity:.45; }
+    .topup-only { display:none; } .is-topup .topup-only { display:block; } .is-topup .not-topup, .is-topup .not-topup-freeze { display:none !important; }
+    .tu-info { background:#f3effc; border:1px solid #d9c8f7; border-radius:8px; padding:10px 14px; margin-bottom:6px; }
     .busy { position:fixed; inset:0; background:rgba(30,20,60,.45); display:flex; align-items:center; justify-content:center; z-index:1000; padding:16px; }
     .busy .box { background:#fff; border-radius:12px; padding:28px 30px; width:100%; max-width:560px; box-shadow:0 12px 40px rgba(0,0,0,.25); text-align:center; }
     .busy .box table { text-align:left; margin-top:10px; }
@@ -151,6 +153,8 @@
 
             <!-- Step 2 -->
             <div class="card step hidden" data-step="2">
+              <div id="topupBox" class="topup-only"></div>
+              <div class="not-topup">
               <p data-stage="CONTRACT" class="muted" style="margin-top:0">Carried over from the proposal. Changing prices here needs approval again if they go below standard.</p>
               <h3 style="margin-top:0">Pricing basis</h3>
               <div class="grid">
@@ -159,10 +163,12 @@
                 <div><label>Physical stores</label><input data-f="commercial.stores" type="number" min="0"></div>
                 <div><label>E-commerce sites</label><input data-f="commercial.ecomSites" type="number" min="0" value="0"></div>
               </div>
+              </div>
               <h3>One-time fees – current price &amp; special price (optional)</h3>
               <div id="otSpecials" class="muted">Enter stores and tick packages (below) to see one-time fees.</div>
               <h3 style="display:flex;gap:14px;align-items:center">Optional one-time services <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink);font-size:13px;font-weight:normal;margin:0"><input type="checkbox" id="otAll" style="width:auto"> Select all</label></h3>
               <div id="onetime"></div>
+              <div class="not-topup">
               <h3>Packages to quote</h3>
               <div class="checks" id="pkgs"></div>
               <h3>What’s included &amp; add-ons</h3>
@@ -172,7 +178,8 @@
               <div id="specials"></div>
               <h3>Platform messaging (negotiated price, optional)</h3>
               <div class="grid" id="comms"></div>
-              <div id="priceFreeze" class="hidden" style="margin:10px 0"><span class="badge warn" id="priceFreezeText"></span> <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" data-f="refreshPrices" style="width:auto"> Use today’s price list on next save</label></div>
+              </div>
+              <div id="priceFreeze" class="hidden not-topup-freeze" style="margin:10px 0"><span class="badge warn" id="priceFreezeText"></span> <label style="display:inline-flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" data-f="refreshPrices" style="width:auto"> Use today’s price list on next save</label></div>
             </div>
 
             <!-- Step 3 -->
@@ -207,7 +214,7 @@
                   <div><label>Payment method</label><select data-f="commercial.paymentMethod"><option>Bank Transfer</option><option>Card</option><option>Cheque</option></select></div>
                   <div><label>Auto-renewal</label><select data-f="commercial.autoRenew" data-bool="1"><option value="true">Yes</option><option value="false">No</option></select></div>
                   <div><label>PO number</label><input data-f="commercial.poNumber"></div>
-                  <div><label>Existing MSA reference (if signed outside this app)</label><input data-f="commercial.msaRef" placeholder="Leave empty – filled automatically"></div>
+                  <div class="not-topup"><label>Existing MSA reference (if signed outside this app)</label><input data-f="commercial.msaRef" placeholder="Leave empty – filled automatically"></div>
                   <div class="wide"><label>Special commercial terms</label><textarea data-f="commercial.specialTerms" placeholder="Leave empty for “None.”"></textarea></div>
                 </div>
                 <h3>What will be generated</h3>
@@ -576,14 +583,72 @@
       d.commercial.specialOneTime = sot; d.commercial.specialOptional = sop;
     }
     d.commercial.oneTimeItems = qa('input[data-ot]:checked').map(function (e) { var q = document.querySelector('[data-otqty="' + e.dataset.ot + '"]'); return { id: e.dataset.ot, qty: q ? Number(q.value || 1) : 1 }; });
+    collectTopup(d);
     return d;
   }
 
   /** MSA exceptions text the stored deal was saved (and possibly approved) with: editing it needs approval again. */
   var STORED_EXC = '';
   function normExc(t) { t = String(t || '').trim(); return /^none\.?$/i.test(t) ? '' : t; }
+  /* ---------- top-up (Won deal → additional licences / add-ons / comms / WhatsApp credits / services) ---------- */
+  function isTopup(d) { return !!d && d.dealType === 'TOPUP'; }
+  function renderTopup(d) {
+    document.body.classList.toggle('is-topup', isTopup(d));
+    if (!isTopup(d)) return;
+    var top = d.topupOf || {}, t = d.topup || {}, cur = (d.commercial || {}).currency || '';
+    var addOns = (BOOT.lists.addOns || []).filter(function (a) {
+      var ok = String(a.packages || 'ALL') === 'ALL' || String(a.packages).split(',').map(function (x) { return x.trim(); }).indexOf(top.package) !== -1;
+      return ok && (top.existingAddOns || []).indexOf(a.id) === -1;
+    });
+    var waRows = (t.whatsapp && t.whatsapp.length ? t.whatsapp : []);
+    $('topupBox').innerHTML =
+      '<div class="tu-info"><b>Top-up</b> of deal <b>' + esc(top.dealId) + '</b> · Order Form <b>' + esc(top.orderFormNo || '—') + '</b> · MSA <b>' + esc(top.msaNo || '—') + '</b><br>' +
+        esc(top.package) + ' plan · contracted <b>' + money(cur, top.contractedPricePerSite) + '</b> / site / month · currently ' + top.baseSites + ' sites (' + top.baseStores + ' stores' + (top.baseEcomSites ? ' + ' + top.baseEcomSites + ' e-commerce' : '') + ')</div>' +
+      '<p class="muted" style="margin-top:0">Add only what the client is buying now – every section is optional. Prices default to the contracted prices; this top-up has its own term (step 3).</p>' +
+      '<h3>Additional licences</h3><div class="grid">' +
+        '<div><label>Additional stores</label><input type="number" min="0" data-f="topup.addStores" value="' + esc(t.addStores || '') + '" placeholder="0"></div>' +
+        '<div><label>Additional e-commerce sites</label><input type="number" min="0" data-f="topup.addEcomSites" value="' + esc(t.addEcomSites || '') + '" placeholder="0"></div>' +
+        '<div><label>Price / site / month <span class="muted">(contracted ' + money(cur, top.contractedPricePerSite) + ')</span></label><input type="number" min="0" data-f="topup.licencePrice" value="' + esc(t.licencePrice === undefined || t.licencePrice === null ? '' : t.licencePrice) + '" placeholder="Contracted price"> <span id="tuLicBadge"></span></div></div>' +
+      '<h3>New add-ons <span class="muted" style="font-weight:normal;font-size:13px">(add-ons the client already has are not listed)</span></h3>' +
+        (addOns.length ? '<div class="checks">' + addOns.map(function (a) { return '<label><input type="checkbox" data-tuaddon="' + esc(a.id) + '"' + ((t.addOns || []).indexOf(a.id) !== -1 ? ' checked' : '') + '> ' + esc(a.label) + '</label>'; }).join('') + '</div>' : '<p class="muted">No further add-ons for this plan.</p>') +
+      '<h3>Communication packs</h3><table><tr><th></th><th>Pack</th><th>Price / month</th></tr>' + (LISTS.commsTiers || []).map(function (c) {
+        var sp = ((d.commercial || {}).specialComms || {})[c.id];
+        return '<tr><td style="width:28px"><input type="checkbox" style="width:auto" data-tucomms="' + esc(c.id) + '"' + ((t.commsTiers || []).indexOf(c.id) !== -1 ? ' checked' : '') + '></td><td>Up to ' + Number(c.messages).toLocaleString('en-US') + ' / month</td>' +
+          '<td><input type="number" min="0" data-tucp="' + esc(c.id) + '" value="' + (sp === undefined ? '' : esc(sp)) + '" placeholder="List price" style="max-width:160px"></td></tr>';
+      }).join('') + '</table>' +
+      '<h3>WhatsApp credits <span class="muted" style="font-weight:normal;font-size:13px">(prepaid; every line needs Amith’s approval)</span></h3>' +
+      '<table id="waTable"><tr><th>Credit type</th><th>Credits</th><th>Price per credit (' + esc(cur) + ')</th><th class="num">Amount</th><th></th></tr></table>' +
+      '<button class="secondary" id="waAdd" style="margin-top:6px">+ Add WhatsApp credits</button>';
+    waRows.forEach(addWaRow);
+    $('waAdd').onclick = function (e) { e.preventDefault(); addWaRow({ type: 'Transactional' }); changed(); };
+    qa('#topupBox input').forEach(function (el) { el.addEventListener('change', changed); el.addEventListener('input', changed); });
+  }
+  function addWaRow(w) {
+    var tr = document.createElement('tr'); tr.className = 'wa-row';
+    tr.innerHTML = '<td><select data-wa="type">' + ['Transactional', 'Promotional', 'Authentication'].map(function (x) { return '<option' + (x === w.type ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></td>' +
+      '<td><input type="number" min="0" data-wa="credits" value="' + esc(w.credits || '') + '" placeholder="e.g. 10000"></td>' +
+      '<td><input type="number" min="0" step="0.0001" data-wa="price" value="' + esc(w.pricePerCredit || '') + '" placeholder="e.g. 0.05"></td>' +
+      '<td class="num" data-wa="amount">—</td><td><button class="secondary" data-wa="remove" title="Remove">✕</button></td>';
+    $('waTable').appendChild(tr);
+    tr.querySelectorAll('input,select').forEach(function (el) { el.addEventListener('change', changed); el.addEventListener('input', changed); });
+    tr.querySelector('[data-wa="remove"]').onclick = function (e) { e.preventDefault(); tr.remove(); changed(); };
+  }
+  function collectTopup(d) {
+    if (!isTopup(d)) return;
+    d.topup = d.topup || {};
+    d.topup.addOns = qa('[data-tuaddon]:checked').map(function (e) { return e.dataset.tuaddon; });
+    d.topup.commsTiers = qa('[data-tucomms]:checked').map(function (e) { return e.dataset.tucomms; });
+    var sc = {}; qa('[data-tucp]').forEach(function (e) { if (e.value !== '') sc[e.dataset.tucp] = Number(e.value); }); d.commercial.specialComms = sc;
+    d.topup.whatsapp = qa('#waTable tr.wa-row').map(function (tr) {
+      return { type: tr.querySelector('[data-wa="type"]').value, credits: Number(tr.querySelector('[data-wa="credits"]').value || 0), pricePerCredit: Number(tr.querySelector('[data-wa="price"]').value || 0) };
+    });
+    d.commercial.packages = (DEAL.commercial || {}).packages || [];
+    d.commercial.addOnsByPackage = {}; d.commercial.addOns = [];
+  }
+
   function fill(d) {
     DEAL = d; OTS_KEY = ''; STORED_EXC = normExc(d.msaExceptions);
+    renderTopup(d);
     qa('[data-f]').forEach(function (el) {
       var v = getPath(d, el.dataset.f);
       if (el.type === 'checkbox') el.checked = !!v;
@@ -696,7 +761,7 @@
     var com = d.commercial || {}, cur = q.currency;
     var spOT = com.specialOneTime || {}, spOpt = com.specialOptional || {};
     var ids = [];
-    q.packages.forEach(function (p) { p.oneTime.forEach(function (l) { if (ids.indexOf(l.id) === -1) ids.push(l.id); }); });
+    q.packages.forEach(function (p) { p.oneTime.forEach(function (l) { if (ids.indexOf(l.id) === -1 && !/^WA_/.test(l.id)) ids.push(l.id); }); });  // WhatsApp credits are priced in the top-up box
     var key = q.packages.map(function (p) { return p.package; }).join(',') + '|' + ids.join(',') + '|' + q.optionalOneTime.map(function (l) { return l.id; }).join(',') + '|' + cur;
     function badge(std, sp) { return sp !== null && sp !== undefined && sp !== '' && Number(sp) < std ? '<span class="badge warn">Needs approval</span>' : ''; }
     if (key !== OTS_KEY) {
@@ -745,6 +810,12 @@
     var c = ev && ev.contract;
     if (!c) return;
     var msa = c.msa, newMsa = c.mode === 'NEW_MSA';
+    if (isTopup(DEAL)) {
+      $('newMsaBox').classList.add('hidden'); $('msaBox').classList.add('hidden');
+      $('btnGenerate').textContent = 'Generate Top-up Order Form';
+      $('contractPack').innerHTML = '<b>Top-up Quotation &amp; Order Form</b> – supplements Order Form <b>' + esc((DEAL.topupOf || {}).orderFormNo || '—') + '</b> under MSA <b>' + esc((msa || {}).no || '—') + '</b>. Only the added items are listed, for the term chosen above.';
+      return;
+    }
     $('newMsaBox').classList.toggle('hidden', !msa);
     $('msaBox').classList.toggle('hidden', !newMsa);
     $('btnGenerate').textContent = newMsa ? 'Generate Order Form & MSA' : 'Generate Order Form';
@@ -755,6 +826,33 @@
         (msa.dealId ? ' (signed with deal ' + esc(msa.dealId) + (msa.date ? ', ' + esc(msa.date) : '') + ')' : ' (entered in “Existing MSA reference”)') + '.';
   }
 
+
+  function renderSideTopup(ev, d) {
+    var h = '', q = ev.quote;
+    if (ev.errors.length) h += '<ul class="tight error">' + ev.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>';
+    qa('#waTable tr.wa-row').forEach(function (tr) {
+      var c = Number(tr.querySelector('[data-wa="credits"]').value || 0), pr = Number(tr.querySelector('[data-wa="price"]').value || 0);
+      tr.querySelector('[data-wa="amount"]').textContent = c && pr ? money((d.commercial || {}).currency, Math.round(c * pr * 100) / 100) : '—';
+    });
+    var lb = $('tuLicBadge'), lp = (d.topup || {}).licencePrice, ct = (d.topupOf || {}).contractedPricePerSite;
+    if (lb) lb.innerHTML = lp !== '' && lp !== undefined && lp !== null && Number(lp) < ct ? '<span class="badge warn">Needs approval</span>' : '';
+    if (q) {
+      var p = q.packages[0], c = q.currency, t = q.topup;
+      var rows = [];
+      if (t.addedSites) rows.push(['Licences +' + t.addedSites + ' sites', money(c, p.licenceMonthly) + ' / mo']);
+      p.addOns.forEach(function (a) { rows.push([esc(a.label), a.text ? esc(a.text) : money(c, a.total) + ' / mo']); });
+      t.comms.forEach(function (x) { rows.push(['Comms up to ' + Number(x.messages).toLocaleString('en-US'), money(c, x.total) + ' / mo']); });
+      p.oneTime.concat(q.optionalOneTime).forEach(function (l) { rows.push([esc(l.label) + (l.qty > 1 ? ' (× ' + Number(l.qty).toLocaleString('en-US') + ')' : ''), l.text ? esc(l.text) : money(c, l.total)]); });
+      h += '<table><tr><th>Top-up item</th><th class="num">Amount</th></tr>' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td class="num">' + r[1] + '</td></tr>'; }).join('') +
+        '<tr><td>Recurring / month</td><td class="num">' + money(c, p.recurringMonthly) + '</td></tr>' +
+        '<tr><td>One-time total</td><td class="num">' + money(c, p.oneTimeTotal + (q.optionalOneTimeTotal || 0)) + '</td></tr>' +
+        '<tr><td><b>Total for ' + t.termMonths + ' months</b></td><td class="num"><b>' + money(c, p.termTotal) + '</b></td></tr></table>';
+      h += '<p>' + (!ev.needsApproval ? '<span class="badge ok">Contracted pricing</span>' : APPROVAL === 'Approved' ? '<span class="badge ok">Approved by Amith</span>' : APPROVAL === 'Pending' ? '<span class="badge warn">Waiting for Amith’s approval</span>' : '<span class="badge warn">Needs Amith’s approval</span>') + '</p>';
+    } else if (!ev.errors.length) h += '<p class="muted">Add licences, add-ons, packs, WhatsApp credits or services.</p>';
+    var miss = Object.keys(ev.missing || {});
+    h += miss.length ? '<p class="muted">Missing for: ' + miss.map(function (t) { return DOC_LABEL[t]; }).join(', ') + '</p>' : (ev.ok ? '<p><span class="badge ok">Ready to generate</span></p>' : '');
+    $('side').innerHTML = h;
+  }
 
   function renderSide(ev, d) {
     renderContractPack(ev);
@@ -767,6 +865,7 @@
       if (bd) bd.innerHTML = pk && sp !== '' && sp !== undefined && sp !== null && Number(sp) < pk.standardPricePerSite ? '<span class="badge warn">Needs approval</span>' : '';
     });
     renderOtSpecials(ev.quote && (d.commercial.packages || []).length ? ev.quote : null, d);
+    if (isTopup(d)) { renderSideTopup(ev, d); return; }
     var h = '', com = d.commercial || {};
     var sites = Number(com.stores || 0) + Number(com.ecomSites || 0);
     if (!(com.packages || []).length || sites < 1) {
@@ -898,7 +997,7 @@
     var isSA = BOOT.user.role === 'Superadmin';
     $('dealList').innerHTML = '<table><tr>' + (isSA ? '<th style="width:28px"><input type="checkbox" id="selAllDeals" style="width:auto" title="Select all on this page"></th>' : '') + '<th>Client</th><th>Country</th><th>Package</th><th class="num">First-year value</th><th>Status</th><th>Approval</th><th>Last activity</th>' +
       (showOwner ? '<th>Owner</th>' : '') + '<th></th></tr>' + rows.map(function (r) {
-        return '<tr>' + (isSA ? '<td><input type="checkbox" data-sel="' + esc(r.dealId) + '" style="width:auto"' + (SELECTED[r.dealId] ? ' checked' : '') + '></td>' : '') + '<td><a href="#" class="dealname" data-open="' + esc(r.dealId) + '">' + esc(r.clientName) + '</a><br><span class="muted">' + esc(r.dealId) + ' · v' + r.version + ' · ' + ((r.stage || 'PROPOSAL') === 'CONTRACT' ? 'Order Form stage' : 'Proposal stage') + '</span></td><td>' + esc(r.country) + '</td><td>' + esc(r.orderPackage || r.packages) + '</td>' +
+        return '<tr>' + (isSA ? '<td><input type="checkbox" data-sel="' + esc(r.dealId) + '" style="width:auto"' + (SELECTED[r.dealId] ? ' checked' : '') + '></td>' : '') + '<td><a href="#" class="dealname" data-open="' + esc(r.dealId) + '">' + esc(r.clientName) + '</a><br><span class="muted">' + esc(r.dealId) + ' · v' + r.version + ' · ' + (r.dealType === 'TOPUP' ? '<span class="badge">Top-up of ' + esc(r.parentDealId) + '</span>' : (r.stage || 'PROPOSAL') === 'CONTRACT' ? 'Order Form stage' : 'Proposal stage') + '</span></td><td>' + esc(r.country) + '</td><td>' + esc(r.orderPackage || r.packages) + '</td>' +
           '<td class="num">' + (r.value ? money(r.currency, r.value) : '') + '</td><td>' + esc(r.status) + (isStale(r) ? '<br><span class="badge warn">⚠ No update ' + daysAgo(r.updatedAt) + ' days</span>' : '') + '</td><td>' +
           (r.needsApproval ? '<span class="badge ' + (r.approvalStatus === 'Approved' ? 'ok' : r.approvalStatus === 'Rejected' ? 'err' : 'warn') + '">' + esc(r.approvalStatus) + '</span>' : '<span class="badge ok">Not required</span>') +
           '</td><td>' + esc(String(activityOf(r)).slice(0, 10)) + '<br><span class="muted" style="font-size:12px">' + (r.lastGeneratedAt ? 'generated' : 'updated') + '</span></td>' + (showOwner ? '<td>' + esc(r.createdBy === mine ? 'Me' : r.createdBy) + '</td>' : '') +
@@ -914,6 +1013,11 @@
     qa('[data-open]').forEach(function (b) { b.onclick = function (e) { if (e) e.preventDefault(); run('apiGetDeal', b.dataset.open).then(function (r) { APPROVAL = r.summary && r.summary.approvalStatus; fill(r.deal); show('deal'); go(4); loadDocs(r.deal.dealId); }); }; });
     qa('[data-clone]').forEach(function (b) { b.onclick = function () { run('apiCloneDeal', b.dataset.clone).then(function (r) { APPROVAL = null; fill(r.deal); show('deal'); go(1); toast('Cloned as ' + r.deal.dealId); }); }; });
     qa('[data-convert]').forEach(function (b) { b.onclick = function () { convertDeal(b.dataset.convert); }; });
+    qa('[data-topup]').forEach(function (b) { b.onclick = function () {
+      busyStart('Creating top-up…', ['Loading the Won deal', 'Locking contracted prices', 'Opening the top-up']);
+      run('apiCreateTopUp', b.dataset.topup).then(function (r) { busyClose(); APPROVAL = null; fill(r.deal); show('deal'); go(2); $('genResult').innerHTML = ''; $('docList').innerHTML = ''; toast('Top-up ' + r.deal.dealId + ' created'); })
+        .catch(function (e) { busyFail(e.message); });
+    }; });
     qa('[data-status]').forEach(function (b) { b.onclick = function () { run('apiSetDealStatus', b.dataset.id, b.dataset.status).then(function () { toast('Marked ' + b.dataset.status); loadList(); }); }; });
   }
 
@@ -929,6 +1033,7 @@
   function rowMenu(r) {
     var id = esc(r.dealId), items = '<button data-open="' + id + '">' + ICON.open + 'Open</button><button data-clone="' + id + '">' + ICON.clone + 'Clone as new deal</button>';
     if ((r.stage || 'PROPOSAL') === 'PROPOSAL' && ['Proposal generated', 'Sent'].indexOf(r.status) !== -1) items += '<button data-convert="' + id + '">' + ICON.convert + 'Convert to Order Form</button>';
+    if (r.status === 'Won' && r.dealType !== 'TOPUP' && r.stage === 'CONTRACT') items += '<button data-topup="' + id + '">' + ICON.convert + 'Top-up (add licences, add-ons, credits)</button>';
     if (['Generated', 'Proposal generated', 'Contract generated', 'Sent', 'Won', 'Lost'].indexOf(r.status) !== -1) {
       items += '<div class="sep"></div><div class="grp">Mark as</div>' + ['Sent', 'Won', 'Lost'].filter(function (x) { return x !== r.status; }).map(function (x) {
         return '<button data-status="' + x + '" data-id="' + id + '">' + ICON[x] + x + '</button>';
@@ -963,7 +1068,8 @@
         tile('Win rate', rate(s.winRate), 'won ÷ (won + lost)') +
         tile('Proposal → Order Form', rate(s.conversionRate), 'proposals that moved to Order Form') +
         tile('Waiting for approval', s.pendingApprovals, 'special pricing') +
-        tile('Avg. discount vs list', pct(s.avgDiscountPct), 'incl. market & volume') + '</div>';
+        tile('Avg. discount vs list', pct(s.avgDiscountPct), 'incl. market & volume') +
+        (s.topups && s.topups.count ? tile('Top-ups (upsell)', usd(s.topups.wonUsd), s.topups.count + ' top-up(s) · open ' + usd(s.topups.openUsd)) : '') + '</div>';
       // action needed
       var a = s.actions, acts = [];
       a.toConvert.forEach(function (x) { acts.push(['Proposal sent – convert to Order Form when accepted', x, 'convert']); });
@@ -1070,6 +1176,11 @@
     qa('#steps div').forEach(function (el, i) { el.textContent = ui.steps[i]; });
     qa('[data-stage]').forEach(function (el) { el.classList.toggle('hidden', el.dataset.stage !== stage); });
     $('btnGenerate').textContent = ui.gen;
+    if (isTopup(DEAL)) {
+      $('stageBanner').innerHTML = '<b>Top-up</b> of deal ' + esc(DEAL.topupOf.dealId) + ' – add licences, add-ons, communication packs, WhatsApp credits or services. Generates a Top-up Quotation &amp; Order Form under the client’s MSA.';
+      qa('#steps div').forEach(function (el, i) { el.textContent = ['1 · Client details', '2 · Top-up items', '3 · Order Form terms', '4 · Review'][i]; });
+      $('btnGenerate').textContent = 'Generate Top-up Order Form';
+    }
     var canConvert = stage === 'PROPOSAL' && DEAL && DEAL.dealId && ['Proposal generated', 'Sent'].indexOf(DEAL.status) !== -1;
     $('btnConvert').classList.toggle('hidden', !canConvert);
   }

@@ -151,3 +151,11 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - MSA template = a copy of management's doc in _Templates ("TEMPLATE – MSA (EN) v1.0", 18bQ-iwrqEhZtP7tQ4DOYB3LSao0nN8n_8fxPynDcULg) with placeholders; old ToS/DPA templates deactivated.
 - New data: Entities.courts_city (jurisdiction city; falls back to governing_law), customer signatory email + notice email on the deal.
 - Open (OptCulture): Amith to confirm the three online pages are live and complete (incl. country DPA addenda formerly drafted here); OptCulture signatory per entity; courts city per entity.
+
+## Top-ups for Won deals (2026-11-15, Varaprasad)
+- A **Won** deal (not itself a top-up) has a **Top-up** action. It creates a new deal (own D-number, "Top-up of D-…") at the contract stage that produces a **Top-up Quotation & Order Form only**, under the client's MSA, supplementing the original Order Form.
+- Content (all optional): additional stores / e-commerce sites, new add-ons, communication packs, **WhatsApp credits**, optional one-time services. Installation fees only for added stores/sites; no set-up fee.
+- **Pricing: contracted** – the original deal's price snapshot, market, currency and slab; licence = its final per-site price. Below contracted (or below standard for one-time/comms) needs approval.
+- **Term: own term** (start date, 12/24/36 months, billing cycle) – not co-termed.
+- **WhatsApp credits**: types Transactional, Promotional, Authentication; rep enters credit count and price per credit freely; **every WhatsApp credit line needs Amith's approval**. Prepaid (one-time section). The proposal still shows the standard WhatsApp markup.
+- Dashboard: "Top-ups (upsell)" tile (won value, count, open value).

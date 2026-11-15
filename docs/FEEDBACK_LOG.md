@@ -70,3 +70,9 @@
 - Live sheet: Templates (MSA active; TOS/DPA inactive), Numbering MSA row, Entities courts_city column, CommercialTerms tos_url/dpa_url/sla_url.
 - UI: step 1 customer signatory email + notice email; step 3 "MSA – Special Terms and Exceptions (§7)" box (only when an MSA is generated), "What will be generated" box, button "Generate Order Form & MSA"; review shows the exceptions with "Needs Amith's approval".
 - Tests: 81 unit tests and 85 browser checks pass.
+
+## 30. Top-up Order Forms (see DECISIONS "Top-ups for Won deals")
+- Pricing: `buildTopupQuote` (contracted price lock, contracted slab, installs only, comms packs, WhatsApp credits with approval). Logic: `makeTopUp`, `canTopUp`, `topupInput`; top-up fields server-owned.
+- Server: `apiCreateTopUp`. Order Form data: `IsTopUp` header block, parent Order Form/deal refs, licence/add-on/comms lines, "N credits × price" lines. Live Order Form template: Top-up block + "Top-up Term" label.
+- UI: ⋯ → Top-up; step 2 "Top-up items" box (licences, new add-ons only, comms packs, WhatsApp credit rows with amounts); top-up live summary; step 3 Order Form only; My Deals badge; dashboard tile.
+- Tests: 7 unit tests (topup.test.js) + 7 browser checks.

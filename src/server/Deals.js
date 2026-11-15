@@ -241,3 +241,28 @@ function apiDeleteDeals(dealIds, confirmText) {
     lock.releaseLock();
   }
 }
+
+/** Won deal → new top-up deal (Order Form only, contracted prices, own term). Owner, manager or Superadmin. */
+function apiCreateTopUp(parentDealId) {
+  var user = requireUser_();
+  var m = getMaster();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var rec = findDeal_(parentDealId);
+    if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
+    var parent = attachClientMsa_(JSON.parse(rec.input_json));
+    if (!canTopUp(parent, rec.status)) throw new Error('A top-up can be created only from a Won deal (not from another top-up).');
+    var deal = makeTopUp(parent, evaluateDeal(withSnapshot(m, parent.pricingSnapshot), parent).quote);
+    try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); }
+    attachClientMsa_(deal);
+    var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
+    var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), null);
+    newRec.status = deal.status;
+    writeRecord_('Deals', newRec, null);
+    audit_('TOPUP_CREATED', { parent: parentDealId }, deal.dealId);
+    return { deal: deal, evaluation: ev, summary: dealSummary(newRec) };
+  } finally {
+    lock.releaseLock();
+  }
+}

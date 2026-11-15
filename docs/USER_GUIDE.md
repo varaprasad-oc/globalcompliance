@@ -28,3 +28,9 @@ Search and filter your deals; **Open** to continue or revise (revisions become v
 - Fill the customer's **signatory name, designation and email** (step 1) – they are printed in the MSA signature block.
 - **MSA – Special Terms and Exceptions** (step 3): type any agreed exceptions, naming the clause (one per line). Leave it empty for "None.". Anything typed goes to Amith for approval first (drafts are created meanwhile).
 - When the client signs, mark the deal **Won**. The MSA is then saved on the client: their next deal produces only a new Order Form under the same MSA. Tick "Issue a new MSA anyway" if a new MSA is needed.
+
+## Top-ups (existing customers)
+- Open **My Deals**, find the **Won** deal, ⋯ → **Top-up**. A new deal opens on "Top-up items".
+- Fill only what the client buys now: additional stores / e-commerce sites (contracted price per site is pre-filled), new add-ons, communication packs, **WhatsApp credits** (choose Transactional / Promotional / Authentication, enter credits and price per credit), optional services.
+- Step 3: set the top-up's own start date, term and billing. Generate → **Top-up Quotation & Order Form** citing the original Order Form and the MSA.
+- WhatsApp credits and any price below the contracted price go to Amith for approval first.

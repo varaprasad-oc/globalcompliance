@@ -8,6 +8,9 @@ th{background:#7B3FE4;color:#ffffff} td.k{background:#f3effc;font-weight:bold;wi
 <p>{{IMAGE:OptCultureLogo}}</p>
 <h1>OPTCULTURE – COMMERCIAL QUOTATION &amp; ORDER FORM</h1>
 <p>Software Subscription &amp; Services</p>
+<p>{{#IF IsTopUp}}</p>
+<p><b>TOP-UP ORDER FORM</b> – supplements Order Form {{ParentOrderFormNo}} under the same Master Services Agreement. Existing subscriptions continue unchanged; this Order Form covers only the additional items below, for its own term.</p>
+<p>{{/IF IsTopUp}}</p>
 <p><b>Order Form No.:</b> {{DocNo}} &nbsp; · &nbsp; <b>Order Date:</b> {{DocDate}} &nbsp; · &nbsp; <b>Quote Valid Until:</b> {{ValidUntil}}{{#IF HasProposalNo}} &nbsp; · &nbsp; <b>Ref. Proposal:</b> {{ProposalNo}}{{/IF HasProposalNo}}</p>
 
 <h2>1. Customer &amp; Contracting Details</h2>
@@ -28,7 +31,7 @@ th{background:#7B3FE4;color:#ffffff} td.k{background:#f3effc;font-weight:bold;wi
 <tr><th>Particulars</th><th>Details</th></tr>
 <tr><td class="k">Plan</td><td>OptCulture {{OrderPackage}}</td></tr>
 <tr><td class="k">Subscription Start Date</td><td>{{SubscriptionStartDate}}</td></tr>
-<tr><td class="k">Initial Subscription Term</td><td>{{SubscriptionTerm}}</td></tr>
+<tr><td class="k">{{#IF IsTopUp}}Top-up Term{{/IF IsTopUp}}{{#IF !IsTopUp}}Initial Subscription Term{{/IF IsTopUp}}</td><td>{{SubscriptionTerm}}</td></tr>
 <tr><td class="k">Subscription End Date</td><td>{{SubscriptionEndDate}}</td></tr>
 <tr><td class="k">Renewal Term</td><td>{{RenewalTerm}}</td></tr>
 <tr><td class="k">Auto-Renewal</td><td>{{AutoRenewal}}</td></tr>

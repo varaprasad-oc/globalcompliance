@@ -452,7 +452,7 @@ function validateQuoteInput(master, input) {
   if (!markets[input.market]) errs.push('Unknown market: ' + input.market);
   if (!currencies[input.currency]) errs.push('Unknown currency: ' + input.currency);
   var stores = Number(input.stores || 0), ecom = Number(input.ecomSites || 0);
-  if (stores < 0 || ecom < 0 || (stores + ecom) < 1) errs.push('Enter at least 1 store or e-commerce site');
+  if (stores < 0 || ecom < 0 || (!input.allowZeroSites && (stores + ecom) < 1)) errs.push('Enter at least 1 store or e-commerce site');
   if (!input.packages || !input.packages.length) errs.push('Select at least one package');
   (input.packages || []).forEach(function (p) { if (!packages[p]) errs.push('Unknown package: ' + p); });
   Object.keys(input.specialPrices || {}).forEach(function (p) {
@@ -481,7 +481,7 @@ function buildQuote(master, input) {
   var stores = Number(input.stores || 0);
   var ecomSites = Number(input.ecomSites || 0);
   var sites = stores + ecomSites;
-  var slab = findSlab(master, sites);
+  var slab = findSlab(master, input.slabSites !== undefined ? Number(input.slabSites) : sites);  // top-ups keep the contracted slab
 
   var fx = Number(cur.fx_rate);
   var marketDisc = Number(mkt.discount);
@@ -648,6 +648,74 @@ function featureMatrix(master, packageNames) {
       packageNames.forEach(function (p) { v[p] = f[p]; });
       return { feature: f.feature, values: v, description: f.description_en, descriptionAr: f.description_ar, addonItemId: f.addon_item_id || '' };
     });
+}
+
+/** WhatsApp credit types offered in top-ups (Meta categories). */
+var WHATSAPP_CREDIT_TYPES = ['Transactional', 'Promotional', 'Authentication'];
+
+/**
+ * Top-up quote for a Won deal (decision 2026-11-15): only the added items, at the CONTRACTED prices of the original deal
+ * (its price snapshot, market, currency and slab; licence = its final per-site price). Own term.
+ * input = { market, currency, termMonths, package, contractedPricePerSite, baseSites, addStores, addEcomSites,
+ *           licencePrice, addOns:[ids], oneTimeItems, specialOptional, specialInstall:{STORE_INSTALL, ECOM_INSTALL},
+ *           commsTiers:[ids], specialComms:{id: price}, whatsapp:[{type, credits, pricePerCredit}] }
+ * Returns a quote with the same shape the Order Form uses (packages[0], optionalOneTime, usage, …) plus .topup.
+ */
+function buildTopupQuote(master, input) {
+  var addStores = Number(input.addStores || 0), addEcom = Number(input.addEcomSites || 0), added = addStores + addEcom;
+  var tiers = input.commsTiers || [];
+  var specialComms = {};
+  tiers.forEach(function (id) { if ((input.specialComms || {})[id] !== undefined) specialComms[id] = input.specialComms[id]; });
+  var q = buildQuote(master, {
+    market: input.market, currency: input.currency, stores: addStores, ecomSites: addEcom, allowZeroSites: true,
+    slabSites: Number(input.baseSites || 0) || added, packages: [input.package],
+    addOnsByPackage: (function () { var o = {}; o[input.package] = input.addOns || []; return o; })(),
+    oneTimeItems: input.oneTimeItems || [], specialOptional: input.specialOptional || {},
+    specialOneTime: (function () { var o = {}; o[input.package] = input.specialInstall || {}; return o; })(),
+    specialComms: specialComms
+  });
+  if (!q.ok) return q;
+  var cur = input.currency, errors = [], reasons = q.approvalReasons.slice();
+  var p = q.packages[0];
+  var contracted = Number(input.contractedPricePerSite || p.standardPricePerSite);
+  var lp = input.licencePrice;
+  var licencePrice = (lp === '' || lp === null || lp === undefined) ? contracted : Number(lp);
+  if (added > 0 && licencePrice < contracted) {
+    reasons.push('Top-up licence: ' + formatMoney(cur, licencePrice) + ' vs contracted ' + formatMoney(cur, contracted) + ' per site/month');
+  }
+  var licenceMonthly = added > 0 ? licencePrice * added : 0;
+  var installs = p.oneTime.filter(function (l) { return l.id !== 'SETUP'; });  // no set-up fee on a top-up
+  var comms = q.comms.filter(function (c) { return tiers.indexOf(c.id) !== -1; });
+  var commsMonthly = comms.reduce(function (s, c) { return s + (c.total || 0); }, 0);
+  var whatsapp = (input.whatsapp || []).filter(function (w) { return w && (Number(w.credits) > 0 || Number(w.pricePerCredit) > 0); }).map(function (w) {
+    var credits = Number(w.credits || 0), ppc = Number(w.pricePerCredit || 0);
+    if (WHATSAPP_CREDIT_TYPES.indexOf(w.type) === -1) errors.push('WhatsApp credit type must be one of ' + WHATSAPP_CREDIT_TYPES.join(', '));
+    if (!(credits > 0) || !(ppc > 0)) errors.push('WhatsApp ' + (w.type || '') + ' credits: enter credit count and price per credit');
+    var total = Math.round(credits * ppc * 100) / 100;
+    reasons.push('WhatsApp ' + w.type + ' credits: ' + credits.toLocaleString('en-US') + ' × ' + formatMoney(cur, ppc) + ' = ' + formatMoney(cur, total));
+    return { id: 'WA_' + String(w.type).toUpperCase(), label: 'WhatsApp ' + w.type + ' credits', unit: 'per credit', qty: credits, unitPrice: ppc, total: total, text: '', credits: credits };
+  });
+  var oneTime = installs.concat(whatsapp);
+  var oneTimeTotal = oneTime.reduce(function (s, l) { return s + (l.total || 0); }, 0);
+  var recurringMonthly = licenceMonthly + p.addOnsMonthly + commsMonthly;
+  if (!added && !p.addOns.length && !comms.length && !whatsapp.length && !q.optionalOneTime.length) errors.push('Add at least one item to the top-up');
+  if (errors.length) return { ok: false, errors: errors };
+  var term = Number(input.termMonths || 12);
+  var pkg = {
+    package: p.package, standardPricePerSite: contracted, contractedPricePerSite: contracted, specialPricePerSite: licencePrice === contracted ? null : licencePrice,
+    finalPricePerSite: licencePrice, listPricePerSite: p.listPricePerSite, effectiveDiscountPct: p.listPricePerSite ? Math.round((1 - licencePrice / p.listPricePerSite) * 10000) / 10000 : 0,
+    specialDiscountPct: licencePrice < contracted ? Math.round((1 - licencePrice / contracted) * 10000) / 10000 : 0,
+    sites: added, licenceMonthly: licenceMonthly, licenceAnnual: licenceMonthly * 12, addOns: p.addOns, addOnsMonthly: p.addOnsMonthly,
+    commsMonthly: commsMonthly, recurringMonthly: recurringMonthly, recurringAnnual: recurringMonthly * 12,
+    overagePer1000: p.overagePer1000, receiptsIncludedPerSite: p.receiptsIncludedPerSite,
+    oneTime: oneTime, oneTimeTotal: oneTimeTotal, firstYearTotal: oneTimeTotal + recurringMonthly * 12,
+    termTotal: oneTimeTotal + q.optionalOneTimeTotal + recurringMonthly * term
+  };
+  return Object.assign({}, q, {
+    packages: [pkg], needsApproval: reasons.length > 0, approvalReasons: reasons,
+    topup: { addStores: addStores, addEcomSites: addEcom, addedSites: added, baseSites: Number(input.baseSites || 0), contractedPricePerSite: contracted,
+      comms: comms, whatsapp: whatsapp, termMonths: term }
+  });
 }
 
 // ===================== DocData.js =====================
@@ -870,6 +938,30 @@ function buildDocData(docType, master, deal, quote, ctx) {
     lists.OneTimeLines = op.oneTime.concat(quote.optionalOneTime).map(function (l) {
       return { description: l.label, scope: l.qty > 1 ? l.qty + ' × ' + m(l.unitPrice) : (l.unit || ''), amount: l.text || m(l.total) };
     });
+
+    // Top-up Order Form: only the added items, under the parent Order Form and MSA
+    flags.IsTopUp = !!quote.topup;
+    fields.ParentOrderFormNo = ''; fields.ParentDealId = '';
+    if (quote.topup) {
+      var top = deal.topupOf || {}, tq = quote.topup;
+      fields.ParentOrderFormNo = _v(top.orderFormNo || 'the original Order Form');
+      fields.ParentDealId = _v(top.dealId);
+      fields.FirstYearTotal = m(op.firstYearTotal + quote.optionalOneTimeTotal);
+      lists.SubscriptionLines = (tq.addedSites ? [{
+        product: 'Additional licences – OptCulture ' + op.package + ' Plan',
+        scope: tq.addedSites + (tq.addedSites === 1 ? ' site (' : ' sites (') + (tq.addStores ? tq.addStores + (tq.addStores === 1 ? ' store' : ' stores') : '') +
+          (tq.addStores && tq.addEcomSites ? ' + ' : '') + (tq.addEcomSites ? tq.addEcomSites + ' e-commerce' : '') + ') @ ' + m(op.finalPricePerSite) + ' / site / month',
+        billing: fields.BillingCycle + ', in advance', amount: m(op.licenceAnnual) + ' / year'
+      }] : []).concat(op.addOns.map(function (a) {
+        return { product: a.label, scope: 'New add-on', billing: fields.BillingCycle + ', in advance', amount: a.text ? a.text : m(a.total * 12) + ' / year' };
+      })).concat(tq.comms.map(function (c) {
+        return { product: 'Platform messaging – up to ' + Number(c.messages).toLocaleString('en-US') + ' / month', scope: 'Communication pack', billing: fields.BillingCycle + ', in advance', amount: m(c.total * 12) + ' / year' };
+      }));
+      lists.OneTimeLines = op.oneTime.concat(quote.optionalOneTime).map(function (l) {
+        var credits = /^WA_/.test(l.id);
+        return { description: l.label, scope: credits ? Number(l.qty).toLocaleString('en-US') + ' credits × ' + m(l.unitPrice) : (l.qty > 1 ? l.qty + ' × ' + m(l.unitPrice) : (l.unit || '')), amount: l.text || m(l.total) };
+      });
+    }
   }
 
   // Online documents incorporated by the MSA (editable in CommercialTerms) – also cited by the Order Form
@@ -1034,11 +1126,14 @@ function existingMsa(deal) {
   var msa = deal.msa || {}, ref = String((deal.commercial || {}).msaRef || '').trim();
   if (msa.no && msa.dealId !== deal.dealId) return { no: msa.no, dpaNo: msa.dpaNo || '', dealId: msa.dealId || '', date: msa.date || '', source: 'client' };
   if (ref && ref !== (deal.docNos || {}).MSA) return { no: ref, dpaNo: '', dealId: '', date: '', source: 'manual' };
+  var top = deal.topupOf || {};
+  if (deal.dealType === 'TOPUP' && top.msaNo) return { no: top.msaNo, dpaNo: '', dealId: top.dealId || '', date: '', source: 'parent' };
   return null;
 }
 
 function contractMode(deal) {
   if (deal.stage !== 'CONTRACT') return null;
+  if (deal.dealType === 'TOPUP') return 'ORDER_ONLY';  // a top-up is always an Order Form under the existing MSA
   return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'NEW_MSA';
 }
 
@@ -1080,7 +1175,7 @@ function evaluateDeal(master, deal) {
   var c1 = c.businessContact || {}, c2 = c.billingContact || {};
   [c1.email, c2.email].forEach(function (e) { if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) errors.push('Invalid email: ' + e); });
 
-  var quote = buildQuote(master, com);
+  var quote = deal.dealType === 'TOPUP' ? buildTopupQuote(master, topupInput(deal)) : buildQuote(master, com);
   if (!quote.ok) errors = errors.concat(quote.errors);
 
   var missing = {};
@@ -1167,6 +1262,7 @@ function dealSummary(rec) {
     createdBy: rec.created_by, createdAt: rec.created_at instanceof Date ? rec.created_at.toISOString() : String(rec.created_at || ''), updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
     lastGeneratedAt: d.lastGeneratedAt || '',
+    dealType: d.dealType || '', parentDealId: (d.topupOf || {}).dealId || '',
     referralPartnerId: d.referralPartnerId || '',
     stage: d.stage || '',
     orderPackage: op ? op.package : '',
@@ -1194,6 +1290,7 @@ function dashboardStats(summaries, users, now, opts) {
   var nameOf = {};
   (users || []).forEach(function (u) { nameOf[String(u.email).toLowerCase()] = u.name; });
   var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, winRate: null, conversionRate: null,
+    topups: { count: 0, openUsd: 0, wonUsd: 0 },
     byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], stale: [], staleDays: staleDays, periodDays: periodDays, actions: { toConvert: [], pending: [], notSent: [], rejected: [] } };
   var discSum = 0, discN = 0;
   function add(map, key, sm) {
@@ -1207,6 +1304,7 @@ function dashboardStats(summaries, users, now, opts) {
     var open = sm.status !== 'Won' && sm.status !== 'Lost';
     if (open) s.pipelineUsd += sm.valueUsd || 0;
     if (sm.status === 'Won') s.wonUsd += sm.valueUsd || 0;
+    if (sm.dealType === 'TOPUP') { s.topups.count++; if (sm.status === 'Won') s.topups.wonUsd += sm.valueUsd || 0; else if (open) s.topups.openUsd += sm.valueUsd || 0; }
     if (sm.approvalStatus === 'Pending') s.pendingApprovals++;
     if (sm.orderPackage) { discSum += sm.discountPct || 0; discN++; }
     add(s.byStatus, sm.status, sm);
@@ -1275,7 +1373,7 @@ function cloneDeal(deal, newId) {
   c.status = DEAL_STATUS.DRAFT;
   c.client = c.client || {};
   delete c.docNos; delete c.pricingSnapshot; delete c.approvalNote; delete c.aiDraft;  // a clone gets new numbers and today's prices
-  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true }; delete c.proposalBaseline;
+  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true }; delete c.proposalBaseline; delete c.dealType; delete c.topupOf; delete c.topup;
   return c;
 }
 
@@ -1288,7 +1386,7 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   var refresh = !!d.refreshPrices;
   delete d.refreshPrices;
   if (!stored) {
-    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT;
+    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT; delete d.dealType; delete d.topupOf;
     delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId; delete d.proposalBaseline;
     d.stage = 'PROPOSAL'; d.docs = { PROPOSAL: true };
     return d;
@@ -1297,6 +1395,8 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   d.docNos = stored.docNos;
   d.proposalBaseline = stored.proposalBaseline;
   d.clientId = stored.clientId;
+  if (stored.dealType) d.dealType = stored.dealType; else delete d.dealType;
+  if (stored.topupOf) d.topupOf = stored.topupOf; else delete d.topupOf;
   d.pricingSnapshot = refresh || !stored.pricingSnapshot ? freshSnapshot : stored.pricingSnapshot;
   d.stage = stored.stage;
   if (d.stage) {
@@ -1342,6 +1442,48 @@ function planDealDeletion(dealIds, records) {
     clientIds: clients.map(function (c) { return c.client_id; }),
     fileIds: files,
     rows: { Deals: desc(deals), Documents: desc(docs), Approvals: desc(appr), Clients: desc(clients) }
+  };
+}
+
+/** Pricing input of a top-up deal: contracted terms from the parent (deal.topupOf, server-owned) + the rep's additions (deal.topup). */
+function topupInput(deal) {
+  var com = deal.commercial || {}, top = deal.topupOf || {}, t = deal.topup || {};
+  return {
+    market: com.market, currency: com.currency, termMonths: com.termMonths, package: top.package,
+    contractedPricePerSite: top.contractedPricePerSite, baseSites: top.baseSites,
+    addStores: t.addStores, addEcomSites: t.addEcomSites, licencePrice: t.licencePrice, addOns: t.addOns || [],
+    specialInstall: (com.specialOneTime || {})[top.package] || t.specialInstall || {}, commsTiers: t.commsTiers || [], specialComms: com.specialComms || {},
+    whatsapp: t.whatsapp || [], oneTimeItems: com.oneTimeItems || [], specialOptional: com.specialOptional || {}
+  };
+}
+
+/** Top-up is offered on Won deals that are not themselves top-ups. */
+function canTopUp(deal, status) {
+  return status === DEAL_STATUS.WON && deal.dealType !== 'TOPUP' && (deal.stage === 'CONTRACT');
+}
+
+/**
+ * New top-up deal from a Won parent: same client, entity, market, currency and price snapshot; contracted package price
+ * and slab locked; contract stage directly (Order Form only, under the parent's MSA). Own term (defaults 12 months).
+ */
+function makeTopUp(parent, parentQuote) {
+  var com = parent.commercial || {}, pkg = com.orderPackage || (com.packages || [])[0];
+  var op = ((parentQuote && parentQuote.packages) || []).filter(function (p) { return p.package === pkg; })[0] || {};
+  var msaNo = (parent.msa && parent.msa.no) || (parent.docNos || {}).MSA || com.msaRef || '';
+  return {
+    dealType: 'TOPUP', stage: 'CONTRACT', status: DEAL_STATUS.CONTRACT_DRAFT, version: 1,
+    client: JSON.parse(JSON.stringify(parent.client || {})), clientId: parent.clientId, entityId: parent.entityId,
+    language: parent.language, referralPartnerId: parent.referralPartnerId || '',
+    pricingSnapshot: parent.pricingSnapshot,
+    topupOf: { dealId: parent.dealId, orderFormNo: (parent.docNos || {}).ORDER_FORM || '', msaNo: msaNo, package: pkg,
+      contractedPricePerSite: op.finalPricePerSite || null, baseSites: Number(com.stores || 0) + Number(com.ecomSites || 0),
+      baseStores: Number(com.stores || 0), baseEcomSites: Number(com.ecomSites || 0),
+      existingAddOns: ((com.addOnsByPackage || {})[pkg] || com.addOns || []).slice() },
+    topup: { addStores: 0, addEcomSites: 0, addOns: [], commsTiers: [], whatsapp: [] },
+    commercial: { market: com.market, currency: com.currency, packages: [pkg], orderPackage: pkg, stores: 0, ecomSites: 0,
+      termMonths: 12, billingCycle: com.billingCycle || 'Annual', paymentMethod: com.paymentMethod || 'Bank Transfer', autoRenew: com.autoRenew !== false,
+      oneTimeItems: [] },
+    docs: { ORDER_FORM: true }
   };
 }
 
@@ -1972,6 +2114,31 @@ function apiDeleteDeals(dealIds, confirmText) {
     });
     audit_('DEALS_DELETED', { deals: plan.dealIds, clients: plan.clientIds, files: trashed, folders: foldersRemoved, failedFiles: failed, by: user.email }, plan.dealIds.join(','));
     return { deals: plan.dealIds.length, clients: plan.clientIds.length, files: trashed, folders: foldersRemoved, failedFiles: failed.length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Won deal → new top-up deal (Order Form only, contracted prices, own term). Owner, manager or Superadmin. */
+function apiCreateTopUp(parentDealId) {
+  var user = requireUser_();
+  var m = getMaster();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var rec = findDeal_(parentDealId);
+    if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
+    var parent = attachClientMsa_(JSON.parse(rec.input_json));
+    if (!canTopUp(parent, rec.status)) throw new Error('A top-up can be created only from a Won deal (not from another top-up).');
+    var deal = makeTopUp(parent, evaluateDeal(withSnapshot(m, parent.pricingSnapshot), parent).quote);
+    try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); }
+    attachClientMsa_(deal);
+    var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
+    var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), null);
+    newRec.status = deal.status;
+    writeRecord_('Deals', newRec, null);
+    audit_('TOPUP_CREATED', { parent: parentDealId }, deal.dealId);
+    return { deal: deal, evaluation: ev, summary: dealSummary(newRec) };
   } finally {
     lock.releaseLock();
   }
