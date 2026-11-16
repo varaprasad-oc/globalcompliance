@@ -238,7 +238,7 @@ var SEED = {
       ['TOS', 'OC-TOS', 2026, 0],
       ['DPA', 'OC-DPA', 2026, 0],
       ['MSA', 'OC-MSA', 2026, 0],
-      ['DEAL', 'D', 2026, 0],
+      ['DEAL', 'D', 202611, 0],  // monthly: D-yyyymm-0001
       ['CLIENT', 'C', '-', 0]
     ]
   },

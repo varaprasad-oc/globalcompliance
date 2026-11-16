@@ -76,3 +76,6 @@
 - Server: `apiCreateTopUp`. Order Form data: `IsTopUp` header block, parent Order Form/deal refs, licence/add-on/comms lines, "N credits × price" lines. Live Order Form template: Top-up block + "Top-up Term" label.
 - UI: ⋯ → Top-up; step 2 "Top-up items" box (licences, new add-ons only, comms packs, WhatsApp credit rows with amounts); top-up live summary; step 3 Order Form only; My Deals badge; dashboard tile.
 - Tests: 7 unit tests (topup.test.js) + 7 browser checks.
+
+## 31. Deal ID D-yyyymm-0001
+- `numberingPeriod()` makes a Numbering row monthly when its year column holds yyyymm; live DEAL row set to 202611 / 0. Unit test covers month rollover.

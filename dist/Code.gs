@@ -330,7 +330,7 @@ var SEED = {
       ['TOS', 'OC-TOS', 2026, 0],
       ['DPA', 'OC-DPA', 2026, 0],
       ['MSA', 'OC-MSA', 2026, 0],
-      ['DEAL', 'D', 2026, 0],
+      ['DEAL', 'D', 202611, 0],  // monthly: D-yyyymm-0001
       ['CLIENT', 'C', '-', 0]
     ]
   },
@@ -1841,8 +1841,9 @@ function visibleOwners_(user) {
 // ===================== Numbering.js =====================
 /**
  * Sprint 4: document numbers OC-P-2026-0001 etc. Uses a script lock so two reps never get the same number.
- * The counter resets each calendar year. Also used for short deal ids (doc_type DEAL → D-2026-0001).
+ * The counter resets each calendar year. Also used for short deal ids (doc_type DEAL → D-202611-0001, monthly).
  * A row whose year is "-" never resets and has no year in the number (doc_type CLIENT → C-0001).
+ * A row whose year holds a month (yyyymm, e.g. 202611) counts per month (doc_type DEAL → D-202611-0001).
  */
 function nextDocNo(docType, callerHoldsLock) {
   var lock = LockService.getScriptLock();
@@ -1856,12 +1857,13 @@ function nextDocNo(docType, callerHoldsLock) {
     for (var r = 1; r < values.length; r++) {
       if (values[r][iType] !== docType) continue;
       var perpetual = String(values[r][iYear]).trim() === '-';
-      var last = perpetual || Number(values[r][iYear]) === year ? Number(values[r][iLast]) : 0;
+      var period = numberingPeriod(values[r][iYear], new Date());
+      var last = perpetual || String(values[r][iYear]) === String(period) ? Number(values[r][iLast]) : 0;
       var next = last + 1;
-      if (!perpetual) sh.getRange(r + 1, iYear + 1).setValue(year);
+      if (!perpetual) sh.getRange(r + 1, iYear + 1).setValue(period);
       sh.getRange(r + 1, iLast + 1).setValue(next);
       SpreadsheetApp.flush();
-      return formatDocNo(values[r][iPrefix], perpetual ? null : year, next);
+      return formatDocNo(values[r][iPrefix], perpetual ? null : period, next);
     }
     throw new Error('No numbering row for ' + docType);
   } finally {
@@ -1872,6 +1874,13 @@ function nextDocNo(docType, callerHoldsLock) {
 /** Pure formatter (tested in Node): prefix-year-0001, or prefix-0001 when year is null. */
 function formatDocNo(prefix, year, n) {
   return prefix + '-' + (year ? year + '-' : '') + ('000' + n).slice(-4);
+}
+
+/** Counting period of a Numbering row: the current yyyymm when the row is monthly (6-digit value), else the current year. */
+function numberingPeriod(stored, now) {
+  var d = new Date(now);
+  var monthly = /^\d{6}$/.test(String(stored).trim());
+  return monthly ? d.getFullYear() * 100 + (d.getMonth() + 1) : d.getFullYear();
 }
 
 // ===================== Deals.js =====================
@@ -2006,7 +2015,7 @@ function apiSaveDeal(deal) {
     if (existing && !canAccessDeal(user, existing.created_by, m.Users)) throw new Error('You do not have access to this deal.');
     deal = protectDealFields(deal, existing ? JSON.parse(existing.input_json) : null, existing ? existing.status : null, pricingSnapshot(m));
     applyCountryDefaults(m, deal);
-    if (!deal.dealId) { try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); } }  // short id D-2026-0001 (falls back if Numbering has no DEAL row)
+    if (!deal.dealId) { try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); } }  // short id D-yyyymm-0001 (falls back if Numbering has no DEAL row)
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
     attachClientMsa_(deal);
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);

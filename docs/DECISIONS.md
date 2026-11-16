@@ -159,3 +159,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - **Term: own term** (start date, 12/24/36 months, billing cycle) – not co-termed.
 - **WhatsApp credits**: types Transactional, Promotional, Authentication; rep enters credit count and price per credit freely; **every WhatsApp credit line needs Amith's approval**. Prepaid (one-time section). The proposal still shows the standard WhatsApp markup.
 - Dashboard: "Top-ups (upsell)" tile (won value, count, open value).
+
+## Deal ID format (2026-11-16, Varaprasad)
+- Deal IDs are **D-yyyymm-0001** (e.g. D-202611-0001); the counter restarts each month. Numbering tab DEAL row: year column holds the month (202611). Existing deals keep their old IDs. Client IDs stay C-0001.

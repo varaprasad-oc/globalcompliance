@@ -64,9 +64,11 @@ test('Clone resets id, version and status', () => {
   eq(d.dealId, 'D-1', 'original untouched');
 });
 
-test('Short ids: deals D-2026-0001, clients C-0001 (perpetual CLIENT numbering row)', (c) => {
+test('Short ids: deals D-yyyymm-0001 (monthly), clients C-0001 (perpetual CLIENT numbering row)', (c) => {
   eq(c.formatDocNo('D', 2026, 1), 'D-2026-0001');
   eq(c.formatDocNo('C', null, 7), 'C-0007');
+  eq(c.formatDocNo('D', c.numberingPeriod(202611, new Date(2026, 10, 16)), 1), 'D-202611-0001', 'deal ids are monthly');
+  eq([c.numberingPeriod(202611, new Date(2026, 11, 1)), c.numberingPeriod(2026, new Date(2026, 11, 1))], [202612, 2026], 'new month resets the deal counter; yearly rows stay yearly');
   const row = c.SEED.Numbering.rows.filter((r) => r[0] === 'CLIENT')[0];
   eq([row[1], row[2]], ['C', '-']);
 });
