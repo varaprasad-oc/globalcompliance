@@ -56,3 +56,9 @@ npm run placeholders
 5. Apps Script → Project Settings → Google Cloud Platform (GCP) Project → **Change project** → paste the **project number**.
 6. Apps Script → Project Settings → Script Properties: `GCP_PROJECT_ID` = project ID; `GCP_LOCATION` = `global` (or a region, e.g. `europe-west4`, if data residency is required and the model is offered there).
 7. Run `aiHealthCheck` in the editor and approve permissions. The log should show JSON from Gemini.
+
+## Friendly URL via Netlify (redirect)
+- `netlify/` = static site: `_redirects` (302 to the Apps Script /exec URL) + `index.html` fallback. Netlify site linked to this repo: build command empty, publish directory `netlify`.
+- Redirect, not iframe: the app keeps XFrameOptionsMode.DEFAULT; Google sign-in is unreliable inside third-party iframes.
+- Custom domain (optional): Netlify → Domain management, then the CNAME record at OptCulture DNS.
+- If the Apps Script deployment URL changes, update both files.
