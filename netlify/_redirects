@@ -1,0 +1,3 @@
+# Netlify: send every visit to the Apps Script web app (sign-in and permissions stay with Google Workspace).
+# If the deployment URL ever changes, update it here and in index.html, then redeploy the netlify folder.
+/*  https://script.google.com/a/macros/optculture.com/s/AKfycbwKYpTw0Dd05z3gte-f9eSfAr8ycXRMw6lqpLMzurI-rUq4rvaH4xsTzekLg0vypcLy/exec  302!
