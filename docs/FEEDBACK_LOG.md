@@ -79,3 +79,6 @@
 
 ## 31. Deal ID D-yyyymm-0001
 - `numberingPeriod()` makes a Numbering row monthly when its year column holds yyyymm; live DEAL row set to 202611 / 0. Unit test covers month rollover.
+
+## 32. installTriggers failed: missing OAuth scope
+- Deploy of c1b763c: `installTriggers` → "Specified permissions are not sufficient to call ScriptApp.getProjectTriggers". Added `https://www.googleapis.com/auth/script.scriptapp` to appsscript.json. New unit test checks that every Apps Script service used in the code has its scope in the manifest.

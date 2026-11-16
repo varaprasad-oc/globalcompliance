@@ -46,3 +46,21 @@ test('Go-live findings flag blockers and data gaps', () => {
   eq(f2.filter((x) => x.level === 'BLOCKER').length, 0);
   eq(f2.some((x) => /Template MSA EN/.test(x.item) && x.level === 'WARN'), true, 'draft legal template flagged');
 });
+
+test('Manifest declares an OAuth scope for every Apps Script service the code uses', () => {
+  const fs = require('fs'), path = require('path');
+  const dir = path.join(__dirname, '..', 'src', 'server');
+  const code = fs.readdirSync(dir).filter((f) => f.endsWith('.js')).map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+  const scopes = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'appsscript.json'), 'utf8')).oauthScopes;
+  const need = [
+    [/ScriptApp\.(newTrigger|getProjectTriggers|deleteTrigger)/, 'https://www.googleapis.com/auth/script.scriptapp'],
+    [/MailApp\./, 'https://www.googleapis.com/auth/script.send_mail'],
+    [/UrlFetchApp\./, 'https://www.googleapis.com/auth/script.external_request'],
+    [/SpreadsheetApp\./, 'https://www.googleapis.com/auth/spreadsheets'],
+    [/DocumentApp\./, 'https://www.googleapis.com/auth/documents'],
+    [/DriveApp\.|Drive\.Permissions/, 'https://www.googleapis.com/auth/drive'],
+    [/Session\.getActiveUser/, 'https://www.googleapis.com/auth/userinfo.email']
+  ];
+  const missing = need.filter(([re, scope]) => re.test(code) && scopes.indexOf(scope) === -1).map(([, s]) => s);
+  eq(missing, [], 'scopes missing from appsscript.json');
+});
