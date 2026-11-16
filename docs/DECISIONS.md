@@ -162,3 +162,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## Deal ID format (2026-11-16, Varaprasad)
 - Deal IDs are **D-yyyymm-0001** (e.g. D-202611-0001); the counter restarts each month. Numbering tab DEAL row: year column holds the month (202611). Existing deals keep their old IDs. Client IDs stay C-0001.
+
+## App address (2026-11-16, Varaprasad)
+- Team URL: **https://salestools.optculturecx.com** (Netlify site optculture-salestools, Netlify DNS, wildcard HTTPS) → 302 redirect to the Apps Script /exec URL. Netlify site is **public**; access control stays with Google: @optculture.com sign-in (deployment access DOMAIN) + active row in the Users tab. Iframe embedding not used (sign-in unreliable in frames).
