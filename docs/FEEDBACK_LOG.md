@@ -87,3 +87,7 @@
 - Pricing/top-up/evaluation return approvalItems; apiListApprovals adds items + document type; approvalEmailBody lists items; UI approval card redesigned (table + highlighted MSA terms + collapsed context).
 - generateDocument always makes a PDF (drafts carry the banner) and shares only the PDF (reader); resync shares PDFs only; generationEmails = one email with PDFs; withoutDocLinks_ hides Doc links for non-Superadmins.
 - Tests: approver email + single-email unit tests; harness checks the approval table, collapsed context and PDF link.
+
+## 34. PDF-only for Superadmin too + long exception text wraps
+- withoutDocLinks_ applies to every role; UI renders PDF links only.
+- Long MSA exception text (incl. unbroken URLs) widened the review table by 368px; wrapping now scoped to free-text cells (.wraptext, li, .appr-terms); repeated exception shortened in the review approval list. Harness checks a very long exception for horizontal overflow.

@@ -27,12 +27,12 @@ const api = {
     const nr = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), rec); nr.status = plan.status;
     if (plan.mode === 'DRAFT' && rec.approval_status !== 'Pending') { nr.approval_status = 'Pending'; store.approvals.push({ approvalId: 'A-1', dealId: id, reasons: ev.approvalReasons }); }
     store.deals[id] = nr;
-    return { mode: plan.mode, message: plan.reason, deal: d, results: plan.docTypes.map((t) => ({ type: t, label: t, docNo: d.docNos[t], docUrl: 'https://docs.google.com/x', pdfUrl: plan.mode === 'FINAL' ? 'https://drive.google.com/y' : '', warnings: [] })) }; },
+    return { mode: plan.mode, message: plan.reason, deal: d, results: plan.docTypes.map((t) => ({ type: t, label: t, docNo: d.docNos[t], docUrl: '', pdfUrl: plan.mode === 'FINAL' ? 'https://drive.google.com/y' : '', warnings: [] })) }; },
   apiDeleteDeals: (ids, txt) => { if (USER.role !== 'Superadmin' || txt !== 'DELETE') throw new Error('no'); ids.forEach((i) => delete store.deals[i]); return { deals: ids.length, clients: 0, files: 2, folders: 1, failedFiles: 0 }; },
   apiCreateTopUp: (id) => { const r = store.deals[id]; const parent = JSON.parse(r.input_json); if (!ctx.canTopUp(parent, r.status)) throw new Error('not Won');
     const deal = ctx.makeTopUp(parent, ctx.evaluateDeal(M, parent).quote); deal.dealId = 'D-TEST-9'; const ev = ctx.evaluateDeal(M, deal);
     const nr = ctx.dealRecord(deal, ev, USER.email, new Date().toISOString(), null); nr.status = deal.status; store.deals['D-TEST-9'] = nr; return { deal, evaluation: ev, summary: ctx.dealSummary(nr) }; },
-  apiDealDocuments: () => [{ docNo: 'OC-P-2026-0001', type: 'PROPOSAL', label: 'Proposal', version: 1, status: 'Final', docUrl: 'x', pdfUrl: 'y', createdAt: '2026-11-15T09:30:00.000Z' }],
+  apiDealDocuments: () => [{ docNo: 'OC-P-2026-0001', type: 'PROPOSAL', label: 'Proposal', version: 1, status: 'Final', docUrl: '', pdfUrl: 'y', createdAt: '2026-11-15T09:30:00.000Z' }],
   apiConvertToContract: (id) => { const r = store.deals[id]; const st = JSON.parse(r.input_json); if (!ctx.canConvertToContract(st, r.status)) throw new Error('not allowed');
     const d = ctx.convertToContract(st, ctx.evaluateDeal(ctx.withSnapshot(M, st.pricingSnapshot), st).quote); const ev = ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d); const nr = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), r); nr.status = d.status; store.deals[id] = nr;
     return { deal: d, evaluation: ev, summary: ctx.dealSummary(nr) }; },
@@ -65,7 +65,7 @@ const api = {
   await p.goto('file://' + path.join(__dirname, '..', 'src/ui/Index.html'), { waitUntil: 'domcontentloaded' });
   await p.waitForSelector('#view-dash:not(.hidden)');
   const menu = async (id, sel) => { await p.click('[data-menu="' + id + '"]'); await p.waitForTimeout(150); await p.click('.menu:not(.hidden) ' + sel); };
-  const check = (name, cond) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) process.exitCode = 1; };
+  const check = (name, cond, info) => { console.log((cond ? '  ✓ ' : '  ✗ ') + name + (!cond && info ? '  ' + info : '')); if (!cond) process.exitCode = 1; };
 
   check('Real logo in header', (await p.getAttribute('header img', 'src')).startsWith('data:image/png;base64,'));
   await p.waitForTimeout(400);
@@ -197,7 +197,13 @@ const api = {
   await p.fill('[data-f="commercial.msaRef"]', 'MSA-OLD-9'); await p.waitForTimeout(1000);
   check('Existing MSA reference → Order Form only, citing it', (await p.textContent('#contractPack')).includes('Order Form only') && (await p.textContent('#contractPack')).includes('MSA-OLD-9') && (await p.textContent('#btnGenerate')).trim() === 'Generate Order Form' && !(await p.isVisible('#msaExceptions')));
   await p.fill('[data-f="commercial.msaRef"]', ''); await p.waitForTimeout(1000);
-  await p.fill('#msaExceptions', 'Clause 3: cure period 45 days.'); await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(900);
+  const longExc = 'Clause 3 (Term and Termination): ' + 'the cure period shall be forty-five (45) days instead of thirty (30) days and notices must be sent to legal@frg.example and cc to procurement-department-head@frg.example; '.repeat(6) + 'https://frg.example/very/long/unbroken/reference/' + 'x'.repeat(160);
+  await p.fill('#msaExceptions', longExc); await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(900);
+  const ovf = await p.evaluate(() => ({ page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    wide: [...document.querySelectorAll('#view-deal *')].filter((e) => e.offsetParent && e.getBoundingClientRect().right > document.documentElement.clientWidth + 2).map((e) => e.tagName + '#' + e.id + '.' + e.className).slice(0, 8) }));
+  check('Long MSA exception text wraps – nothing runs off the screen', ovf.page <= 0 && ovf.wide.length === 0, JSON.stringify(ovf));
+  await p.screenshot({ path: path.join(out, 'long-exception.png'), fullPage: true });
+  await p.click('#steps div[data-step="3"]'); await p.fill('#msaExceptions', 'Clause 3: cure period 45 days.'); await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(900);
   check('MSA exception needs approval: shown in review, generation becomes a draft', (await p.textContent('#review')).includes('cure period 45 days') && (await p.textContent('#review')).includes('Needs Amith') && !(await p.textContent('#genHint')).includes('final'));
   await p.click('#steps div[data-step="3"]'); await p.fill('#msaExceptions', ''); await p.waitForTimeout(900);
   check('Order Form package list follows packages', (await p.$$eval('#orderPackage option', (o) => o.map((x) => x.value))).join() === 'Loyalty,Advanced');
@@ -218,6 +224,7 @@ const api = {
   check('Back to My Deals returns to the list', await p.isVisible('#view-list') && !(await p.isVisible('#busy')));
   await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(500);
   const g2 = await p.textContent('#genResult');
+  check('Generated documents: PDF link only, no Google Doc link', (await p.textContent('#docList')).includes('PDF') && !(await p.textContent('#docList')).includes('Doc ·') && !(await p.$('#docList a[href*="docs.google.com"]')));
   check('Generated documents table has a Date column', (await p.textContent('#docList')).includes('Date') && (await p.textContent('#docList')).includes('15 Nov 2026'));
   check('Contract documents final (approval carried over)', g2.includes('Documents created') && g2.includes('OC-Q-2026-0001') && g2.includes('OC-MSA-2026-0001') && !g2.includes('OC-DPA') && !g2.includes('OC-P-2026'));
   check('Status Contract generated', store.deals['D-TEST-1'].status === 'Contract generated');

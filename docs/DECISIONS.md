@@ -169,3 +169,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 ## Approvals show only what needs approval; reps get PDFs only (2026-11-16, Varaprasad)
 - Every approval trigger is a structured item (area, item, reference price + label, proposed, % difference, note; MSA exceptions carry their text). Amith's card and email lead with "Needs your approval (N)"; full pricing is collapsed; draft PDF link.
 - Reps/managers: one email with the PDFs attached (drafts: watermarked DRAFT PDFs, "do not send"); no Google Doc links in emails or in the app; only the PDF is shared with them (view only). The Superadmin keeps Doc links. Changes are made in the app and generated again.
+
+## No Google Doc links for anyone (2026-11-16, Varaprasad)
+- Amith (Superadmin) also gets PDF links only – emails, generation dialog, Generated documents / version history and approval cards. Google Docs stay in the Shared Drive only.

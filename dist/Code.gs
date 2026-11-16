@@ -2702,9 +2702,8 @@ function archivePreviousVersions_(dealId, currentVersion, docTypes) {
   });
 }
 
-/** Reps and managers see PDFs only; the Superadmin also gets the Google Doc links. */
-function withoutDocLinks_(list, user) {
-  if (user && user.role === CONFIG.ROLES.SUPERADMIN) return list;
+/** Everyone – reps, managers and the Superadmin – sees PDF links only; Google Docs are never linked in the app (decision 2026-11-16). */
+function withoutDocLinks_(list) {
   return list.map(function (r) { var c = JSON.parse(JSON.stringify(r)); c.docUrl = ''; return c; });
 }
 

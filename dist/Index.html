@@ -67,6 +67,8 @@
     button.danger { background:#c62828; color:#fff; border-color:#c62828; } button.danger:disabled { opacity:.45; }
     .topup-only { display:none; } .is-topup .topup-only { display:block; } .is-topup .not-topup, .is-topup .not-topup-freeze { display:none !important; }
     .tu-info { background:#f3effc; border:1px solid #d9c8f7; border-radius:8px; padding:10px 14px; margin-bottom:6px; }
+    .wraptext, li, .appr-terms { overflow-wrap:anywhere; }  /* long free text (MSA exceptions, URLs) wraps instead of widening the page */
+    textarea { max-width:100%; box-sizing:border-box; }
     .appr-items td, .appr-items th { vertical-align:top; }
     .appr-terms { background:#fff7e6; border:1px solid #f0d3b4; border-left:4px solid #e08a00; border-radius:6px; padding:10px 12px; margin:8px 0; }
     .busy { position:fixed; inset:0; background:rgba(30,20,60,.45); display:flex; align-items:center; justify-content:center; z-index:1000; padding:16px; }
@@ -381,7 +383,7 @@
   function resultsTable(g) {
     return '<table><tr><th>Document</th><th>No.</th><th>Links</th></tr>' + g.results.map(function (r) {
       return '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.docNo) + '</td><td>' + (r.error ? '<span class="error">' + esc(r.error) + '</span>' :
-        (r.pdfUrl ? '<a href="' + esc(r.pdfUrl) + '" target="_blank">PDF</a>' : '') + (r.docUrl ? ' · <a href="' + esc(r.docUrl) + '" target="_blank">Google Doc</a>' : '') +
+        (r.pdfUrl ? '<a href="' + esc(r.pdfUrl) + '" target="_blank">PDF</a>' : '<span class="muted">PDF not available</span>') +
         (r.warnings && r.warnings.length ? '<br><span class="muted">' + r.warnings.length + ' warning(s): ' + esc(r.warnings.join('; ')) + '</span>' : '')) + '</td></tr>';
     }).join('') + '</table>';
   }
@@ -903,7 +905,7 @@
       '<tr><td>Client</td><td>' + esc(c.legalName) + (c.shortName ? ' (' + esc(c.shortName) + ')' : '') + ', ' + esc(c.country) + '</td></tr>' +
       '<tr><td>Contracting party</td><td>' + esc(ent ? ent.name : '—') + '</td></tr>' +
       '<tr><td>Documents</td><td>' + (stageOf(d) === 'PROPOSAL' ? ['PROPOSAL'] : ev.contract && ev.contract.mode === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['ORDER_FORM', 'MSA']).map(function (k) { return DOC_LABEL[k]; }).join(', ') + '</td></tr>' +
-      (ev.msaExceptions ? '<tr><td>MSA special terms</td><td style="white-space:pre-wrap">' + esc(ev.msaExceptions) + ' <span class="badge warn">Needs Amith’s approval</span></td></tr>' : '') +
+      (ev.msaExceptions ? '<tr><td>MSA special terms</td><td class="wraptext" style="white-space:pre-wrap">' + esc(ev.msaExceptions) + ' <span class="badge warn">Needs Amith’s approval</span></td></tr>' : '') +
       (stageOf(d) === 'CONTRACT' ? '<tr><td>Order Form</td><td>' + esc(com.orderPackage || '') + ' · ' + esc(com.termMonths) + ' months · ' + esc(com.billingCycle) + '</td></tr>' : '') + '</table>';
     if (q) {
       h += '<h3>Pricing (' + esc(q.currency) + ')</h3><table><tr><th></th>' + q.packages.map(function (p) { return '<th class="num">' + esc(p.package) + '</th>'; }).join('') + '</tr>';
@@ -935,7 +937,7 @@
         (ch.length ? '<ul class="tight">' + ch.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<p class="muted">No changes – the Order Form matches the proposal.</p>');
     }
     var apprOk = APPROVAL === 'Approved' && normExc(ev.msaExceptions) === STORED_EXC;
-    if (ev.needsApproval) h += '<h3>' + (apprOk ? 'Special pricing / terms – approved by Amith' : APPROVAL === 'Pending' && normExc(ev.msaExceptions) === STORED_EXC ? 'Waiting for Amith’s approval' : 'Approval required') + '</h3><ul class="tight">' + ev.approvalReasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' + (apprOk ? '<p class="muted">Changing these prices or the MSA special terms will need approval again.</p>' : '');
+    if (ev.needsApproval) h += '<h3>' + (apprOk ? 'Special pricing / terms – approved by Amith' : APPROVAL === 'Pending' && normExc(ev.msaExceptions) === STORED_EXC ? 'Waiting for Amith’s approval' : 'Approval required') + '</h3><ul class="tight">' + ev.approvalReasons.map(function (r) { return '<li>' + esc(/^MSA special terms/.test(r) && r.length > 140 ? r.slice(0, 140) + '… (full text above)' : r) + '</li>'; }).join('') + '</ul>' + (apprOk ? '<p class="muted">Changing these prices or the MSA special terms will need approval again.</p>' : '');
     if (ev.errors.length) h += '<h3>Fix before generating</h3><ul class="tight error">' + ev.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>';
     if (ev.readyToGenerate) h += '<p><span class="badge ok">All selected documents have the information they need.</span></p>';
     $('btnGenerate').disabled = !ev.readyToGenerate;
@@ -1321,7 +1323,7 @@
       $('docList').innerHTML = '<h3>Generated documents</h3><table><tr><th>Document</th><th>No.</th><th>Version</th><th>Date</th><th>Status</th><th>Links</th></tr>' + docs.slice().sort(function (a, b) { return String(b.createdAt) > String(a.createdAt) ? 1 : -1; }).map(function (d) {
         var dt = new Date(d.createdAt), when = isNaN(dt) ? esc(String(d.createdAt).slice(0, 10)) : dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' <span class="muted">' + dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</span>';
         return '<tr><td>' + esc(d.label) + '</td><td>' + esc(d.docNo) + '</td><td>v' + d.version + '</td><td>' + when + '</td><td>' + esc(d.status) + '</td><td>' +
-          (d.docUrl ? '<a href="' + esc(d.docUrl) + '" target="_blank">Doc</a>' : '') + (d.pdfUrl ? ' · <a href="' + esc(d.pdfUrl) + '" target="_blank">PDF</a>' : '') + '</td></tr>';
+          (d.pdfUrl ? '<a href="' + esc(d.pdfUrl) + '" target="_blank">PDF</a>' : '<span class="muted">—</span>') + '</td></tr>';
       }).join('') + '</table>';
     });
   }
