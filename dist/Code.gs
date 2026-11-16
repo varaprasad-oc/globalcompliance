@@ -506,7 +506,12 @@ function buildQuote(master, input) {
     };
   }
 
-  var approvalReasons = [];
+  var approvalReasons = [], approvalItems = [];
+  /** Structured approval line for the approver: area, item, reference price, proposed price, % below reference. */
+  function approvalItem(area, item, refLabel, ref, proposed, unit, note) {
+    return { area: area, item: item, referenceLabel: refLabel, reference: ref, proposed: proposed, unit: unit || '',
+      diffPct: ref ? Math.round((proposed / ref - 1) * 10000) / 10000 : null, note: note || '' };
+  }
   /** Special unit price for a one-time line: keeps the standard price, recalculates the total, flags discounts for approval. */
   function applyOneTimeSpecial(l, sp, prefix) {
     l.standardUnitPrice = l.unitPrice;
@@ -519,6 +524,7 @@ function buildQuote(master, input) {
     if (sp < l.standardUnitPrice) {
       approvalReasons.push(prefix + l.label + ': special ' + formatMoney(input.currency, sp) + ' vs standard ' + formatMoney(input.currency, l.standardUnitPrice) +
         (l.qty > 1 ? ' (× ' + l.qty + ')' : ''));
+      approvalItems.push(approvalItem('One-time fee', prefix + l.label, 'Standard', l.standardUnitPrice, sp, l.qty > 1 ? 'each × ' + l.qty : 'one-time'));
     }
   }
   var storeInstall = items.filter(function (i) { return i.item_id === 'STORE_INSTALL'; })[0];
@@ -533,6 +539,7 @@ function buildQuote(master, input) {
     if (special !== null && special < standard) {
       approvalReasons.push(name + ': special price ' + formatMoney(input.currency, special) +
         ' vs standard ' + formatMoney(input.currency, standard) + ' per site/month');
+      approvalItems.push(approvalItem('Subscription', name + ' plan – licence', 'Standard', standard, special, 'per site / month'));
     }
 
     var oneTime = [];
@@ -599,6 +606,8 @@ function buildQuote(master, input) {
       if (special !== null && special < list) {
         approvalReasons.push('Platform comms (' + Number(t.messages).toLocaleString('en-US') + ' / month): special ' + formatMoney(input.currency, special) +
           ' vs list ' + formatMoney(input.currency, list) + (special < floor ? ' — BELOW FLOOR ' + formatMoney(input.currency, floor) : ''));
+        approvalItems.push(approvalItem('Messaging', 'Up to ' + Number(t.messages).toLocaleString('en-US') + ' / month', 'List', list, special, 'per month',
+          special < floor ? 'Below floor ' + formatMoney(input.currency, floor) : ''));
       }
       return { id: t.tier_id, label: t.label, unit: 'per month', qty: 1, messages: Number(t.messages),
         listPrice: list, floorPrice: floor, specialPrice: special, unitPrice: fin, total: fin, text: '', belowFloor: special !== null && special < floor };
@@ -634,6 +643,7 @@ function buildQuote(master, input) {
     rateCardAddOns: byCat('ADDON'),
     needsApproval: approvalReasons.length > 0,
     approvalReasons: approvalReasons,
+    approvalItems: approvalItems,
     terms: terms
   };
 }
@@ -675,13 +685,17 @@ function buildTopupQuote(master, input) {
     specialComms: specialComms
   });
   if (!q.ok) return q;
-  var cur = input.currency, errors = [], reasons = q.approvalReasons.slice();
+  var cur = input.currency, errors = [], reasons = q.approvalReasons.slice(), items = (q.approvalItems || []).slice();
+  var aItem = function (area, item, refLabel, ref, proposed, unit, note) {
+    return { area: area, item: item, referenceLabel: refLabel, reference: ref, proposed: proposed, unit: unit || '', diffPct: ref ? Math.round((proposed / ref - 1) * 10000) / 10000 : null, note: note || '' };
+  };
   var p = q.packages[0];
   var contracted = Number(input.contractedPricePerSite || p.standardPricePerSite);
   var lp = input.licencePrice;
   var licencePrice = (lp === '' || lp === null || lp === undefined) ? contracted : Number(lp);
   if (added > 0 && licencePrice < contracted) {
     reasons.push('Top-up licence: ' + formatMoney(cur, licencePrice) + ' vs contracted ' + formatMoney(cur, contracted) + ' per site/month');
+    items.push(aItem('Top-up licence', input.package + ' plan – ' + added + ' additional site(s)', 'Contracted', contracted, licencePrice, 'per site / month'));
   }
   var licenceMonthly = added > 0 ? licencePrice * added : 0;
   var installs = p.oneTime.filter(function (l) { return l.id !== 'SETUP'; });  // no set-up fee on a top-up
@@ -693,6 +707,7 @@ function buildTopupQuote(master, input) {
     if (!(credits > 0) || !(ppc > 0)) errors.push('WhatsApp ' + (w.type || '') + ' credits: enter credit count and price per credit');
     var total = Math.round(credits * ppc * 100) / 100;
     reasons.push('WhatsApp ' + w.type + ' credits: ' + credits.toLocaleString('en-US') + ' × ' + formatMoney(cur, ppc) + ' = ' + formatMoney(cur, total));
+    items.push(aItem('WhatsApp credits', w.type + ' – ' + credits.toLocaleString('en-US') + ' credits', 'No standard', null, ppc, 'per credit', 'Total ' + formatMoney(cur, total) + ' – every WhatsApp credit line needs approval'));
     return { id: 'WA_' + String(w.type).toUpperCase(), label: 'WhatsApp ' + w.type + ' credits', unit: 'per credit', qty: credits, unitPrice: ppc, total: total, text: '', credits: credits };
   });
   var oneTime = installs.concat(whatsapp);
@@ -712,7 +727,7 @@ function buildTopupQuote(master, input) {
     termTotal: oneTimeTotal + q.optionalOneTimeTotal + recurringMonthly * term
   };
   return Object.assign({}, q, {
-    packages: [pkg], needsApproval: reasons.length > 0, approvalReasons: reasons,
+    packages: [pkg], needsApproval: reasons.length > 0, approvalReasons: reasons, approvalItems: items,
     topup: { addStores: addStores, addEcomSites: addEcom, addedSites: added, baseSites: Number(input.baseSites || 0), contractedPricePerSite: contracted,
       comms: comms, whatsapp: whatsapp, termMonths: term }
   });
@@ -1190,6 +1205,8 @@ function evaluateDeal(master, deal) {
     needsApproval: quote.ok ? quote.needsApproval || !!msaExceptions(deal) : false,
     approvalReasons: quote.ok ? quote.approvalReasons.concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
     msaExceptions: msaExceptions(deal),
+    approvalItems: quote.ok ? (quote.approvalItems || []).concat(msaExceptions(deal) ? [{ area: 'MSA special terms', item: '§7 Special Terms and Exceptions', referenceLabel: 'Standard MSA',
+      reference: null, proposed: null, unit: '', diffPct: null, note: '', text: msaExceptions(deal) }] : []) : [],
     changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : [],
     contract: deal.stage === 'CONTRACT' ? { mode: contractMode(deal), msa: existingMsa(deal) } : null
   };
@@ -1583,46 +1600,46 @@ function docNumbersNeeded(deal, docTypes) {
   return docTypes.filter(function (t) { return !have[t]; });
 }
 
-/** Email body for the rep after generation. */
-function generationEmail(deal, results, mode) {
-  var c = deal.client || {};
-  var lines = ['Documents for ' + (c.legalName || deal.dealId) + ' (deal ' + deal.dealId + ', v' + (deal.version || 1) + '):', ''];
-  results.forEach(function (r) {
-    lines.push('• ' + r.label + ' ' + r.docNo + (r.error ? ' – FAILED: ' + r.error : ''));
-    if (!r.error) { lines.push('  Doc: ' + r.docUrl); if (r.pdfUrl) lines.push('  PDF: ' + r.pdfUrl); }
-  });
-  lines.push('');
-  if (mode === 'DRAFT') lines.push('These are DRAFTS pending Amith’s approval of the special pricing. Do not send them to the client.');
-  lines.push('— OptCulture Sales Docs');
-  return { subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'OptCulture documents – ' + (c.shortName || c.legalName || deal.dealId), body: lines.join('\n') };
-}
 
 /**
- * Emails after generation: (1) one email with all Google Doc links, (2) one email with all PDFs attached (final only).
+ * Email to the rep after generation: ONE email with the PDFs attached and no Google Doc links – changes are made in the app
+ * and generated again (decision 2026-11-16). Drafts get the watermarked PDFs with a "do not send" note.
  * Returns [{subject, body, pdfIds: []}].
  */
 function generationEmails(deal, results, mode) {
   var c = deal.client || {}, name = c.shortName || c.legalName || deal.dealId;
   var ok = results.filter(function (r) { return !r.error; }), failed = results.filter(function (r) { return r.error; });
-  var head = (c.legalName || deal.dealId) + ' – deal ' + deal.dealId + ', v' + (deal.version || 1);
-  var linkLines = ok.map(function (r) { return '• ' + r.label + ' ' + r.docNo + '\n  ' + r.docUrl; });
-  var failLines = failed.map(function (r) { return '• ' + r.label + ' ' + r.docNo + ' – FAILED: ' + r.error; });
-  var mails = [{
-    subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'Documents ready – ' + name,
-    body: 'Google Docs for ' + head + ':\n\n' + linkLines.join('\n') + (failLines.length ? '\n\nProblems:\n' + failLines.join('\n') : '') +
-      '\n\n' + (mode === 'DRAFT' ? 'These are DRAFTS pending Amith’s approval of the special pricing. Do not send them to the client. Final PDFs follow after approval.' :
-        'Edit only wording here if needed – change prices in the app and generate again. PDFs follow in a separate email.') + '\n\n— OptCulture Sales Docs',
-    pdfIds: []
-  }];
   var pdfs = ok.filter(function (r) { return r.pdfId; });
-  if (mode !== 'DRAFT' && pdfs.length) {
-    mails.push({
-      subject: 'PDFs for review – ' + name,
-      body: 'Attached: ' + pdfs.map(function (r) { return r.label + ' ' + r.docNo; }).join(', ') + '\n\nFor ' + head + '. Review before sending to the client.\n\n— OptCulture Sales Docs',
-      pdfIds: pdfs.map(function (r) { return r.pdfId; })
-    });
-  }
-  return mails;
+  var head = (c.legalName || deal.dealId) + ' – deal ' + deal.dealId + ', v' + (deal.version || 1);
+  var list = ok.map(function (r) { return '• ' + r.label + ' ' + r.docNo; });
+  var failLines = failed.map(function (r) { return '• ' + r.label + ' ' + r.docNo + ' – FAILED: ' + r.error; });
+  var draft = mode === 'DRAFT';
+  return [{
+    subject: (draft ? '[DRAFT – pending approval] ' : '') + 'OptCulture documents – ' + name,
+    body: (draft ? 'DRAFT PDFs attached for ' : 'PDFs attached for ') + head + ':\n\n' + list.join('\n') +
+      (failLines.length ? '\n\nProblems:\n' + failLines.join('\n') : '') + '\n\n' +
+      (draft ? 'These are DRAFTS waiting for Amith’s approval – do NOT send them to the client. You will receive the final PDFs by email after approval.'
+        : 'Review before sending to the client. To change anything, open the deal in the app, edit it and generate again – the documents are not edited directly.') +
+      '\n\n— OptCulture Sales Docs',
+    pdfIds: pdfs.map(function (r) { return r.pdfId; })
+  }];
+}
+
+/** Email to the approver: only what needs approval, item by item (structured), plus rep note and a link. */
+function approvalEmailBody(deal, ev, user, url) {
+  var c = deal.client || {}, cur = (deal.commercial || {}).currency || '';
+  var what = deal.dealType === 'TOPUP' ? 'Top-up Order Form' : deal.stage === 'CONTRACT' ? (contractMode(deal) === 'NEW_MSA' ? 'Quotation & Order Form + MSA' : 'Quotation & Order Form') : 'Proposal';
+  var lines = (ev.approvalItems || []).map(function (it) {
+    if (it.text) return '• ' + it.area + ':\n    "' + it.text.replace(/\n/g, '\n     ') + '"';
+    var ref = it.reference === null || it.reference === undefined ? '' : ' vs ' + it.referenceLabel.toLowerCase() + ' ' + formatMoney(cur, it.reference);
+    var diff = it.diffPct === null || it.diffPct === undefined ? '' : ' (' + (it.diffPct * 100).toFixed(1) + '%)';
+    return '• ' + it.area + ' – ' + it.item + ': ' + formatMoney(cur, it.proposed) + ' ' + it.unit + ref + diff + (it.note ? ' – ' + it.note : '');
+  });
+  return 'Approval requested by ' + user.name + ' (' + user.email + ')\n\n' +
+    'Client: ' + c.legalName + ' (' + c.country + ')\nDeal: ' + deal.dealId + ' v' + deal.version + ' – ' + what + '\n\n' +
+    'NEEDS YOUR APPROVAL (' + lines.length + '):\n' + lines.join('\n') +
+    (deal.approvalNote ? '\n\nRep note: ' + deal.approvalNote : '') +
+    '\n\nEverything else in the documents is standard. Review and approve in the app (Approvals): ' + url + '\n\n— OptCulture Sales Docs';
 }
 
 // ===================== AdminLogic.js =====================
@@ -2208,12 +2225,12 @@ function generateDocument(docType, data, opts) {
   doc.saveAndClose();
 
   var result = { docId: copy.getId(), docUrl: copy.getUrl(), pdfId: '', pdfUrl: '', name: name, warnings: warnings };
-  if (!opts.draft) {
-    var pdf = folder.createFile(copy.getAs(MimeType.PDF)).setName(name + '.pdf');
-    result.pdfId = pdf.getId();
-    result.pdfUrl = pdf.getUrl();
-  }
-  shareFiles_([result.docId, result.pdfId].filter(String), opts.shareWith || []);
+  // PDF for every document (drafts show the DRAFT banner). Reps and managers get the PDF only: changes are made in the app,
+  // not in the Google Doc (the Doc stays in the Shared Drive for the Superadmin).
+  var pdf = folder.createFile(copy.getAs(MimeType.PDF)).setName(name + '.pdf');
+  result.pdfId = pdf.getId();
+  result.pdfUrl = pdf.getUrl();
+  shareFiles_([result.pdfId], opts.shareWith || []);
   return result;
 }
 
@@ -2249,9 +2266,9 @@ function shareFiles_(fileIds, emails) {
       if (String(e).toLowerCase() === me) return;
       try {
         if (typeof Drive !== 'undefined' && Drive.Permissions) {
-          Drive.Permissions.create({ role: 'writer', type: 'user', emailAddress: e }, id, { sendNotificationEmail: false, supportsAllDrives: true });
+          Drive.Permissions.create({ role: 'reader', type: 'user', emailAddress: e }, id, { sendNotificationEmail: false, supportsAllDrives: true });
         } else {
-          DriveApp.getFileById(id).addEditor(e);  // fallback (sends Google's notification)
+          DriveApp.getFileById(id).addViewer(e);  // fallback (sends Google's notification)
         }
       } catch (err) { console.warn('share failed ' + e + ': ' + err); }
     });
@@ -2668,7 +2685,7 @@ function generateForDeal_(dealId, user) {
     } catch (e) { console.warn('email failed: ' + e); notifyFailure_('Sending documents email for ' + dealId, e); }
   });
 
-  return { mode: plan.mode, message: plan.reason, results: results, deal: deal, summary: dealSummary(newRec) };
+  return { mode: plan.mode, message: plan.reason, results: withoutDocLinks_(results, user), deal: deal, summary: dealSummary(newRec) };
 }
 
 /** Move files of earlier versions of this deal to _Archive and mark them Superseded. */
@@ -2685,17 +2702,23 @@ function archivePreviousVersions_(dealId, currentVersion, docTypes) {
   });
 }
 
+/** Reps and managers see PDFs only; the Superadmin also gets the Google Doc links. */
+function withoutDocLinks_(list, user) {
+  if (user && user.role === CONFIG.ROLES.SUPERADMIN) return list;
+  return list.map(function (r) { var c = JSON.parse(JSON.stringify(r)); c.docUrl = ''; return c; });
+}
+
 /** Documents of a deal (latest first) for the UI. */
 function apiDealDocuments(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
   if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('No access.');
-  return readRecords_('Documents').filter(function (d) { return d.deal_id === dealId; }).map(function (d) {
+  return withoutDocLinks_(readRecords_('Documents').filter(function (d) { return d.deal_id === dealId; }).map(function (d) {
     return { docNo: d.doc_no, type: d.doc_type, label: DOC_LABEL[d.doc_type], version: Number(d.version), status: d.status,
       docUrl: d.doc_file_id ? 'https://docs.google.com/document/d/' + d.doc_file_id + '/edit' : '',
       pdfUrl: d.pdf_file_id ? 'https://drive.google.com/file/d/' + d.pdf_file_id + '/view' : '',
       createdAt: d.created_at instanceof Date ? d.created_at.toISOString() : String(d.created_at) };
-  }).sort(function (a, b) { return b.version - a.version; });
+  }).sort(function (a, b) { return b.version - a.version; }), user);
 }
 
 /** Email every Superadmin that a deal is waiting for approval. */
@@ -2704,9 +2727,7 @@ function notifyApprovers_(deal, ev, user) {
   if (!to.length) return;
   var url = '';
   try { url = ScriptApp.getService().getUrl(); } catch (e) { /* not deployed */ }
-  var body = 'Approval requested by ' + user.name + ' (' + user.email + ')\n\n' +
-    'Client: ' + (deal.client || {}).legalName + ' (' + (deal.client || {}).country + ')\nDeal: ' + deal.dealId + ' v' + deal.version + '\n\nReasons:\n- ' +
-    ev.approvalReasons.join('\n- ') + ((deal.approvalNote) ? '\n\nRep note: ' + deal.approvalNote : '') + '\n\nReview in the app (Approvals): ' + url;
+  var body = approvalEmailBody(deal, ev, user, url);
   try { MailApp.sendEmail({ to: to.join(','), subject: 'Approval needed – ' + ((deal.client || {}).shortName || (deal.client || {}).legalName), body: body, name: CONFIG.APP_NAME }); }
   catch (e) { console.warn('approval email failed: ' + e); }
 }
@@ -2735,6 +2756,8 @@ function apiListApprovals() {
     return {
       approvalId: a.approval_id, dealId: a.deal_id, version: Number(a.version), requestedAt: a.requested_at instanceof Date ? a.requested_at.toISOString() : String(a.requested_at),
       requestedBy: owner.name || rec.created_by, reasons: String(a.reasons || '').split(' | '), note: d.approvalNote || '',
+      items: approvalItemsFor_(d), what: d.dealType === 'TOPUP' ? 'Top-up Order Form (of ' + ((d.topupOf || {}).dealId || '') + ')' :
+        (d.stage === 'CONTRACT' ? (contractMode(d) === 'NEW_MSA' ? 'Quotation & Order Form + MSA' : 'Quotation & Order Form') : 'Proposal'),
       client: d.client.legalName, country: d.client.country, currency: rec.currency, summary: dealSummary(rec),
       packages: q ? q.packages.map(function (p) { return { name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite,
         specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal }; }) : [],
@@ -2743,6 +2766,11 @@ function apiListApprovals() {
       documents: apiDealDocuments(a.deal_id).filter(function (x) { return Number(x.version) === Number(a.version); })
     };
   }).filter(Boolean);
+}
+
+/** Fresh, structured list of what needs approval (from the deal's frozen prices). */
+function approvalItemsFor_(deal) {
+  try { return evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal).approvalItems || []; } catch (e) { return []; }
 }
 
 /** Approve or reject. Approve → final documents are generated automatically. */
@@ -2820,7 +2848,7 @@ function apiResyncSharing() {
     var rec = deals[d.deal_id];
     if (!rec || d.status === 'Superseded') return;
     var owner = (users || []).filter(function (u) { return String(u.email).toLowerCase() === String(rec.created_by).toLowerCase(); })[0] || {};
-    shareFiles_([d.doc_file_id, d.pdf_file_id].filter(String), [rec.created_by, owner.manager_email].filter(Boolean));
+    shareFiles_([d.pdf_file_id].filter(String), [rec.created_by, owner.manager_email].filter(Boolean));  // PDFs only
     n++;
   });
   audit_('SHARING_RESYNC', { documents: n });

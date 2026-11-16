@@ -52,12 +52,12 @@ function generateDocument(docType, data, opts) {
   doc.saveAndClose();
 
   var result = { docId: copy.getId(), docUrl: copy.getUrl(), pdfId: '', pdfUrl: '', name: name, warnings: warnings };
-  if (!opts.draft) {
-    var pdf = folder.createFile(copy.getAs(MimeType.PDF)).setName(name + '.pdf');
-    result.pdfId = pdf.getId();
-    result.pdfUrl = pdf.getUrl();
-  }
-  shareFiles_([result.docId, result.pdfId].filter(String), opts.shareWith || []);
+  // PDF for every document (drafts show the DRAFT banner). Reps and managers get the PDF only: changes are made in the app,
+  // not in the Google Doc (the Doc stays in the Shared Drive for the Superadmin).
+  var pdf = folder.createFile(copy.getAs(MimeType.PDF)).setName(name + '.pdf');
+  result.pdfId = pdf.getId();
+  result.pdfUrl = pdf.getUrl();
+  shareFiles_([result.pdfId], opts.shareWith || []);
   return result;
 }
 
@@ -93,9 +93,9 @@ function shareFiles_(fileIds, emails) {
       if (String(e).toLowerCase() === me) return;
       try {
         if (typeof Drive !== 'undefined' && Drive.Permissions) {
-          Drive.Permissions.create({ role: 'writer', type: 'user', emailAddress: e }, id, { sendNotificationEmail: false, supportsAllDrives: true });
+          Drive.Permissions.create({ role: 'reader', type: 'user', emailAddress: e }, id, { sendNotificationEmail: false, supportsAllDrives: true });
         } else {
-          DriveApp.getFileById(id).addEditor(e);  // fallback (sends Google's notification)
+          DriveApp.getFileById(id).addViewer(e);  // fallback (sends Google's notification)
         }
       } catch (err) { console.warn('share failed ' + e + ': ' + err); }
     });

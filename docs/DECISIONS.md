@@ -165,3 +165,7 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## App address (2026-11-16, Varaprasad)
 - Team URL: **https://salestools.optculturecx.com** (Netlify site optculture-salestools, Netlify DNS, wildcard HTTPS) → 302 redirect to the Apps Script /exec URL. Netlify site is **public**; access control stays with Google: @optculture.com sign-in (deployment access DOMAIN) + active row in the Users tab. Iframe embedding not used (sign-in unreliable in frames).
+
+## Approvals show only what needs approval; reps get PDFs only (2026-11-16, Varaprasad)
+- Every approval trigger is a structured item (area, item, reference price + label, proposed, % difference, note; MSA exceptions carry their text). Amith's card and email lead with "Needs your approval (N)"; full pricing is collapsed; draft PDF link.
+- Reps/managers: one email with the PDFs attached (drafts: watermarked DRAFT PDFs, "do not send"); no Google Doc links in emails or in the app; only the PDF is shared with them (view only). The Superadmin keeps Doc links. Changes are made in the app and generated again.

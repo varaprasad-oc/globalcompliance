@@ -119,7 +119,12 @@ function buildQuote(master, input) {
     };
   }
 
-  var approvalReasons = [];
+  var approvalReasons = [], approvalItems = [];
+  /** Structured approval line for the approver: area, item, reference price, proposed price, % below reference. */
+  function approvalItem(area, item, refLabel, ref, proposed, unit, note) {
+    return { area: area, item: item, referenceLabel: refLabel, reference: ref, proposed: proposed, unit: unit || '',
+      diffPct: ref ? Math.round((proposed / ref - 1) * 10000) / 10000 : null, note: note || '' };
+  }
   /** Special unit price for a one-time line: keeps the standard price, recalculates the total, flags discounts for approval. */
   function applyOneTimeSpecial(l, sp, prefix) {
     l.standardUnitPrice = l.unitPrice;
@@ -132,6 +137,7 @@ function buildQuote(master, input) {
     if (sp < l.standardUnitPrice) {
       approvalReasons.push(prefix + l.label + ': special ' + formatMoney(input.currency, sp) + ' vs standard ' + formatMoney(input.currency, l.standardUnitPrice) +
         (l.qty > 1 ? ' (× ' + l.qty + ')' : ''));
+      approvalItems.push(approvalItem('One-time fee', prefix + l.label, 'Standard', l.standardUnitPrice, sp, l.qty > 1 ? 'each × ' + l.qty : 'one-time'));
     }
   }
   var storeInstall = items.filter(function (i) { return i.item_id === 'STORE_INSTALL'; })[0];
@@ -146,6 +152,7 @@ function buildQuote(master, input) {
     if (special !== null && special < standard) {
       approvalReasons.push(name + ': special price ' + formatMoney(input.currency, special) +
         ' vs standard ' + formatMoney(input.currency, standard) + ' per site/month');
+      approvalItems.push(approvalItem('Subscription', name + ' plan – licence', 'Standard', standard, special, 'per site / month'));
     }
 
     var oneTime = [];
@@ -212,6 +219,8 @@ function buildQuote(master, input) {
       if (special !== null && special < list) {
         approvalReasons.push('Platform comms (' + Number(t.messages).toLocaleString('en-US') + ' / month): special ' + formatMoney(input.currency, special) +
           ' vs list ' + formatMoney(input.currency, list) + (special < floor ? ' — BELOW FLOOR ' + formatMoney(input.currency, floor) : ''));
+        approvalItems.push(approvalItem('Messaging', 'Up to ' + Number(t.messages).toLocaleString('en-US') + ' / month', 'List', list, special, 'per month',
+          special < floor ? 'Below floor ' + formatMoney(input.currency, floor) : ''));
       }
       return { id: t.tier_id, label: t.label, unit: 'per month', qty: 1, messages: Number(t.messages),
         listPrice: list, floorPrice: floor, specialPrice: special, unitPrice: fin, total: fin, text: '', belowFloor: special !== null && special < floor };
@@ -247,6 +256,7 @@ function buildQuote(master, input) {
     rateCardAddOns: byCat('ADDON'),
     needsApproval: approvalReasons.length > 0,
     approvalReasons: approvalReasons,
+    approvalItems: approvalItems,
     terms: terms
   };
 }
@@ -288,13 +298,17 @@ function buildTopupQuote(master, input) {
     specialComms: specialComms
   });
   if (!q.ok) return q;
-  var cur = input.currency, errors = [], reasons = q.approvalReasons.slice();
+  var cur = input.currency, errors = [], reasons = q.approvalReasons.slice(), items = (q.approvalItems || []).slice();
+  var aItem = function (area, item, refLabel, ref, proposed, unit, note) {
+    return { area: area, item: item, referenceLabel: refLabel, reference: ref, proposed: proposed, unit: unit || '', diffPct: ref ? Math.round((proposed / ref - 1) * 10000) / 10000 : null, note: note || '' };
+  };
   var p = q.packages[0];
   var contracted = Number(input.contractedPricePerSite || p.standardPricePerSite);
   var lp = input.licencePrice;
   var licencePrice = (lp === '' || lp === null || lp === undefined) ? contracted : Number(lp);
   if (added > 0 && licencePrice < contracted) {
     reasons.push('Top-up licence: ' + formatMoney(cur, licencePrice) + ' vs contracted ' + formatMoney(cur, contracted) + ' per site/month');
+    items.push(aItem('Top-up licence', input.package + ' plan – ' + added + ' additional site(s)', 'Contracted', contracted, licencePrice, 'per site / month'));
   }
   var licenceMonthly = added > 0 ? licencePrice * added : 0;
   var installs = p.oneTime.filter(function (l) { return l.id !== 'SETUP'; });  // no set-up fee on a top-up
@@ -306,6 +320,7 @@ function buildTopupQuote(master, input) {
     if (!(credits > 0) || !(ppc > 0)) errors.push('WhatsApp ' + (w.type || '') + ' credits: enter credit count and price per credit');
     var total = Math.round(credits * ppc * 100) / 100;
     reasons.push('WhatsApp ' + w.type + ' credits: ' + credits.toLocaleString('en-US') + ' × ' + formatMoney(cur, ppc) + ' = ' + formatMoney(cur, total));
+    items.push(aItem('WhatsApp credits', w.type + ' – ' + credits.toLocaleString('en-US') + ' credits', 'No standard', null, ppc, 'per credit', 'Total ' + formatMoney(cur, total) + ' – every WhatsApp credit line needs approval'));
     return { id: 'WA_' + String(w.type).toUpperCase(), label: 'WhatsApp ' + w.type + ' credits', unit: 'per credit', qty: credits, unitPrice: ppc, total: total, text: '', credits: credits };
   });
   var oneTime = installs.concat(whatsapp);
@@ -325,7 +340,7 @@ function buildTopupQuote(master, input) {
     termTotal: oneTimeTotal + q.optionalOneTimeTotal + recurringMonthly * term
   };
   return Object.assign({}, q, {
-    packages: [pkg], needsApproval: reasons.length > 0, approvalReasons: reasons,
+    packages: [pkg], needsApproval: reasons.length > 0, approvalReasons: reasons, approvalItems: items,
     topup: { addStores: addStores, addEcomSites: addEcom, addedSites: added, baseSites: Number(input.baseSites || 0), contractedPricePerSite: contracted,
       comms: comms, whatsapp: whatsapp, termMonths: term }
   });

@@ -67,6 +67,8 @@
     button.danger { background:#c62828; color:#fff; border-color:#c62828; } button.danger:disabled { opacity:.45; }
     .topup-only { display:none; } .is-topup .topup-only { display:block; } .is-topup .not-topup, .is-topup .not-topup-freeze { display:none !important; }
     .tu-info { background:#f3effc; border:1px solid #d9c8f7; border-radius:8px; padding:10px 14px; margin-bottom:6px; }
+    .appr-items td, .appr-items th { vertical-align:top; }
+    .appr-terms { background:#fff7e6; border:1px solid #f0d3b4; border-left:4px solid #e08a00; border-radius:6px; padding:10px 12px; margin:8px 0; }
     .busy { position:fixed; inset:0; background:rgba(30,20,60,.45); display:flex; align-items:center; justify-content:center; z-index:1000; padding:16px; }
     .busy .box { background:#fff; border-radius:12px; padding:28px 30px; width:100%; max-width:560px; box-shadow:0 12px 40px rgba(0,0,0,.25); text-align:center; }
     .busy .box table { text-align:left; margin-top:10px; }
@@ -379,7 +381,7 @@
   function resultsTable(g) {
     return '<table><tr><th>Document</th><th>No.</th><th>Links</th></tr>' + g.results.map(function (r) {
       return '<tr><td>' + esc(r.label) + '</td><td>' + esc(r.docNo) + '</td><td>' + (r.error ? '<span class="error">' + esc(r.error) + '</span>' :
-        '<a href="' + esc(r.docUrl) + '" target="_blank">Google Doc</a>' + (r.pdfUrl ? ' · <a href="' + esc(r.pdfUrl) + '" target="_blank">PDF</a>' : '') +
+        (r.pdfUrl ? '<a href="' + esc(r.pdfUrl) + '" target="_blank">PDF</a>' : '') + (r.docUrl ? ' · <a href="' + esc(r.docUrl) + '" target="_blank">Google Doc</a>' : '') +
         (r.warnings && r.warnings.length ? '<br><span class="muted">' + r.warnings.length + ' warning(s): ' + esc(r.warnings.join('; ')) + '</span>' : '')) + '</td></tr>';
     }).join('') + '</table>';
   }
@@ -1133,16 +1135,27 @@
       $('apprCount').textContent = list.length; $('apprCount').classList.toggle('hidden', !list.length);
       if (!list.length) { $('appr').innerHTML = '<p class="muted">Nothing waiting for approval.</p>'; return; }
       $('appr').innerHTML = list.map(function (a) {
-        var c = a.currency;
-        return '<div class="card"><div class="bar"><b>' + esc(a.client) + '</b><span class="muted">' + esc(a.country) + ' · ' + esc(a.dealId) + ' v' + a.version + ' · by ' + esc(a.requestedBy) + ' · ' + esc(String(a.requestedAt).slice(0, 10)) + '</span></div>' +
-          '<ul class="tight">' + a.reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' +
+        var c = a.currency, items = a.items || [];
+        var priced = items.filter(function (x) { return !x.text; }), terms = items.filter(function (x) { return x.text; });
+        var diff = function (x) { return x.diffPct === null || x.diffPct === undefined ? '—' : '<b class="error">' + (x.diffPct * 100).toFixed(1) + '%</b>'; };
+        var pdfs = (a.documents || []).filter(function (d) { return d.pdfUrl; });
+        return '<div class="card appr-card"><div class="bar"><span><b>' + esc(a.client) + '</b> <span class="muted">' + esc(a.country) + '</span></span><span class="muted">' + esc(a.dealId) + ' v' + a.version + ' · ' + esc(a.what || '') + ' · by ' + esc(a.requestedBy) + ' · ' + esc(String(a.requestedAt).slice(0, 10)) + '</span></div>' +
+          '<h3 style="margin:10px 0 6px">Needs your approval <span class="badge warn">' + items.length + '</span></h3>' +
+          (priced.length ? '<table class="appr-items"><tr><th>Area</th><th>Item</th><th class="num">Reference</th><th class="num">Proposed</th><th class="num">Difference</th></tr>' +
+            priced.map(function (x) {
+              return '<tr><td>' + esc(x.area) + '</td><td>' + esc(x.item) + (x.note ? '<br><span class="muted" style="font-size:12px">' + esc(x.note) + '</span>' : '') + '</td>' +
+                '<td class="num">' + (x.reference === null || x.reference === undefined ? '<span class="muted">' + esc(x.referenceLabel) + '</span>' : money(c, x.reference) + '<br><span class="muted" style="font-size:12px">' + esc(x.referenceLabel.toLowerCase()) + ' ' + esc(x.unit) + '</span>') + '</td>' +
+                '<td class="num"><b>' + money(c, x.proposed) + '</b><br><span class="muted" style="font-size:12px">' + esc(x.unit) + '</span></td><td class="num">' + diff(x) + '</td></tr>';
+            }).join('') + '</table>' : '') +
+          terms.map(function (x) { return '<div class="appr-terms"><b>' + esc(x.area) + ' – ' + esc(x.item) + '</b><div style="white-space:pre-wrap;margin-top:4px">' + esc(x.text) + '</div></div>'; }).join('') +
+          (!items.length ? '<ul class="tight">' + a.reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' : '') +
           (a.note ? '<p><b>Rep note:</b> ' + esc(a.note) + '</p>' : '') +
-          (a.changes && a.changes.length ? '<p><b>Changed since proposal:</b></p><ul class="tight">' + a.changes.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
-          '<table><tr><th>Package</th><th class="num">List</th><th class="num">Standard</th><th class="num">Proposed</th><th class="num">Special disc.</th><th class="num">Total disc. vs list</th><th class="num">First year</th></tr>' +
-          a.packages.map(function (p) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + money(c, p.list) + '</td><td class="num">' + money(c, p.standard) + '</td><td class="num"><b>' + money(c, p.final) + '</b></td><td class="num">' + pct(p.specialDiscountPct) + '</td><td class="num">' + pct(p.effectiveDiscountPct) + '</td><td class="num">' + money(c, p.firstYear) + '</td></tr>'; }).join('') + '</table>' +
-          (a.comms.length ? '<p class="muted">Messaging: ' + a.comms.map(function (m) { return esc(Number(m.messages).toLocaleString('en-US')) + '/month ' + money(c, m.specialPrice) + ' (list ' + money(c, m.listPrice) + ', floor ' + money(c, m.floorPrice) + ')'; }).join('; ') + '</p>' : '') +
-          (a.documents.length ? '<p>Draft documents: ' + a.documents.map(function (d) { return '<a target="_blank" href="' + esc(d.docUrl) + '">' + esc(d.label) + '</a>'; }).join(' · ') + '</p>' : '') +
-          '<div class="grid"><div class="wide"><label>Comment (required to reject)</label><textarea data-comment="' + esc(a.approvalId) + '" style="min-height:50px"></textarea></div></div>' +
+          '<p class="muted" style="margin:6px 0">Everything else is standard. First-year value: <b>' + money('USD', Math.round(a.summary.valueUsd || 0)) + '</b>' + (pdfs.length ? ' · Draft PDF: ' + pdfs.map(function (d) { return '<a target="_blank" href="' + esc(d.pdfUrl) + '">' + esc(d.label) + '</a>'; }).join(' · ') : '') + '</p>' +
+          '<details><summary class="muted" style="cursor:pointer">Full pricing context</summary>' +
+            (a.changes && a.changes.length ? '<p><b>Changed since proposal:</b></p><ul class="tight">' + a.changes.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+            '<table><tr><th>Package</th><th class="num">List</th><th class="num">Standard</th><th class="num">Proposed</th><th class="num">Special disc.</th><th class="num">Total disc. vs list</th><th class="num">First year</th></tr>' +
+            a.packages.map(function (p) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + money(c, p.list) + '</td><td class="num">' + money(c, p.standard) + '</td><td class="num">' + money(c, p.final) + '</td><td class="num">' + pct(p.specialDiscountPct) + '</td><td class="num">' + pct(p.effectiveDiscountPct) + '</td><td class="num">' + money(c, p.firstYear) + '</td></tr>'; }).join('') + '</table></details>' +
+          '<div class="grid" style="margin-top:8px"><div class="wide"><label>Comment (required to reject)</label><textarea data-comment="' + esc(a.approvalId) + '" style="min-height:50px"></textarea></div></div>' +
           '<div class="bar" style="margin-top:8px;justify-content:flex-end"><button class="secondary" data-decide="Rejected" data-aid="' + esc(a.approvalId) + '">Reject</button> <button data-decide="Approved" data-aid="' + esc(a.approvalId) + '">Approve &amp; generate final documents</button></div></div>';
       }).join('');
       qa('[data-decide]').forEach(function (b) {
@@ -1152,7 +1165,7 @@
           var appr = b.dataset.decide === 'Approved';
           if (appr) busyStart('Approving and generating final documents…', ['Recording your approval', 'Creating the final documents', 'Converting to PDF', 'Sharing and emailing the rep']);
           run('apiDecideApproval', b.dataset.aid, b.dataset.decide, comment).then(function (r) {
-            if (appr && r.generation && r.generation.results) busyDone('Approved – final documents created', resultsTable(r.generation) + '<p class="muted" style="margin-bottom:0">The rep has been emailed the links and PDFs.</p>', 'approvals');
+            if (appr && r.generation && r.generation.results) busyDone('Approved – final documents created', resultsTable(r.generation) + '<p class="muted" style="margin-bottom:0">The rep has been emailed the final PDFs.</p>', 'approvals');
             else if (appr && r.generation && r.generation.error) busyFail('Approved, but generation failed: ' + r.generation.error);
             else { busyClose(); toast(r.decision); }
             loadApprovals();
@@ -1290,13 +1303,13 @@
       APPROVAL = g.summary && g.summary.approvalStatus; fill(g.deal);
       var h = '<h3>' + (g.mode === 'DRAFT' ? 'Draft documents created' : 'Documents created') + '</h3>';
       if (g.message) h += '<p><span class="badge warn">' + esc(g.message) + '</span></p>';
-      h += resultsTable(g) + '<p class="muted">The links were also emailed to the deal owner.</p>';
+      h += resultsTable(g) + '<p class="muted">The PDFs were emailed to the deal owner. To change anything, edit the deal here and generate again.</p>';
       if (g.mode === 'FINAL' && stageOf(g.deal) === 'PROPOSAL') h += '<p><b>Next:</b> send the proposal to the client. When they accept, click <b>Convert to Order Form</b> (below or in My Deals).</p>';
       $('genResult').innerHTML = h;
       applyStage(stageOf(g.deal)); loadDocs(g.deal.dealId);
       var failed = g.results.filter(function (r) { return r.error; }).length;
       busyDone(failed ? 'Finished with ' + failed + ' error(s)' : g.mode === 'DRAFT' ? 'Drafts created – sent to Amith for approval' : 'Documents created',
-        (g.message ? '<p><span class="badge warn">' + esc(g.message) + '</span></p>' : '') + resultsTable(g) + '<p class="muted" style="margin-bottom:0">Links were also emailed to you.</p>', 'list');
+        (g.message ? '<p><span class="badge warn">' + esc(g.message) + '</span></p>' : '') + resultsTable(g) + '<p class="muted" style="margin-bottom:0">The PDFs were also emailed to you. To change anything, edit the deal here and generate again.</p>', 'list');
     }).catch(function (e) { $('genResult').innerHTML = '<p class="error">' + esc(e.message) + '</p>'; busyFail(e.message); })
       .finally(function () { $('btnGenerate').disabled = false; });
   }

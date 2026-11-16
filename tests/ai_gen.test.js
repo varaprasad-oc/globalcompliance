@@ -59,22 +59,24 @@ test('Approval status survives a re-save only if the quote is unchanged', () => 
   eq(C().dealRecord(d, ev2, 'r@optculture.com', 't3', Object.assign({}, base, { approval_status: 'Approved' })).approval_status, 'Required', 'price changed → re-approval');
 });
 
-test('Rep email lists documents and warns on drafts', () => {
-  const m = C().generationEmail({ dealId: 'D-1', version: 2, client: { legalName: 'FRG SAE', shortName: 'FRG' } },
-    [{ label: 'Proposal', docNo: 'OC-P-2026-0001', docUrl: 'u1', pdfUrl: '' }, { label: 'DPA', docNo: 'OC-DPA-2026-0001', error: 'boom' }], 'DRAFT');
-  eq(m.subject, '[DRAFT] OptCulture documents – FRG');
-  eq(/FAILED: boom/.test(m.body) && /Do not send them/.test(m.body), true);
+test('Rep gets ONE email with PDFs attached and no Google Doc links; drafts say do not send', () => {
+  const deal = { dealId: 'D-202611-0001', version: 1, client: { legalName: 'FRG SAE', shortName: 'FRG' } };
+  const res = [{ label: 'Quotation & Order Form', docNo: 'OC-Q-2026-0001', docUrl: 'https://docs.google.com/d1', pdfId: 'p1' },
+    { label: 'Master Services Agreement', docNo: 'OC-MSA-2026-0001', docUrl: 'https://docs.google.com/d2', pdfId: 'p2' }, { label: 'X', docNo: 'X-1', error: 'boom' }];
+  const m = C().generationEmails(deal, res, 'FINAL');
+  eq([m.length, m[0].subject, m[0].pdfIds], [1, 'OptCulture documents – FRG', ['p1', 'p2']]);
+  eq([/docs\.google\.com/.test(m[0].body), /FAILED: boom/.test(m[0].body), /open the deal in the app/.test(m[0].body)], [false, true, true]);
+  const dr = C().generationEmails(deal, res, 'DRAFT');
+  eq([dr.length, dr[0].subject.indexOf('[DRAFT') === 0, /do NOT send/.test(dr[0].body), dr[0].pdfIds], [1, true, true, ['p1', 'p2']]);
 });
 
-test('Two emails after final generation: links, then PDFs attached; drafts get one', () => {
-  const deal = { dealId: 'D-2026-0001', version: 1, client: { legalName: 'FRG SAE', shortName: 'FRG' } };
-  const res = [{ label: 'Order Form', docNo: 'OC-Q-2026-0001', docUrl: 'd1', pdfId: 'p1' }, { label: 'Terms of Service', docNo: 'OC-TOS-2026-0001', docUrl: 'd2', pdfId: 'p2' },
-    { label: 'DPA', docNo: 'OC-DPA-2026-0001', docUrl: 'd3', pdfId: 'p3' }];
-  const m = C().generationEmails(deal, res, 'FINAL');
-  eq(m.length, 2);
-  eq([m[0].subject, m[1].subject], ['Documents ready – FRG', 'PDFs for review – FRG']);
-  eq(/d1[\s\S]*d2[\s\S]*d3/.test(m[0].body), true, 'all Doc links in one email');
-  eq(m[1].pdfIds, ['p1', 'p2', 'p3']);
-  const dr = C().generationEmails(deal, res.map((r) => Object.assign({}, r, { pdfId: '' })), 'DRAFT');
-  eq([dr.length, dr[0].subject.startsWith('[DRAFT]')], [1, true]);
+test('Approver email lists only what needs approval, item by item', () => {
+  const { sampleDeal } = require('./fixtures');
+  const d = JSON.parse(JSON.stringify(sampleDeal)); d.stage = 'CONTRACT'; d.commercial.msaRef = ''; d.msaExceptions = 'Clause 3: cure period 45 days.';
+  const ev = C().evaluateDeal(global.M, d);
+  const body = C().approvalEmailBody(d, ev, { name: 'Rep', email: 'r@optculture.com' }, 'https://salestools.optculturecx.com');
+  eq(/NEEDS YOUR APPROVAL \(2\)/.test(body), true);
+  eq(/Subscription – Loyalty plan – licence: USD 70 per site \/ month vs standard USD 75 \(-6\.7%\)/.test(body), true, body);
+  eq(/MSA special terms:\n {4}"Clause 3: cure period 45 days\."/.test(body), true);
+  eq(ev.approvalItems.map((x) => x.area), ['Subscription', 'MSA special terms']);
 });

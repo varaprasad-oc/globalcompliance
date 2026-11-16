@@ -15,6 +15,8 @@ function apiListApprovals() {
     return {
       approvalId: a.approval_id, dealId: a.deal_id, version: Number(a.version), requestedAt: a.requested_at instanceof Date ? a.requested_at.toISOString() : String(a.requested_at),
       requestedBy: owner.name || rec.created_by, reasons: String(a.reasons || '').split(' | '), note: d.approvalNote || '',
+      items: approvalItemsFor_(d), what: d.dealType === 'TOPUP' ? 'Top-up Order Form (of ' + ((d.topupOf || {}).dealId || '') + ')' :
+        (d.stage === 'CONTRACT' ? (contractMode(d) === 'NEW_MSA' ? 'Quotation & Order Form + MSA' : 'Quotation & Order Form') : 'Proposal'),
       client: d.client.legalName, country: d.client.country, currency: rec.currency, summary: dealSummary(rec),
       packages: q ? q.packages.map(function (p) { return { name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite,
         specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal }; }) : [],
@@ -23,6 +25,11 @@ function apiListApprovals() {
       documents: apiDealDocuments(a.deal_id).filter(function (x) { return Number(x.version) === Number(a.version); })
     };
   }).filter(Boolean);
+}
+
+/** Fresh, structured list of what needs approval (from the deal's frozen prices). */
+function approvalItemsFor_(deal) {
+  try { return evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal).approvalItems || []; } catch (e) { return []; }
 }
 
 /** Approve or reject. Approve → final documents are generated automatically. */
@@ -100,7 +107,7 @@ function apiResyncSharing() {
     var rec = deals[d.deal_id];
     if (!rec || d.status === 'Superseded') return;
     var owner = (users || []).filter(function (u) { return String(u.email).toLowerCase() === String(rec.created_by).toLowerCase(); })[0] || {};
-    shareFiles_([d.doc_file_id, d.pdf_file_id].filter(String), [rec.created_by, owner.manager_email].filter(Boolean));
+    shareFiles_([d.pdf_file_id].filter(String), [rec.created_by, owner.manager_email].filter(Boolean));  // PDFs only
     n++;
   });
   audit_('SHARING_RESYNC', { documents: n });

@@ -34,44 +34,44 @@ function docNumbersNeeded(deal, docTypes) {
   return docTypes.filter(function (t) { return !have[t]; });
 }
 
-/** Email body for the rep after generation. */
-function generationEmail(deal, results, mode) {
-  var c = deal.client || {};
-  var lines = ['Documents for ' + (c.legalName || deal.dealId) + ' (deal ' + deal.dealId + ', v' + (deal.version || 1) + '):', ''];
-  results.forEach(function (r) {
-    lines.push('• ' + r.label + ' ' + r.docNo + (r.error ? ' – FAILED: ' + r.error : ''));
-    if (!r.error) { lines.push('  Doc: ' + r.docUrl); if (r.pdfUrl) lines.push('  PDF: ' + r.pdfUrl); }
-  });
-  lines.push('');
-  if (mode === 'DRAFT') lines.push('These are DRAFTS pending Amith’s approval of the special pricing. Do not send them to the client.');
-  lines.push('— OptCulture Sales Docs');
-  return { subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'OptCulture documents – ' + (c.shortName || c.legalName || deal.dealId), body: lines.join('\n') };
-}
 
 /**
- * Emails after generation: (1) one email with all Google Doc links, (2) one email with all PDFs attached (final only).
+ * Email to the rep after generation: ONE email with the PDFs attached and no Google Doc links – changes are made in the app
+ * and generated again (decision 2026-11-16). Drafts get the watermarked PDFs with a "do not send" note.
  * Returns [{subject, body, pdfIds: []}].
  */
 function generationEmails(deal, results, mode) {
   var c = deal.client || {}, name = c.shortName || c.legalName || deal.dealId;
   var ok = results.filter(function (r) { return !r.error; }), failed = results.filter(function (r) { return r.error; });
-  var head = (c.legalName || deal.dealId) + ' – deal ' + deal.dealId + ', v' + (deal.version || 1);
-  var linkLines = ok.map(function (r) { return '• ' + r.label + ' ' + r.docNo + '\n  ' + r.docUrl; });
-  var failLines = failed.map(function (r) { return '• ' + r.label + ' ' + r.docNo + ' – FAILED: ' + r.error; });
-  var mails = [{
-    subject: (mode === 'DRAFT' ? '[DRAFT] ' : '') + 'Documents ready – ' + name,
-    body: 'Google Docs for ' + head + ':\n\n' + linkLines.join('\n') + (failLines.length ? '\n\nProblems:\n' + failLines.join('\n') : '') +
-      '\n\n' + (mode === 'DRAFT' ? 'These are DRAFTS pending Amith’s approval of the special pricing. Do not send them to the client. Final PDFs follow after approval.' :
-        'Edit only wording here if needed – change prices in the app and generate again. PDFs follow in a separate email.') + '\n\n— OptCulture Sales Docs',
-    pdfIds: []
-  }];
   var pdfs = ok.filter(function (r) { return r.pdfId; });
-  if (mode !== 'DRAFT' && pdfs.length) {
-    mails.push({
-      subject: 'PDFs for review – ' + name,
-      body: 'Attached: ' + pdfs.map(function (r) { return r.label + ' ' + r.docNo; }).join(', ') + '\n\nFor ' + head + '. Review before sending to the client.\n\n— OptCulture Sales Docs',
-      pdfIds: pdfs.map(function (r) { return r.pdfId; })
-    });
-  }
-  return mails;
+  var head = (c.legalName || deal.dealId) + ' – deal ' + deal.dealId + ', v' + (deal.version || 1);
+  var list = ok.map(function (r) { return '• ' + r.label + ' ' + r.docNo; });
+  var failLines = failed.map(function (r) { return '• ' + r.label + ' ' + r.docNo + ' – FAILED: ' + r.error; });
+  var draft = mode === 'DRAFT';
+  return [{
+    subject: (draft ? '[DRAFT – pending approval] ' : '') + 'OptCulture documents – ' + name,
+    body: (draft ? 'DRAFT PDFs attached for ' : 'PDFs attached for ') + head + ':\n\n' + list.join('\n') +
+      (failLines.length ? '\n\nProblems:\n' + failLines.join('\n') : '') + '\n\n' +
+      (draft ? 'These are DRAFTS waiting for Amith’s approval – do NOT send them to the client. You will receive the final PDFs by email after approval.'
+        : 'Review before sending to the client. To change anything, open the deal in the app, edit it and generate again – the documents are not edited directly.') +
+      '\n\n— OptCulture Sales Docs',
+    pdfIds: pdfs.map(function (r) { return r.pdfId; })
+  }];
+}
+
+/** Email to the approver: only what needs approval, item by item (structured), plus rep note and a link. */
+function approvalEmailBody(deal, ev, user, url) {
+  var c = deal.client || {}, cur = (deal.commercial || {}).currency || '';
+  var what = deal.dealType === 'TOPUP' ? 'Top-up Order Form' : deal.stage === 'CONTRACT' ? (contractMode(deal) === 'NEW_MSA' ? 'Quotation & Order Form + MSA' : 'Quotation & Order Form') : 'Proposal';
+  var lines = (ev.approvalItems || []).map(function (it) {
+    if (it.text) return '• ' + it.area + ':\n    "' + it.text.replace(/\n/g, '\n     ') + '"';
+    var ref = it.reference === null || it.reference === undefined ? '' : ' vs ' + it.referenceLabel.toLowerCase() + ' ' + formatMoney(cur, it.reference);
+    var diff = it.diffPct === null || it.diffPct === undefined ? '' : ' (' + (it.diffPct * 100).toFixed(1) + '%)';
+    return '• ' + it.area + ' – ' + it.item + ': ' + formatMoney(cur, it.proposed) + ' ' + it.unit + ref + diff + (it.note ? ' – ' + it.note : '');
+  });
+  return 'Approval requested by ' + user.name + ' (' + user.email + ')\n\n' +
+    'Client: ' + c.legalName + ' (' + c.country + ')\nDeal: ' + deal.dealId + ' v' + deal.version + ' – ' + what + '\n\n' +
+    'NEEDS YOUR APPROVAL (' + lines.length + '):\n' + lines.join('\n') +
+    (deal.approvalNote ? '\n\nRep note: ' + deal.approvalNote : '') +
+    '\n\nEverything else in the documents is standard. Review and approve in the app (Approvals): ' + url + '\n\n— OptCulture Sales Docs';
 }

@@ -82,3 +82,8 @@
 
 ## 32. installTriggers failed: missing OAuth scope
 - Deploy of c1b763c: `installTriggers` → "Specified permissions are not sufficient to call ScriptApp.getProjectTriggers". Added `https://www.googleapis.com/auth/script.scriptapp` to appsscript.json. New unit test checks that every Apps Script service used in the code has its scope in the manifest.
+
+## 33. Approval view + PDF-only for sales
+- Pricing/top-up/evaluation return approvalItems; apiListApprovals adds items + document type; approvalEmailBody lists items; UI approval card redesigned (table + highlighted MSA terms + collapsed context).
+- generateDocument always makes a PDF (drafts carry the banner) and shares only the PDF (reader); resync shares PDFs only; generationEmails = one email with PDFs; withoutDocLinks_ hides Doc links for non-Superadmins.
+- Tests: approver email + single-email unit tests; harness checks the approval table, collapsed context and PDF link.

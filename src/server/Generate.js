@@ -76,7 +76,7 @@ function generateForDeal_(dealId, user) {
     } catch (e) { console.warn('email failed: ' + e); notifyFailure_('Sending documents email for ' + dealId, e); }
   });
 
-  return { mode: plan.mode, message: plan.reason, results: results, deal: deal, summary: dealSummary(newRec) };
+  return { mode: plan.mode, message: plan.reason, results: withoutDocLinks_(results, user), deal: deal, summary: dealSummary(newRec) };
 }
 
 /** Move files of earlier versions of this deal to _Archive and mark them Superseded. */
@@ -93,17 +93,23 @@ function archivePreviousVersions_(dealId, currentVersion, docTypes) {
   });
 }
 
+/** Reps and managers see PDFs only; the Superadmin also gets the Google Doc links. */
+function withoutDocLinks_(list, user) {
+  if (user && user.role === CONFIG.ROLES.SUPERADMIN) return list;
+  return list.map(function (r) { var c = JSON.parse(JSON.stringify(r)); c.docUrl = ''; return c; });
+}
+
 /** Documents of a deal (latest first) for the UI. */
 function apiDealDocuments(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
   if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('No access.');
-  return readRecords_('Documents').filter(function (d) { return d.deal_id === dealId; }).map(function (d) {
+  return withoutDocLinks_(readRecords_('Documents').filter(function (d) { return d.deal_id === dealId; }).map(function (d) {
     return { docNo: d.doc_no, type: d.doc_type, label: DOC_LABEL[d.doc_type], version: Number(d.version), status: d.status,
       docUrl: d.doc_file_id ? 'https://docs.google.com/document/d/' + d.doc_file_id + '/edit' : '',
       pdfUrl: d.pdf_file_id ? 'https://drive.google.com/file/d/' + d.pdf_file_id + '/view' : '',
       createdAt: d.created_at instanceof Date ? d.created_at.toISOString() : String(d.created_at) };
-  }).sort(function (a, b) { return b.version - a.version; });
+  }).sort(function (a, b) { return b.version - a.version; }), user);
 }
 
 /** Email every Superadmin that a deal is waiting for approval. */
@@ -112,9 +118,7 @@ function notifyApprovers_(deal, ev, user) {
   if (!to.length) return;
   var url = '';
   try { url = ScriptApp.getService().getUrl(); } catch (e) { /* not deployed */ }
-  var body = 'Approval requested by ' + user.name + ' (' + user.email + ')\n\n' +
-    'Client: ' + (deal.client || {}).legalName + ' (' + (deal.client || {}).country + ')\nDeal: ' + deal.dealId + ' v' + deal.version + '\n\nReasons:\n- ' +
-    ev.approvalReasons.join('\n- ') + ((deal.approvalNote) ? '\n\nRep note: ' + deal.approvalNote : '') + '\n\nReview in the app (Approvals): ' + url;
+  var body = approvalEmailBody(deal, ev, user, url);
   try { MailApp.sendEmail({ to: to.join(','), subject: 'Approval needed – ' + ((deal.client || {}).shortName || (deal.client || {}).legalName), body: body, name: CONFIG.APP_NAME }); }
   catch (e) { console.warn('approval email failed: ' + e); }
 }

@@ -38,7 +38,7 @@ const api = {
     return { deal: d, evaluation: ev, summary: ctx.dealSummary(nr) }; },
   apiListApprovals: () => store.approvals.filter((a) => !a.decision).map((a) => { const r = store.deals[a.dealId]; const q = JSON.parse(r.quote_json); const d = JSON.parse(r.input_json);
     return { approvalId: a.approvalId, dealId: a.dealId, version: 1, requestedAt: '2026-11-14', requestedBy: 'Varaprasad SN', reasons: a.reasons, note: d.approvalNote || '', client: d.client.legalName,
-      country: d.client.country, currency: r.currency, summary: ctx.dealSummary(r), comms: [], documents: [],
+      country: d.client.country, currency: r.currency, summary: ctx.dealSummary(r), comms: [], documents: [{ label: 'Proposal', pdfUrl: 'https://drive.google.com/p', docUrl: '' }], what: 'Proposal', items: ctx.evaluateDeal(M, d).approvalItems,
       packages: q.packages.map((p) => ({ name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite, specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal })) }; }),
   apiDecideApproval: (aid, dec, comment) => { const a = store.approvals.find((x) => x.approvalId === aid); a.decision = dec; const r = store.deals[a.dealId]; r.approval_status = dec; r.status = dec === 'Approved' ? 'Approved' : 'Rejected';
     const gen = dec === 'Approved' ? api.apiGenerateDocs(a.dealId) : null; return { decision: dec, generation: gen }; },
@@ -162,7 +162,10 @@ const api = {
   check('Superadmin dashboard shows the pending approval as an action', (await p.textContent('#dash')).includes('Waiting for Amith'));
   check('Approvals menu shows 1 pending', (await p.textContent('#apprCount')).trim() === '1');
   await p.click('nav a[data-view="appr"]'); await p.waitForTimeout(400);
-  check('Approval card shows proposed USD 70 and special discount', (await p.textContent('#appr')).includes('6.7%'));
+  const ap = await p.textContent('#appr');
+  check('Approval card leads with "Needs your approval": item, standard USD 75, proposed USD 70, -6.7%', ap.includes('Needs your approval') && (await p.textContent('.appr-items')).includes('Loyalty plan – licence') && (await p.textContent('.appr-items')).includes('USD 75') && (await p.textContent('.appr-items')).includes('-6.7%'));
+  check('Full pricing is collapsed; draft PDF link (no Doc link)', !(await p.isVisible('.appr-card details table')) && ap.includes('Draft PDF'));
+  await (await p.$('.appr-card')).screenshot({ path: path.join(out, 'approval-card.png') });
   await p.click('[data-decide="Approved"]'); await p.waitForTimeout(700);
   check('Approve shows the processing/success dialog', (await p.textContent('#busyBox')).includes('final documents created'));
   await p.click('#busyStay'); await p.waitForTimeout(200);

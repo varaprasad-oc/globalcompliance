@@ -170,6 +170,8 @@ function evaluateDeal(master, deal) {
     needsApproval: quote.ok ? quote.needsApproval || !!msaExceptions(deal) : false,
     approvalReasons: quote.ok ? quote.approvalReasons.concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
     msaExceptions: msaExceptions(deal),
+    approvalItems: quote.ok ? (quote.approvalItems || []).concat(msaExceptions(deal) ? [{ area: 'MSA special terms', item: '§7 Special Terms and Exceptions', referenceLabel: 'Standard MSA',
+      reference: null, proposed: null, unit: '', diffPct: null, note: '', text: msaExceptions(deal) }] : []) : [],
     changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : [],
     contract: deal.stage === 'CONTRACT' ? { mode: contractMode(deal), msa: existingMsa(deal) } : null
   };
