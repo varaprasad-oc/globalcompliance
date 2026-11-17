@@ -51,3 +51,5 @@ With these set, there's no need to run `setupAll()`; it would just find everythi
 - Dropdowns on: Users.role, Features package columns, Entities.type, Countries market/addendum, PriceItems category/basis.
 - Protection: master tabs editable by amith.lulla@ and varaprasad@ only; record tabs by varaprasad@ only. Add docs-admin@ to both once it exists.
 - Verified 2026-11-14: values read back from the live Sheet produce the same pricing as the automated tests (Emerging/EGP/47 sites: Loyalty EGP 4,020; Developed/USD: 90/125/175).
+
+- Team manual (Google Doc, Guides folder): 14uNP0b0G2AhjslirfpBbT23hdqgxEPNtDUavWEeCnug – source docs/SALES_TEAM_MANUAL.html
