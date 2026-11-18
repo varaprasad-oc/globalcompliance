@@ -37,3 +37,4 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-15: Deployed as Apps Script version 10 ("v13 – proposal price reference"): feedback rounds 1–2 live (two-stage flow, package matrix, select-all, white-label fix, singular/plural, proposal unit prices). Awaiting regenerated test proposal for visual check.
 
 - 2026-11-16: Live = Apps Script version 23 ("v20 – PDF links only for everyone; long MSA exceptions wrap", commit dfffdc5). Team URL https://salestools.optculturecx.com. Daily backup trigger installed.
+- 2026-11-18: Live = Apps Script version 24 ("v21 – proposal cover page, page breaks, fee table style", commit 0a1afc7). Proposal template v1.3 active.
