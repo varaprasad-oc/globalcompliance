@@ -75,3 +75,33 @@ function approvalEmailBody(deal, ev, user, url) {
     (deal.approvalNote ? '\n\nRep note: ' + deal.approvalNote : '') +
     '\n\nEverything else in the documents is standard. Review and approve in the app (Approvals): ' + url + '\n\n— OptCulture Sales Docs';
 }
+
+/** Tables up to this many rows are kept on one page; longer ones repeat their header row on the next page. */
+var KEEP_TABLE_MAX_ROWS = 22;
+
+/**
+ * Docs API requests that stop tables breaking across pages (pure – tested in Node).
+ * Short tables were wrapped by the engine in an invisible 1×1 "frame" table: its single row gets preventOverflow, so the
+ * whole table moves to the next page instead of splitting. Long tables (> KEEP_TABLE_MAX_ROWS) can't fit a page: their header
+ * row is pinned (repeats on the next page) and no row is split.
+ * doc = documents.get JSON (body.content or tabs[0].documentTab.body.content).
+ */
+function tablePagingRequests(doc, maxRows) {
+  maxRows = maxRows || KEEP_TABLE_MAX_ROWS;
+  var content = (doc.body || ((doc.tabs || [])[0] || {}).documentTab && doc.tabs[0].documentTab.body || {}).content || [];
+  var reqs = [];
+  content.forEach(function (el) {
+    if (!el.table) return;
+    var t = el.table, loc = { index: el.startIndex };
+    var rows = t.tableRows || [];
+    var isFrame = rows.length === 1 && (rows[0].tableCells || []).length === 1 &&
+      (rows[0].tableCells[0].content || []).some(function (c) { return !!c.table; });
+    if (isFrame) {
+      reqs.push({ updateTableRowStyle: { tableStartLocation: loc, rowIndices: [0], tableRowStyle: { preventOverflow: true }, fields: 'preventOverflow' } });
+    } else if (rows.length > maxRows) {
+      reqs.push({ pinTableHeaderRows: { tableStartLocation: loc, pinnedHeaderRowsCount: 1 } });
+      reqs.push({ updateTableRowStyle: { tableStartLocation: loc, tableRowStyle: { preventOverflow: true }, fields: 'preventOverflow' } });
+    }
+  });
+  return reqs;
+}

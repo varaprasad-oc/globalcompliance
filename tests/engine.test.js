@@ -37,3 +37,21 @@ test('Tag at the start of a cell after another tag was removed keeps template st
   eq(t.s, 'Loyalty plan');
   eq([...new Set(t.st)], ['dark']);
 });
+
+test('Tables never split: framed short tables get "row cannot split"; long tables repeat the header row', (c) => {
+  const cell = (content) => ({ content });
+  const para = { paragraph: {} };
+  const tbl = (n) => ({ table: { tableRows: Array.from({ length: n }, () => ({ tableCells: [cell([para]), cell([para])] })) } });
+  const doc = { body: { content: [
+    { startIndex: 10, table: { tableRows: [{ tableCells: [cell([para, tbl(5), para])] }] } },  // frame around a 5-row table
+    Object.assign({ startIndex: 200 }, tbl(30)),                                                 // long feature matrix
+    Object.assign({ startIndex: 900 }, tbl(4))                                                   // unframed short table: left alone
+  ] } };
+  const r = c.tablePagingRequests(doc);
+  eq(r, [
+    { updateTableRowStyle: { tableStartLocation: { index: 10 }, rowIndices: [0], tableRowStyle: { preventOverflow: true }, fields: 'preventOverflow' } },
+    { pinTableHeaderRows: { tableStartLocation: { index: 200 }, pinnedHeaderRowsCount: 1 } },
+    { updateTableRowStyle: { tableStartLocation: { index: 200 }, tableRowStyle: { preventOverflow: true }, fields: 'preventOverflow' } }
+  ]);
+  eq(c.tablePagingRequests({ tabs: [{ documentTab: { body: { content: doc.body.content } } }] }).length, 3, 'tabbed docs too');
+});

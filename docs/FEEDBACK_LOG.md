@@ -95,3 +95,6 @@
 ## 35. Proposal cover page + page breaks + table style (from screenshots)
 - New live template "TEMPLATE – Proposal (EN) v1.3" (1Zp5UfBv0IPD9eX_3PJBo-Qu1q_lrJHbd0wM09ApDO0I), registered in Templates (v1.2 kept in notes): cover page with logo, PROPOSAL FOR, client name (navy), country (gold italic), title between gold rules, tagline (red italic), CONFIDENTIAL + date + Tel + Email + Ref; page break after the cover and before "Detailed Break-up of Fees"; H1 headings with gold underline; all headings keep-with-next.
 - Engine: generated tables get light-grey first column, padding, centred values, bold amounts (fees, licence); One-time fee table = Scope of Work | Fee | Payment Terms (Advance); proposal template tables get the same first-column shading. Cover logo up to 240px.
+
+## 36. Tables never split across pages
+- Engine: every top-level table with 2–22 rows is placed in an invisible 1×1 frame table; after save, the Docs API (advanced service "Docs", added to appsscript.json) marks the frame row preventOverflow, so the whole table moves to the next page. Tables > 22 rows (feature matrix) get a pinned (repeating) header row and no split rows. Pure request planner `tablePagingRequests` unit-tested; request shapes verified against the live Docs API on a scratch doc.
