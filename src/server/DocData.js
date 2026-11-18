@@ -138,21 +138,22 @@ function buildDocData(docType, master, deal, quote, ctx) {
     priceRows.push(['Billed annually – per site'].concat(quote.packages.map(function (x) { return m(x.annualPerSite) + ' / year'; })));
     priceRows.push(['Receipts included / site / month'].concat(quote.packages.map(function (x) { return x.receiptsIncludedPerSite.toLocaleString('en-US'); })));
     priceRows.push(['Per additional 1,000 receipts'].concat(quote.packages.map(function (x) { return m(x.overagePer1000); })));
-    tables.PriceSummary = { headers: ['Recurring charges'].concat(pkgNames), rows: priceRows };
+    tables.PriceSummary = { boldValues: true, headers: ['Recurring charges'].concat(pkgNames), rows: priceRows };
 
     var oneTimeIds = [];
     quote.packages.forEach(function (x) { x.oneTime.forEach(function (l) { if (oneTimeIds.indexOf(l.id) === -1) oneTimeIds.push(l.id); }); });
     tables.OneTimeFees = {
-      headers: ['One-time fees'].concat(pkgNames),
+      boldValues: true, paymentTerms: true,
+      headers: ['Scope of Work'].concat(pkgNames.map(function (pn) { return pkgNames.length > 1 ? pn + ' (' + cur + ')' : 'Fee (' + cur + ')'; })).concat(['Payment Terms']),
       rows: oneTimeIds.map(function (id) {
         var label = '';
         var cells = quote.packages.map(function (x) {
           var l = x.oneTime.filter(function (o) { return o.id === id; })[0];
           if (!l) return '';
           label = l.label;
-          return m(l.unitPrice) + (l.unit === 'per store' ? ' per store' : l.unit === 'per site' ? ' per e-commerce site' : '');
+          return m(l.unitPrice) + (l.unit === 'per store' ? ' / store' : l.unit === 'per site' ? ' / e-commerce site' : '');
         });
-        return [label].concat(cells);
+        return [label].concat(cells).concat(['Advance']);
       })
     };
 

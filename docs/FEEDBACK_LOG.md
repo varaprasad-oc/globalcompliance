@@ -91,3 +91,7 @@
 ## 34. PDF-only for Superadmin too + long exception text wraps
 - withoutDocLinks_ applies to every role; UI renders PDF links only.
 - Long MSA exception text (incl. unbroken URLs) widened the review table by 368px; wrapping now scoped to free-text cells (.wraptext, li, .appr-terms); repeated exception shortened in the review approval list. Harness checks a very long exception for horizontal overflow.
+
+## 35. Proposal cover page + page breaks + table style (from screenshots)
+- New live template "TEMPLATE – Proposal (EN) v1.3" (1Zp5UfBv0IPD9eX_3PJBo-Qu1q_lrJHbd0wM09ApDO0I), registered in Templates (v1.2 kept in notes): cover page with logo, PROPOSAL FOR, client name (navy), country (gold italic), title between gold rules, tagline (red italic), CONFIDENTIAL + date + Tel + Email + Ref; page break after the cover and before "Detailed Break-up of Fees"; H1 headings with gold underline; all headings keep-with-next.
+- Engine: generated tables get light-grey first column, padding, centred values, bold amounts (fees, licence); One-time fee table = Scope of Work | Fee | Payment Terms (Advance); proposal template tables get the same first-column shading. Cover logo up to 240px.

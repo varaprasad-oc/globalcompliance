@@ -874,21 +874,22 @@ function buildDocData(docType, master, deal, quote, ctx) {
     priceRows.push(['Billed annually – per site'].concat(quote.packages.map(function (x) { return m(x.annualPerSite) + ' / year'; })));
     priceRows.push(['Receipts included / site / month'].concat(quote.packages.map(function (x) { return x.receiptsIncludedPerSite.toLocaleString('en-US'); })));
     priceRows.push(['Per additional 1,000 receipts'].concat(quote.packages.map(function (x) { return m(x.overagePer1000); })));
-    tables.PriceSummary = { headers: ['Recurring charges'].concat(pkgNames), rows: priceRows };
+    tables.PriceSummary = { boldValues: true, headers: ['Recurring charges'].concat(pkgNames), rows: priceRows };
 
     var oneTimeIds = [];
     quote.packages.forEach(function (x) { x.oneTime.forEach(function (l) { if (oneTimeIds.indexOf(l.id) === -1) oneTimeIds.push(l.id); }); });
     tables.OneTimeFees = {
-      headers: ['One-time fees'].concat(pkgNames),
+      boldValues: true, paymentTerms: true,
+      headers: ['Scope of Work'].concat(pkgNames.map(function (pn) { return pkgNames.length > 1 ? pn + ' (' + cur + ')' : 'Fee (' + cur + ')'; })).concat(['Payment Terms']),
       rows: oneTimeIds.map(function (id) {
         var label = '';
         var cells = quote.packages.map(function (x) {
           var l = x.oneTime.filter(function (o) { return o.id === id; })[0];
           if (!l) return '';
           label = l.label;
-          return m(l.unitPrice) + (l.unit === 'per store' ? ' per store' : l.unit === 'per site' ? ' per e-commerce site' : '');
+          return m(l.unitPrice) + (l.unit === 'per store' ? ' / store' : l.unit === 'per site' ? ' / e-commerce site' : '');
         });
-        return [label].concat(cells);
+        return [label].concat(cells).concat(['Advance']);
       })
     };
 
@@ -2181,7 +2182,7 @@ function apiCreateTopUp(parentDealId) {
 
 var DOC_FOLDER_KEY = { PROPOSAL: 'PROPOSALS', ORDER_FORM: 'ORDER_FORMS', MSA: 'LEGAL', TOS: 'LEGAL', DPA: 'LEGAL' };
 var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Quotation & Order Form', MSA: 'Master Services Agreement', TOS: 'Terms of Service', DPA: 'DPA', AGREEMENT: 'Agreement' };
-var TABLE_STYLE = { headerBg: '#7B3FE4', headerFg: '#ffffff', border: '#c9d2dc', font: 'Arial', size: 10 };
+var TABLE_STYLE = { headerBg: '#7B3FE4', headerFg: '#ffffff', border: '#c9d2dc', font: 'Arial', size: 10, firstColBg: '#F3F4F8' };
 
 /**
  * @param {string} docType PROPOSAL | ORDER_FORM | TOS | DPA
@@ -2219,6 +2220,7 @@ function generateDocument(docType, data, opts) {
     Object.keys(data.fields).forEach(function (k) { replaceLiteral_(sec, '{{' + k + '}}', data.fields[k]); });
   });
   styleAllTableHeaders_(body, (data.style && data.style.tableHeaderBg) || TABLE_STYLE.headerBg);
+  if (docType === 'PROPOSAL') shadeFirstColumns_(body);
   sections.forEach(function (sec) { warnings = warnings.concat(highlightLeftovers_(sec)); });
   if ((opts.language || data.language) === 'AR') applyRtl_(body);
   if (opts.draft) addDraftBanner_(doc);
@@ -2435,7 +2437,7 @@ function applyTables_(body, tables, warnings) {
     if (!t) { warnings.push('No table data for TABLE:' + key); _removeChild(body, idx); continue; }
     var cells = [t.headers].concat(t.rows).map(function (r) { return r.map(function (c) { return String(c == null ? '' : c); }); });
     var table = body.insertTable(idx + 1, cells);
-    styleTable_(table, null);
+    styleTable_(table, t);
     _removeChild(body, idx);
   }
 }
@@ -2451,18 +2453,41 @@ function styleAllTableHeaders_(body, bg) {
   });
 }
 
-function styleTable_(table) {
+/**
+ * Generated tables (proposal style): brand header row, light-grey first column, values centred,
+ * amounts bold when spec.boldValues (e.g. fees), roomy padding.
+ */
+function styleTable_(table, spec) {
+  spec = spec || {};
   table.setBorderColor(TABLE_STYLE.border);
   for (var r = 0; r < table.getNumRows(); r++) {
     var row = table.getRow(r);
     for (var c = 0; c < row.getNumCells(); c++) {
       var cell = row.getCell(c);
-      cell.setPaddingTop(3).setPaddingBottom(3);
+      cell.setPaddingTop(6).setPaddingBottom(6).setPaddingLeft(8).setPaddingRight(8);
       var txt = cell.editAsText().setFontFamily(TABLE_STYLE.font).setFontSize(TABLE_STYLE.size);
+      var last = spec.paymentTerms && c === row.getNumCells() - 1;
       if (r === 0) { cell.setBackgroundColor(TABLE_STYLE.headerBg); txt.setForegroundColor(TABLE_STYLE.headerFg).setBold(true); }
+      else if (c === 0) cell.setBackgroundColor(TABLE_STYLE.firstColBg);
+      else if (spec.boldValues && !last && cell.getText()) txt.setBold(true);
       if (c > 0) cell.getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.CENTER);
     }
   }
+}
+
+/** Proposal: template tables (optional services, communication, consulting) get the same light-grey first column and padding. */
+function shadeFirstColumns_(body) {
+  body.getTables().forEach(function (t) {
+    if (t.getNumRows() < 2) return;
+    for (var r = 0; r < t.getNumRows(); r++) {
+      var row = t.getRow(r);
+      for (var c = 0; c < row.getNumCells(); c++) {
+        var cell = row.getCell(c);
+        cell.setPaddingTop(6).setPaddingBottom(6).setPaddingLeft(8).setPaddingRight(8);
+        if (r > 0 && c === 0 && !cell.getBackgroundColor()) cell.setBackgroundColor(TABLE_STYLE.firstColBg);
+      }
+    }
+  });
 }
 
 function applyImages_(sec, images) {
@@ -2477,7 +2502,7 @@ function applyImages_(sec, images) {
     var par = el.getParent();
     while (par.getType() !== DocumentApp.ElementType.PARAGRAPH) par = par.getParent();
     var img = par.asParagraph().insertInlineImage(0, DriveApp.getFileById(images[key]).getBlob());
-    var w = img.getWidth(), h = img.getHeight(), maxW = key === 'OptCultureLogo' ? 200 : 120;
+    var w = img.getWidth(), h = img.getHeight(), maxW = key === 'OptCultureLogo' ? 240 : 120;  // cover logo
     if (w > maxW) img.setWidth(maxW).setHeight(Math.round(h * maxW / w));
   }
 }
