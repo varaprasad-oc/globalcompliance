@@ -39,3 +39,4 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-16: Live = Apps Script version 23 ("v20 – PDF links only for everyone; long MSA exceptions wrap", commit dfffdc5). Team URL https://salestools.optculturecx.com. Daily backup trigger installed.
 - 2026-11-18: Live = Apps Script version 24 ("v21 – proposal cover page, page breaks, fee table style", commit 0a1afc7). Proposal template v1.3 active.
 - 2026-11-21: Live = team deployment version 25 + public acceptance deployment version 26 (commit 43c39be, flow v2).
+- 2026-11-21: Live = team deployment version 28 + public acceptance deployment version 27 ("v24 – branded client links", commit c9cba83). ACCEPT_BASE_URL = https://salestools.optculturecx.com/accept/.
