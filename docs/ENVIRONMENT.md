@@ -53,3 +53,5 @@ With these set, there's no need to run `setupAll()`; it would just find everythi
 - Verified 2026-11-14: values read back from the live Sheet produce the same pricing as the automated tests (Emerging/EGP/47 sites: Loyalty EGP 4,020; Developed/USD: 90/125/175).
 
 - Team manual (Google Doc, Guides folder): 14uNP0b0G2AhjslirfpBbT23hdqgxEPNtDUavWEeCnug – source docs/SALES_TEAM_MANUAL.html
+
+- Public acceptance deployment ("Client acceptance page (public)", access Anyone): https://script.google.com/macros/s/AKfycbx07ijgy8QiIE67NqKD8NyGcxnMHuaOu2dWsz2M7yKHT3hzRiVXarCOYNZhTvW4Dxa1/exec (Script property PUBLIC_EXEC_URL). Branded client links: https://salestools.optculturecx.com/accept/<token> (Netlify rule; Script property ACCEPT_BASE_URL). Every release: new version on BOTH deployments.

@@ -3367,7 +3367,7 @@ var ACCEPT_PAGE_HTML = [
   'function call(fn){var a=[].slice.call(arguments,1);return new Promise(function(ok,ko){var r=google.script.run.withSuccessHandler(ok).withFailureHandler(function(e){ko(e)});r[fn].apply(r,a)})}',
   'function msg(t,ok){$("msg").className=ok?"ok":"err";$("msg").textContent=t||""}',
   'function done(when){["doc","verify","act"].forEach(function(i){$(i).classList.add("hidden")});$("state").innerHTML="<h1 class=ok>Thank you</h1><p>"+esc(INFO.docLabel)+" "+esc(INFO.docNo)+" was received on "+esc(when)+". "+esc(INFO.repName)+" has been notified and will be in touch.</p>"}',
-  'function show(i){INFO=i;var head="<h1>"+esc(i.docLabel||"Document")+" "+esc(i.docNo||"")+"</h1><p class=muted>From "+esc(i.entityName||"OptCulture")+" for "+esc(i.clientName||"")+"</p>";',
+  'function show(i){INFO=i;var head=i.docNo?"<h1>"+esc(i.docLabel||"Document")+" "+esc(i.docNo)+"</h1>"+(i.clientName?"<p class=muted>From "+esc(i.entityName||"OptCulture")+" for "+esc(i.clientName)+"</p>":""):"";',
   ' if(i.state==="DONE"){$("state").innerHTML=head+"<p class=ok>This document has already been accepted"+(i.acceptedAt?" on "+esc(i.acceptedAt):"")+". Thank you.</p>";return}',
   ' if(i.state!=="OK"){$("state").innerHTML=head+"<p class=err>"+({EXPIRED:"This link has expired.",LOCKED:"This link is locked after too many wrong codes.",REVOKED:"This link is no longer valid."}[i.state]||"This link cannot be used.")+" Please contact "+esc(i.repName||"your OptCulture contact")+(i.repEmail?" ("+esc(i.repEmail)+")":"")+" for a new link.</p>";return}',
   ' $("state").innerHTML=head+"<p class=muted>Please review the document, verify your email and then accept it online or upload a signed copy. Link valid until "+esc(i.validUntil)+".</p>";',
