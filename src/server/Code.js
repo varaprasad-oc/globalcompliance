@@ -1,6 +1,7 @@
 /** Web app entry point and client-callable API (google.script.run). */
 
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.a) return acceptPage_(e.parameter.a);  // client acceptance page (public deployment)
   var t = uiTemplate_();
   return t.evaluate()
     .setTitle(CONFIG.APP_NAME)
@@ -16,7 +17,7 @@ function include(name) {
 function apiBootstrap() {
   var user = getCurrentUser();
   if (!user.ok) return { user: user };
-  var m = getMaster();
+  var m = getMaster_();
   return {
     user: user,
     lists: {
@@ -36,7 +37,7 @@ function apiBootstrap() {
 /** Live price preview (Sprint 3 / used by the deal wizard in Sprint 6). */
 function apiPreviewQuote(input) {
   requireUser_();
-  return buildQuote(getMaster(), input);
+  return buildQuote(getMaster_(), input);
 }
 
 /** UI file is "ui/Index" when pushed with clasp, "Index" when pasted from dist/. */

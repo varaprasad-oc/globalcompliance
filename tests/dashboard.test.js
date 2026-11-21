@@ -31,8 +31,8 @@ test('Dashboard stats: pipeline excludes Won/Lost, won total, pending approvals,
 
 test('Pipeline status changes only after generation', () => {
   eq(C().canSetStatus('Generated', 'Sent'), true);
-  eq(C().canSetStatus('Sent', 'Won'), true);
-  eq(C().canSetStatus('Draft', 'Won'), false);
+  eq([C().canSetStatus('Sent', 'Won'), C().canSetStatus('Sent', 'Won', true), C().canSetStatus('Sent', 'Lost')], [false, true, true], 'Won comes from client acceptance; Superadmin override');
+  eq(C().canSetStatus('Draft', 'Won', true), false);
   eq(C().canSetStatus('Pending approval', 'Sent'), false);
   eq(C().canSetStatus('Generated', 'Approved'), false);
 });

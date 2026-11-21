@@ -14,11 +14,18 @@
  */
 
 var DEAL_STATUS = { DRAFT: 'Draft', PENDING: 'Pending approval', APPROVED: 'Approved', REJECTED: 'Rejected', GENERATED: 'Generated',
-  PROPOSAL_GENERATED: 'Proposal generated', CONTRACT_DRAFT: 'Contract draft', CONTRACT_GENERATED: 'Contract generated', SENT: 'Sent', WON: 'Won', LOST: 'Lost' };
+  PROPOSAL_GENERATED: 'Proposal generated', CONTRACT_DRAFT: 'Contract draft', CONTRACT_GENERATED: 'Contract generated', SENT: 'Sent', WON: 'Won', LOST: 'Lost',
+  ORDER_FORM_GENERATED: 'Order Form generated', ORDER_FORM_SENT: 'Order Form sent', ORDER_FORM_ACCEPTED: 'Order Form accepted',
+  MSA_GENERATED: 'MSA generated', MSA_SENT: 'MSA sent' };
 
-/** Two-stage flow: PROPOSAL (proposal only) → CONTRACT (Quotation & Order Form + MSA, or Order Form only under an existing MSA). */
-var STAGE_DOCS = { PROPOSAL: ['PROPOSAL'], CONTRACT: ['ORDER_FORM', 'MSA'] };  // ToS, DPA and SLA are online documents incorporated by the MSA
-var GENERATED_STATUSES = ['Generated', 'Proposal generated', 'Contract generated', 'Sent', 'Won', 'Lost'];
+/**
+ * Flow (decision 2026-11-21): PROPOSAL → CONTRACT (Quotation & Order Form only; client accepts online or uploads a signed copy)
+ * → MSA (standard MSA, deviations only in §7; client accepts or uploads) → Won. A client who already has an MSA, and every
+ * top-up, is Won as soon as the Order Form is accepted. ToS, DPA and SLA are online documents incorporated by the MSA.
+ */
+var STAGE_DOCS = { PROPOSAL: ['PROPOSAL'], CONTRACT: ['ORDER_FORM'], MSA: ['MSA'] };
+var GENERATED_STATUSES = ['Generated', 'Proposal generated', 'Contract generated', 'Sent', 'Won', 'Lost',
+  'Order Form generated', 'Order Form sent', 'MSA generated', 'MSA sent'];
 
 /** A proposal that has been generated (and possibly sent) can be converted to the contract stage. */
 function canConvertToContract(deal, status) {
@@ -77,7 +84,7 @@ function convertToContract(deal, quote) {
   d.proposalBaseline = proposalBaseline(deal, quote);
   d.stage = 'CONTRACT';
   d.status = DEAL_STATUS.CONTRACT_DRAFT;
-  d.docs = { ORDER_FORM: true, MSA: true };
+  d.docs = { ORDER_FORM: true };
   d.commercial = d.commercial || {};
   if (!d.commercial.orderPackage || (d.commercial.packages || []).indexOf(d.commercial.orderPackage) === -1) d.commercial.orderPackage = (d.commercial.packages || [])[0];
   return d;
@@ -112,7 +119,7 @@ function existingMsa(deal) {
 }
 
 function contractMode(deal) {
-  if (deal.stage !== 'CONTRACT') return null;
+  if (deal.stage !== 'CONTRACT' && deal.stage !== 'MSA') return null;
   if (deal.dealType === 'TOPUP') return 'ORDER_ONLY';  // a top-up is always an Order Form under the existing MSA
   return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'NEW_MSA';
 }
@@ -128,13 +135,14 @@ function relatedNumbers(deal) {
 
 /** MSA §7 exceptions that will be printed (only when an MSA is generated). Any text needs Superadmin approval. */
 function msaExceptions(deal) {
-  if (deal.stage !== 'CONTRACT' || contractMode(deal) !== 'NEW_MSA') return '';
+  if (deal.stage !== 'MSA' || contractMode(deal) !== 'NEW_MSA') return '';
   var t = String(deal.msaExceptions || '').trim();
   return /^none\.?$/i.test(t) ? '' : t;
 }
 
 function selectedDocs(deal) {
-  if (deal.stage === 'CONTRACT') return contractMode(deal) === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['ORDER_FORM', 'MSA'];
+  if (deal.stage === 'CONTRACT') return ['ORDER_FORM'];
+  if (deal.stage === 'MSA') return ['MSA'];
   var d = deal.docs || {};
   var allowed = deal.stage ? STAGE_DOCS[deal.stage] : DOC_TYPES;
   return DOC_TYPES.filter(function (t) { return d[t] && allowed.indexOf(t) !== -1; });
@@ -167,13 +175,14 @@ function evaluateDeal(master, deal) {
     quote: quote.ok ? quote : null,
     missing: missing,
     readyToGenerate: errors.length === 0 && Object.keys(missing).length === 0,
-    needsApproval: quote.ok ? quote.needsApproval || !!msaExceptions(deal) : false,
-    approvalReasons: quote.ok ? quote.approvalReasons.concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
+    // MSA stage: prices were agreed in the accepted Order Form – only §7 exceptions can need approval
+    needsApproval: quote.ok ? (deal.stage === 'MSA' ? false : quote.needsApproval) || !!msaExceptions(deal) : false,
+    approvalReasons: quote.ok ? (deal.stage === 'MSA' ? [] : quote.approvalReasons).concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
     msaExceptions: msaExceptions(deal),
-    approvalItems: quote.ok ? (quote.approvalItems || []).concat(msaExceptions(deal) ? [{ area: 'MSA special terms', item: '§7 Special Terms and Exceptions', referenceLabel: 'Standard MSA',
+    approvalItems: quote.ok ? (deal.stage === 'MSA' ? [] : (quote.approvalItems || [])).concat(msaExceptions(deal) ? [{ area: 'MSA special terms', item: '§7 Special Terms and Exceptions', referenceLabel: 'Standard MSA',
       reference: null, proposed: null, unit: '', diffPct: null, note: '', text: msaExceptions(deal) }] : []) : [],
     changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : [],
-    contract: deal.stage === 'CONTRACT' ? { mode: contractMode(deal), msa: existingMsa(deal) } : null
+    contract: deal.stage === 'CONTRACT' || deal.stage === 'MSA' ? { mode: contractMode(deal), msa: existingMsa(deal), stage: deal.stage } : null
   };
 }
 
@@ -244,6 +253,7 @@ function dealSummary(rec) {
     createdBy: rec.created_by, createdAt: rec.created_at instanceof Date ? rec.created_at.toISOString() : String(rec.created_at || ''), updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
     lastGeneratedAt: d.lastGeneratedAt || '',
+    awaiting: (function () { var a = d.acceptance || {}, t = d.stage === 'MSA' ? 'MSA' : 'ORDER_FORM'; return a[t] && a[t].sentAt && !a[t].at ? { docType: t, sentAt: a[t].sentAt, to: a[t].to || '' } : null; })(),
     dealType: d.dealType || '', parentDealId: (d.topupOf || {}).dealId || '',
     referralPartnerId: d.referralPartnerId || '',
     stage: d.stage || '',
@@ -257,8 +267,40 @@ function dealSummary(rec) {
 
 /** Owner may move a generated deal along the sales pipeline. */
 var PIPELINE_STATUSES = ['Sent', 'Won', 'Lost'];
-function canSetStatus(currentStatus, newStatus) {
-  return PIPELINE_STATUSES.indexOf(newStatus) !== -1 && GENERATED_STATUSES.indexOf(currentStatus) !== -1;
+/**
+ * Manual status changes. Sent: a generated proposal. Lost: any generated or accepted deal. Won is set by the client's
+ * acceptance (Order Form under an existing MSA / top-up, or the MSA); only the Superadmin can mark Won by hand.
+ */
+function canSetStatus(currentStatus, newStatus, isSuperadmin) {
+  var open = GENERATED_STATUSES.concat([DEAL_STATUS.ORDER_FORM_ACCEPTED]);
+  if (newStatus === 'Sent') return ['Proposal generated', 'Generated'].indexOf(currentStatus) !== -1;
+  if (newStatus === 'Lost') return open.indexOf(currentStatus) !== -1 && currentStatus !== 'Lost';
+  if (newStatus === 'Won') return !!isSuperadmin && open.indexOf(currentStatus) !== -1 && currentStatus !== 'Won';
+  return false;
+}
+
+/** Can this document be sent to the client for acceptance now? (final documents of the current stage) */
+function canSendForAcceptance(deal, status, docType) {
+  if (docType === 'ORDER_FORM') return deal.stage === 'CONTRACT' && ['Order Form generated', 'Order Form sent', 'Contract generated'].indexOf(status) !== -1;
+  if (docType === 'MSA') return deal.stage === 'MSA' && ['MSA generated', 'MSA sent'].indexOf(status) !== -1;
+  return false;
+}
+
+/**
+ * Client accepted (online or signed upload). Order Form: Won when the client already has an MSA (or it is a top-up),
+ * otherwise the deal moves to the MSA stage. MSA: Won. info = { method, name, title, email, at, signedFileId, ref }.
+ */
+function applyAcceptance(deal, docType, info) {
+  var d = JSON.parse(JSON.stringify(deal));
+  d.acceptance = d.acceptance || {};
+  d.acceptance[docType] = Object.assign({}, d.acceptance[docType] || {}, info, { status: info.method === 'upload' ? 'Signed copy uploaded' : 'Accepted online' });
+  if (docType === 'ORDER_FORM') {
+    if (contractMode(d) === 'ORDER_ONLY') { d.status = DEAL_STATUS.WON; }
+    else { d.stage = 'MSA'; d.status = DEAL_STATUS.ORDER_FORM_ACCEPTED; d.docs = { MSA: true }; }
+  } else if (docType === 'MSA') {
+    d.status = DEAL_STATUS.WON;
+  }
+  return d;
 }
 
 /** Dashboard numbers from deal summaries (amounts in USD for comparability). now = Date for the monthly window. */
@@ -273,7 +315,7 @@ function dashboardStats(summaries, users, now, opts) {
   (users || []).forEach(function (u) { nameOf[String(u.email).toLowerCase()] = u.name; });
   var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, winRate: null, conversionRate: null,
     topups: { count: 0, openUsd: 0, wonUsd: 0 },
-    byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], stale: [], staleDays: staleDays, periodDays: periodDays, actions: { toConvert: [], pending: [], notSent: [], rejected: [] } };
+    byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], stale: [], staleDays: staleDays, periodDays: periodDays, actions: { toConvert: [], pending: [], notSent: [], rejected: [], awaitingClient: [], withLegal: [] } };
   var discSum = 0, discN = 0;
   function add(map, key, sm) {
     key = key || '—';
@@ -296,12 +338,14 @@ function dashboardStats(summaries, users, now, opts) {
     var stage = sm.stage || 'PROPOSAL';
     if (sm.status === 'Won') f.won++;
     else if (sm.status === 'Lost') f.lost++;
-    else if (stage === 'CONTRACT') f.contract++;
+    else if (stage === 'CONTRACT' || stage === 'MSA') f.contract++;
     else if (['Proposal generated', 'Sent', 'Generated'].indexOf(sm.status) !== -1) f.proposal++;
     else f.draft++;
     if (stage === 'PROPOSAL' && ['Proposal generated', 'Sent'].indexOf(sm.status) !== -1) s.actions.toConvert.push(mini(sm));
     if (sm.approvalStatus === 'Pending') s.actions.pending.push(mini(sm));
-    if (sm.status === 'Contract generated') s.actions.notSent.push(mini(sm));
+    if (['Contract generated', 'Order Form generated', 'MSA generated'].indexOf(sm.status) !== -1) s.actions.notSent.push(mini(sm));
+    if (sm.awaiting) s.actions.awaitingClient.push(Object.assign(mini(sm), { docType: sm.awaiting.docType, days: daysSince(sm.awaiting.sentAt) }));
+    if (stage === 'MSA' && ['Order Form accepted', 'MSA generated', 'Pending approval', 'Rejected'].indexOf(sm.status) !== -1) s.actions.withLegal.push(mini(sm));
     if (sm.status === 'Rejected') s.actions.rejected.push(mini(sm));
   });
   // partner performance (Superadmin only: opts.partners is passed for Superadmin)
@@ -378,6 +422,13 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   d.proposalBaseline = stored.proposalBaseline;
   d.clientId = stored.clientId;
   if (stored.dealType) d.dealType = stored.dealType; else delete d.dealType;
+  d.acceptance = stored.acceptance;  // client acceptance records: server-owned
+  if (stored.stage === 'MSA') {
+    // Order Form accepted: commercials and party details are locked; only MSA fields can change
+    var keepClient = JSON.parse(JSON.stringify(stored.client || {})), inc = d.client || {};
+    ['signatoryName', 'signatoryTitle', 'signatoryEmail', 'noticeEmail'].forEach(function (k) { if (inc[k] !== undefined) keepClient[k] = inc[k]; });
+    d.client = keepClient; d.commercial = stored.commercial; d.entityId = stored.entityId; d.topup = stored.topup;
+  }
   if (stored.topupOf) d.topupOf = stored.topupOf; else delete d.topupOf;
   d.pricingSnapshot = refresh || !stored.pricingSnapshot ? freshSnapshot : stored.pricingSnapshot;
   d.stage = stored.stage;
@@ -389,7 +440,7 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   }
   var revised = GENERATED_STATUSES.indexOf(existingStatus) !== -1;
   d.version = Number(stored.version || 1) + (revised ? 1 : 0);
-  var draftStatus = d.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_DRAFT : DEAL_STATUS.DRAFT;
+  var draftStatus = d.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_DRAFT : d.stage === 'MSA' ? DEAL_STATUS.ORDER_FORM_ACCEPTED : DEAL_STATUS.DRAFT;
   d.status = revised || existingStatus === DEAL_STATUS.REJECTED ? draftStatus : (existingStatus || draftStatus);
   return d;
 }
@@ -441,7 +492,7 @@ function topupInput(deal) {
 
 /** Top-up is offered on Won deals that are not themselves top-ups. */
 function canTopUp(deal, status) {
-  return status === DEAL_STATUS.WON && deal.dealType !== 'TOPUP' && (deal.stage === 'CONTRACT');
+  return status === DEAL_STATUS.WON && deal.dealType !== 'TOPUP' && (deal.stage === 'CONTRACT' || deal.stage === 'MSA');
 }
 
 /**

@@ -35,7 +35,7 @@ function apiAdminSaveRow(tab, rowNumber, obj, reason) {
     var before = rowNumber ? existing.filter(function (r) { return r._row === rowNumber; })[0] : null;
     if (rowNumber && !before) throw new Error('Row not found – reload and try again.');
     writeRecord_(tab, res.row, rowNumber || null);
-    clearMasterCache();
+    clearMasterCache_();
     var changed = before ? headers.filter(function (h) { return String(before[h]) !== String(res.row[h]); }) : headers;
     appendRecord_('ChangeLog', { date: new Date(), raised_by: user.email, area: tab, change: (before ? 'Edited ' : 'Added ') + res.row[key] + ': ' +
       changed.map(function (h) { return h + (before ? ' ' + before[h] + ' → ' : ' = ') + res.row[h]; }).join('; ') + (reason ? ' — ' + reason : ''),
@@ -53,7 +53,7 @@ function apiAdminCheckTemplate(fileIdOrUrl, docType) {
   var id = String(fileIdOrUrl).replace(/^.*\/d\/([a-zA-Z0-9_-]+).*$/, '$1');
   var doc = DocumentApp.openById(id);
   var text = [doc.getBody().getText(), doc.getHeader() ? doc.getHeader().getText() : '', doc.getFooter() ? doc.getFooter().getText() : ''].join('\n');
-  var m = getMaster();
+  var m = getMaster_();
   var sample = sampleDealForChecks_();
   var data = buildDocData(docType, m, sample, buildQuote(m, sample.commercial), { docNo: 'CHECK', related: { PROPOSAL: 'x', ORDER_FORM: 'x', MSA: 'x' } });
   var unknown = checkTemplateTokens(text, data).filter(function (t) { return ['label', 'amount', 'title', 'text'].indexOf(t) === -1; });

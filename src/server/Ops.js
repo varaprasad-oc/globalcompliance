@@ -7,6 +7,10 @@ function backupMasterSheet() {
   try {
     var src = DriveApp.getFileById(getProp_('MASTER_SHEET_ID'));
     var folder = getOrCreateFolder_(DriveApp.getFolderById(getProp_('FOLDER_ARCHIVE')), 'Backups');
+    // Runs from the daily trigger; also callable by name from a page, so at most one backup per 20 hours (no flooding).
+    var latest = 0, chk = folder.getFiles();
+    while (chk.hasNext()) latest = Math.max(latest, chk.next().getDateCreated().getTime());
+    if (Date.now() - latest < 20 * 3600 * 1000) { console.log('Backup skipped: last backup is less than 20 hours old'); return; }
     src.makeCopy('Master DB backup ' + Utilities.formatDate(new Date(), 'Asia/Dubai', 'yyyy-MM-dd HH:mm'), folder);
     var files = [], it = folder.getFiles();
     while (it.hasNext()) files.push(it.next());
@@ -21,6 +25,7 @@ function backupMasterSheet() {
 
 /** Install the daily backup (02:00 Dubai). Safe to run more than once. */
 function installTriggers() {
+  requireOperator_();
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'backupMasterSheet') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('backupMasterSheet').timeBased().everyDays(1).atHour(2).inTimezone('Asia/Dubai').create();
   setProp_('BACKUP_TRIGGER', new Date().toISOString());
@@ -30,7 +35,7 @@ function installTriggers() {
 /** Email superadmins (and alert_email, if set) when something important fails. Never throws. */
 function notifyFailure_(context, err) {
   try {
-    var m = getMaster();
+    var m = getMaster_();
     var to = (m.Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
     var extra = ((m.CommercialTerms || []).filter(function (r) { return r.key === 'alert_email'; })[0] || {}).value;
     if (extra) to.push(extra);
@@ -43,10 +48,11 @@ function notifyFailure_(context, err) {
 
 /** Editor + Admin check before go-live. */
 function goLiveCheck() {
+  requireOperator_();
   var props = PropertiesService.getScriptProperties().getProperties();
-  var findings = goLiveFindings(getMaster(true), props);
+  var findings = goLiveFindings(getMaster_(true), props);
   // live checks: templates and logo can be opened
-  (getMaster().Templates || []).filter(function (t) { return isTrue(t.active); }).forEach(function (t) {
+  (getMaster_().Templates || []).filter(function (t) { return isTrue(t.active); }).forEach(function (t) {
     try { DriveApp.getFileById(t.file_id).getName(); } catch (e) { findings.push({ level: 'BLOCKER', item: 'Template ' + t.doc_type + ' ' + t.language, detail: 'file cannot be opened' }); }
   });
   findings.push({ level: MailApp.getRemainingDailyQuota() > 50 ? 'OK' : 'WARN', item: 'Email quota', detail: MailApp.getRemainingDailyQuota() + ' left today' });

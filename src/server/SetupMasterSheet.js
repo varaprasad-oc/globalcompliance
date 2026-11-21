@@ -8,6 +8,7 @@
  */
 
 function setupAll() {
+  requireOperator_();
   setupFolders();
   setupMasterSheet();
 }
@@ -24,6 +25,7 @@ function getOrCreateFolder_(parent, name) {
 }
 
 function setupFolders() {
+  requireOperator_();
   var root = getRootFolder_();
   var ids = {};
   Object.keys(CONFIG.FOLDERS).forEach(function (k) {
@@ -35,6 +37,7 @@ function setupFolders() {
 }
 
 function setupMasterSheet() {
+  requireOperator_();
   var ss;
   var id = getProp_('MASTER_SHEET_ID');
   if (id) {
@@ -66,7 +69,7 @@ function setupMasterSheet() {
 
   writeSchemaReadme_(ss);
   protectMasterTabs_(ss);
-  clearMasterCache();
+  clearMasterCache_();
   console.log('Master Sheet ready: ' + ss.getUrl());
   return ss.getUrl();
 }

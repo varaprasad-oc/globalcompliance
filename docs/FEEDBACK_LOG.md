@@ -98,3 +98,10 @@
 
 ## 36. Tables never split across pages
 - Engine: every top-level table with 2–22 rows is placed in an invisible 1×1 frame table; after save, the Docs API (advanced service "Docs", added to appsscript.json) marks the frame row preventOverflow, so the whole table moves to the next page. Tables > 22 rows (feature matrix) get a pinned (repeating) header row and no split rows. Pure request planner `tablePagingRequests` unit-tested; request shapes verified against the live Docs API on a scratch doc.
+
+## 37. Flow v2 + client acceptance portal (see DECISIONS "Flow v2")
+- Logic: STAGE_DOCS CONTRACT=[ORDER_FORM], MSA=[MSA]; new statuses (Order Form generated/sent/accepted, MSA generated/sent); applyAcceptance, canSendForAcceptance; MSA-stage approval only for §7; commercials locked at MSA stage; canSetStatus (Won = Superadmin override); dashboard "Waiting for client" and "MSA with legal".
+- Portal: AcceptLogic.js (pure, tested), Accept.js (send/resend, record signed copy, token API, OTP, certificate PDF, notifications), AcceptPage.js (client page), doGet ?a=token route, Acceptances tab (live sheet created).
+- Security hardening: operator tools guarded (requireOperator_), internal workers made private, backup throttled.
+- Order Form template (repo + live): governing line until MSA, MSA reference "To follow after acceptance", "signing below or accepting electronically".
+- UI: stage 3 (MSA), acceptance panel (Send/Resend, Record signed copy), locked fields, list/dashboard statuses. Tests: 96 unit, 103 browser checks, 8 client-page checks (tests/accept-ui.js).

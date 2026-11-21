@@ -22,7 +22,7 @@ th{background:#7B3FE4;color:#ffffff} td.k{background:#f3effc;font-weight:bold;wi
 <tr><td class="k">Billing Entity / Address</td><td>{{ClientBillingAddress}}</td></tr>
 <tr><td class="k">Customer Business Contact</td><td>{{ClientBusinessContact}}</td></tr>
 <tr><td class="k">Customer Billing Contact</td><td>{{ClientBillingContact}}</td></tr>
-<tr><td class="k">MSA Reference</td><td>{{#IF HasMsa}}{{MsaRef}}{{/IF HasMsa}}{{#IF !HasMsa}}To be signed with this Order Form{{/IF HasMsa}}</td></tr>
+<tr><td class="k">MSA Reference</td><td>{{#IF HasMsa}}{{MsaRef}}{{/IF HasMsa}}{{#IF !HasMsa}}To follow after acceptance of this Order Form{{/IF HasMsa}}</td></tr>
 <tr><td class="k">Purchase Order No.</td><td>{{PONumber}}</td></tr>
 </table>
 
@@ -83,8 +83,8 @@ th{background:#7B3FE4;color:#ffffff} td.k{background:#f3effc;font-weight:bold;wi
 <p class="small">Any modification to the MSA or other standard contractual terms must be expressly identified and agreed in writing by authorised representatives of both Parties.</p>
 
 <h2>8. Agreement &amp; Acceptance</h2>
-<p>This Order Form is issued under and forms part of the Master Services Agreement{{#IF HasMsa}} No. {{MsaRef}}{{/IF HasMsa}} between the Parties, which incorporates the OptCulture Terms of Service ({{TosUrl}}), Data Processing Agreement ({{DpaUrl}}) and Service Level Agreement ({{SlaUrl}}), subject to the order of precedence set out in the MSA.</p>
-<p>By signing below, the Parties agree to the subscriptions, fees, duration and commercial arrangements specified in this Order Form.</p>
+<p>{{#IF HasMsa}}This Order Form is issued under and forms part of the Master Services Agreement No. {{MsaRef}} between the Parties, which incorporates the OptCulture Terms of Service ({{TosUrl}}), Data Processing Agreement ({{DpaUrl}}) and Service Level Agreement ({{SlaUrl}}).{{/IF HasMsa}}{{#IF !HasMsa}}Until a Master Services Agreement is signed between the Parties, this Order Form is governed by the OptCulture Terms of Service ({{TosUrl}}), Data Processing Agreement ({{DpaUrl}}) and Service Level Agreement ({{SlaUrl}}). Once signed, the Master Services Agreement, including any agreed special terms, governs this Order Form and all future Order Forms.{{/IF HasMsa}}</p>
+<p>By signing below or accepting electronically, the Parties agree to the subscriptions, fees, duration and commercial arrangements specified in this Order Form.</p>
 <table>
 <tr><th></th><th>For {{EntityShortName}}</th><th>For Customer</th></tr>
 <tr><td class="k">Legal Entity</td><td>{{EntityName}}</td><td>{{ClientLegalName}}</td></tr>

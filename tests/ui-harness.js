@@ -18,7 +18,7 @@ const api = {
   apiSaveDeal: (d) => { const ex = d.dealId ? store.deals[d.dealId] : null; d = ctx.protectDealFields(d, ex ? JSON.parse(ex.input_json) : null, ex ? ex.status : null, ctx.pricingSnapshot(M)); ctx.applyCountryDefaults(M, d); if (!d.dealId) d.dealId = 'D-TEST-' + (++seq);
     const ev = ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d); const rec = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), ex); store.deals[d.dealId] = rec; return { deal: d, evaluation: ev, summary: ctx.dealSummary(rec) }; },
   apiListDeals: () => Object.values(store.deals).map(ctx.dealSummary),
-  apiGetDeal: (id) => { const r = store.deals[id]; const d = JSON.parse(r.input_json); return { deal: d, evaluation: ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d), summary: ctx.dealSummary(r) }; },
+  apiGetDeal: (id) => { const r = store.deals[id]; const d = JSON.parse(r.input_json); d.status = r.status; return { deal: d, evaluation: ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d), summary: ctx.dealSummary(r) }; },
   apiCloneDeal: (id) => { const c = ctx.cloneDeal(JSON.parse(store.deals[id].input_json), null); c.dealId = null; return api.apiSaveDeal(c); },
   apiPreviewQuote: (i) => ctx.buildQuote(M, i),
   apiDraftNarrative: (d, o) => { ctx.buildNarrativePrompt(M, d, o); return ctx.sanitizeNarrative(JSON.stringify({ executiveSummary: 'FRG is a leading franchisee.\n\nOne program for every brand. It costs USD 70.', journeys: ['Win-back: lapsed shoppers get bonus points.'], multiBrandIntro: 'Shared wallet.' }), M); },
@@ -32,6 +32,12 @@ const api = {
   apiCreateTopUp: (id) => { const r = store.deals[id]; const parent = JSON.parse(r.input_json); if (!ctx.canTopUp(parent, r.status)) throw new Error('not Won');
     const deal = ctx.makeTopUp(parent, ctx.evaluateDeal(M, parent).quote); deal.dealId = 'D-TEST-9'; const ev = ctx.evaluateDeal(M, deal);
     const nr = ctx.dealRecord(deal, ev, USER.email, new Date().toISOString(), null); nr.status = deal.status; store.deals['D-TEST-9'] = nr; return { deal, evaluation: ev, summary: ctx.dealSummary(nr) }; },
+  apiSendForAcceptance: (id, type, to) => { const r = store.deals[id]; const d = JSON.parse(r.input_json); if (!ctx.canSendForAcceptance(d, r.status, type)) throw new Error('not ready');
+    d.acceptance = d.acceptance || {}; d.acceptance[type] = { sentAt: new Date().toISOString(), to, validUntil: '2026-12-21' }; d.status = type === 'MSA' ? 'MSA sent' : 'Order Form sent';
+    r.input_json = JSON.stringify(d); r.status = d.status; store.sent = (store.sent || []).concat([[type, to]]); return { sentTo: to, validUntil: '2026-12-21', deal: d, summary: ctx.dealSummary(r) }; },
+  apiRecordSignedCopy: (id, type, fn, b64, name, title) => { if (!/\.pdf$/i.test(fn)) throw new Error('Please upload a PDF file.'); const r = store.deals[id];
+    const d = ctx.applyAcceptance(JSON.parse(r.input_json), type, { method: 'upload', name, title, at: new Date().toISOString(), signedFileId: 'signed-1' });
+    r.input_json = JSON.stringify(d); r.status = d.status; return { status: d.status, stage: d.stage, deal: d, summary: ctx.dealSummary(r) }; },
   apiDealDocuments: () => [{ docNo: 'OC-P-2026-0001', type: 'PROPOSAL', label: 'Proposal', version: 1, status: 'Final', docUrl: '', pdfUrl: 'y', createdAt: '2026-11-15T09:30:00.000Z' }],
   apiConvertToContract: (id) => { const r = store.deals[id]; const st = JSON.parse(r.input_json); if (!ctx.canConvertToContract(st, r.status)) throw new Error('not allowed');
     const d = ctx.convertToContract(st, ctx.evaluateDeal(ctx.withSnapshot(M, st.pricingSnapshot), st).quote); const ev = ctx.evaluateDeal(ctx.withSnapshot(M, d.pricingSnapshot), d); const nr = ctx.dealRecord(d, ev, USER.email, new Date().toISOString(), r); nr.status = d.status; store.deals[id] = nr;
@@ -72,7 +78,7 @@ const api = {
   check('Dashboard is the home page for a rep/manager', (await p.textContent('#dash')).includes('Open pipeline') && (await p.textContent('#dash')).includes('Deal funnel'));
   await p.click('#navNew'); await p.waitForTimeout(300);
   // ---------- Stage 1: proposal ----------
-  check('New deal opens in Stage 1 (Proposal)', (await p.textContent('#stageBanner')).includes('Stage 1 of 2'));
+  check('New deal opens in Stage 1 (Proposal)', (await p.textContent('#stageBanner')).includes('Stage 1 of 3'));
   check('Contract fields hidden in Stage 1', !(await p.isVisible('[data-f="client.address"]')) && !(await p.isVisible('[data-f="client.billingContact.email"]')));
   await p.fill('[data-f="client.legalName"]', 'Fashion Retail Group S.A.E.');
   await p.fill('[data-f="client.shortName"]', 'FRG');
@@ -177,63 +183,84 @@ const api = {
   check('Menu shows Convert for generated proposal', await p.isVisible('.menu:not(.hidden) [data-convert="D-TEST-1"]'));
   await p.screenshot({ path: path.join(out, 'menu.png') });
   await p.click('.menu:not(.hidden) [data-convert="D-TEST-1"]'); await p.waitForTimeout(600);
-  check('Stage 2 banner and contract fields visible', (await p.textContent('#stageBanner')).includes('Stage 2 of 2') && (await p.isVisible('[data-f="client.address"]')));
+  check('Stage 2 banner and contract fields visible', (await p.textContent('#stageBanner')).includes('Stage 2 of 3') && (await p.isVisible('[data-f="client.address"]')));
   await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(800);
   const gb = await p.textContent('#genBlockers');
   await (await p.$('#view-deal .step[data-step="4"]')).screenshot({ path: path.join(out, 'blockers.png') });
-  check('Disabled Generate explains what is missing (incl. MSA signatory)', (await p.isDisabled('#btnGenerate')) && gb.includes('Registered address') && gb.includes('Billing contact email') && gb.includes('Customer signatory email'));
+  check('Disabled Generate explains what is missing for the Order Form', (await p.isDisabled('#btnGenerate')) && gb.includes('Registered address') && gb.includes('Billing contact email') && !gb.includes('signatory'));
   await p.click('#genBlockers a[data-fix]'); await p.waitForTimeout(400);
   check('Fix → jumps to step 1 and outlines missing fields', (await p.isVisible('[data-f="client.address"]')) && (await p.getAttribute('[data-f="client.address"]', 'class')).includes('missing'));
   await p.fill('[data-f="client.address"]', 'Cairo, Egypt');
   await p.fill('[data-f="client.businessContact.email"]', 'buyer@frg.example');
   await p.fill('[data-f="client.billingContact.email"]', 'finance@frg.example');
-  await p.fill('[data-f="client.signatoryName"]', 'A. Client'); await p.fill('[data-f="client.signatoryTitle"]', 'CEO'); await p.fill('[data-f="client.signatoryEmail"]', 'ceo@frg.example');
   await p.click('#steps div[data-step="2"]'); await p.fill('[data-f="commercial.stores"]', '50');
   await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(800);
   check('Review lists changes since proposal', (await p.textContent('#review')).includes('Stores: 46 → 50'));
   await p.click('#steps div[data-step="2"]'); await p.fill('[data-f="commercial.stores"]', '46'); await p.waitForTimeout(300);
-  await p.click('#steps div[data-step="3"]');
-  check('Order Form terms + document choices in Stage 2 step 3', (await p.isVisible('#orderPackage')) && (await p.textContent('#contractPack')).includes('Two documents') && (await p.textContent('#contractPack')).includes('Master Services Agreement') && (await p.isVisible('#msaExceptions')) && !(await p.isVisible('[data-f="proposal.title"]')));
+  await p.click('#steps div[data-step="3"]'); await p.waitForTimeout(800);
+  check('Stage 2 step 3: Order Form terms, commercial-only pack, no MSA box yet', (await p.isVisible('#orderPackage')) && (await p.textContent('#contractPack')).includes('commercial terms only') && (await p.textContent('#contractPack')).includes('online Terms of Service') && !(await p.isVisible('#msaExceptions')) && !(await p.isVisible('[data-f="proposal.title"]')));
   await p.fill('[data-f="commercial.msaRef"]', 'MSA-OLD-9'); await p.waitForTimeout(1000);
-  check('Existing MSA reference → Order Form only, citing it', (await p.textContent('#contractPack')).includes('Order Form only') && (await p.textContent('#contractPack')).includes('MSA-OLD-9') && (await p.textContent('#btnGenerate')).trim() === 'Generate Order Form' && !(await p.isVisible('#msaExceptions')));
+  check('Existing MSA reference → Order Form under that MSA; acceptance = Won', (await p.textContent('#contractPack')).includes('MSA-OLD-9') && (await p.textContent('#contractPack')).includes('deal is Won'));
   await p.fill('[data-f="commercial.msaRef"]', ''); await p.waitForTimeout(1000);
-  const longExc = 'Clause 3 (Term and Termination): ' + 'the cure period shall be forty-five (45) days instead of thirty (30) days and notices must be sent to legal@frg.example and cc to procurement-department-head@frg.example; '.repeat(6) + 'https://frg.example/very/long/unbroken/reference/' + 'x'.repeat(160);
-  await p.fill('#msaExceptions', longExc); await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(900);
-  const ovf = await p.evaluate(() => ({ page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    wide: [...document.querySelectorAll('#view-deal *')].filter((e) => e.offsetParent && e.getBoundingClientRect().right > document.documentElement.clientWidth + 2).map((e) => e.tagName + '#' + e.id + '.' + e.className).slice(0, 8) }));
-  check('Long MSA exception text wraps – nothing runs off the screen', ovf.page <= 0 && ovf.wide.length === 0, JSON.stringify(ovf));
-  await p.screenshot({ path: path.join(out, 'long-exception.png'), fullPage: true });
-  await p.click('#steps div[data-step="3"]'); await p.fill('#msaExceptions', 'Clause 3: cure period 45 days.'); await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(900);
-  check('MSA exception needs approval: shown in review, generation becomes a draft', (await p.textContent('#review')).includes('cure period 45 days') && (await p.textContent('#review')).includes('Needs Amith') && !(await p.textContent('#genHint')).includes('final'));
-  await p.click('#steps div[data-step="3"]'); await p.fill('#msaExceptions', ''); await p.waitForTimeout(900);
   check('Order Form package list follows packages', (await p.$$eval('#orderPackage option', (o) => o.map((x) => x.value))).join() === 'Loyalty,Advanced');
   await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(700);
   check('Approved pricing shown as approved; hint says final', (await p.textContent('#review')).includes('approved by Amith') && (await p.textContent('#genHint')).includes('final'));
   check('Stage 2 summary shows totals', (await p.textContent('#side')).includes('First year'));
   check('Stage 2 summary lists one-time lines separately', (await p.textContent('#side')).includes('Set-up and Training') && (await p.textContent('#side')).includes('Installation per store (× 46)') && (await p.textContent('#side')).includes('Installation per e-commerce site'));
-  check('Generate button says Order Form & MSA', (await p.textContent('#btnGenerate')).includes('Order Form & MSA') && !(await p.isDisabled('#btnGenerate')));
+  check('Generate button says Generate Order Form', (await p.textContent('#btnGenerate')).trim() === 'Generate Order Form' && !(await p.isDisabled('#btnGenerate')));
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
-  await p.evaluate(() => { busyStart('Generating your documents…', ['Saving the deal', 'Reserving the Order Form and MSA numbers', 'Creating the Quotation & Order Form', 'Creating the MSA (with special terms)', 'Converting to PDF', 'Saving to Drive, sharing and emailing the links']); });
+  await p.evaluate(() => { busyStart('Generating your documents…', ['Saving the deal', 'Creating the Quotation & Order Form', 'Filling prices and payment terms', 'Converting to PDF', 'Saving to Drive, sharing and emailing the links']); });
   await p.waitForTimeout(6500); await p.screenshot({ path: path.join(out, 'processing.png') });
-  check('Processing overlay shows spinner and step list', (await p.isVisible('.spinner')) && (await p.textContent('#busyBox')).includes('Reserving the Order Form and MSA'));
+  check('Processing overlay shows spinner and step list', (await p.isVisible('.spinner')) && (await p.textContent('#busyBox')).includes('Creating the Quotation'));
   await p.evaluate(() => busyClose());
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
   check('Contract success dialog lists the documents', (await p.textContent('#busyBox')).includes('Documents created'));
   await p.screenshot({ path: path.join(out, 'success-dialog.png') });
   await p.click('#busyBack'); await p.waitForTimeout(400);
   check('Back to My Deals returns to the list', await p.isVisible('#view-list') && !(await p.isVisible('#busy')));
-  await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(500);
-  const g2 = await p.textContent('#genResult');
+  await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(700);
   check('Generated documents: PDF link only, no Google Doc link', (await p.textContent('#docList')).includes('PDF') && !(await p.textContent('#docList')).includes('Doc ·') && !(await p.$('#docList a[href*="docs.google.com"]')));
   check('Generated documents table has a Date column', (await p.textContent('#docList')).includes('Date') && (await p.textContent('#docList')).includes('15 Nov 2026'));
-  check('Contract documents final (approval carried over)', g2.includes('Documents created') && g2.includes('OC-Q-2026-0001') && g2.includes('OC-MSA-2026-0001') && !g2.includes('OC-DPA') && !g2.includes('OC-P-2026'));
-  check('Status Contract generated', store.deals['D-TEST-1'].status === 'Contract generated');
-  await p.screenshot({ path: path.join(out, 'stage2-generated.png'), fullPage: true });
+  check('Order Form only (no MSA yet), status Order Form generated', store.deals['D-TEST-1'].status === 'Order Form generated' && !(JSON.parse(store.deals['D-TEST-1'].input_json).docNos || {}).MSA);
+  // ---------- send to client, client accepts ----------
+  check('Acceptance panel: not sent yet, Send to client button', (await p.textContent('#acceptBox')).includes('Not sent yet') && await p.isVisible('#btnSendClient'));
+  p.once('dialog', (dlg) => dlg.accept('ceo@frg.example'));
+  await p.click('#btnSendClient'); await p.waitForTimeout(700);
+  check('Send to client: status Order Form sent, panel waiting for client', store.deals['D-TEST-1'].status === 'Order Form sent' && store.sent.slice(-1)[0][1] === 'ceo@frg.example' && (await p.textContent('#busyBox')).includes('Sent to ceo@frg.example'));
+  await p.click('#busyStay'); await p.waitForTimeout(300);
+  check('Panel shows Waiting for client and Resend link', (await p.textContent('#acceptBox')).includes('Waiting for client') && (await p.textContent('#btnSendClient')).includes('Resend'));
+  (function clientAccepts() { const r = store.deals['D-TEST-1']; const d = ctx.applyAcceptance(JSON.parse(r.input_json), 'ORDER_FORM', { method: 'online', name: 'Ahmed Hassan', title: 'CEO', email: 'ceo@frg.example', at: new Date().toISOString() }); r.input_json = JSON.stringify(d); r.status = d.status; })();
+  await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
+  check('My Deals: MSA stage after the client accepted the Order Form', (await p.textContent('#dealList')).includes('MSA stage') && (await p.textContent('#dealList')).includes('Order Form accepted'));
+  await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(700);
+  check('Stage 3 banner; commercials locked; signatory still editable', (await p.textContent('#stageBanner')).includes('Stage 3 of 3') && await p.isDisabled('[data-f="commercial.stores"]') && await p.isDisabled('[data-f="client.legalName"]') && !(await p.isDisabled('[data-f="client.signatoryName"]')));
+  await p.click('#steps div[data-step="1"]');
+  await p.fill('[data-f="client.signatoryName"]', 'Ahmed Hassan'); await p.fill('[data-f="client.signatoryTitle"]', 'CEO'); await p.fill('[data-f="client.signatoryEmail"]', 'ceo@frg.example');
+  await p.click('#steps div[data-step="3"]'); await p.waitForTimeout(700);
+  check('MSA box visible with Order Form reference', await p.isVisible('#msaExceptions') && (await p.textContent('#msaPack')).includes('OC-Q-2026-0001') && (await p.textContent('#msaPack')).includes('accepted online by Ahmed Hassan'));
+  const longExc = 'Clause 3 (Term and Termination): ' + 'the cure period shall be forty-five (45) days instead of thirty (30) days and notices must be sent to legal@frg.example and cc to procurement-department-head@frg.example; '.repeat(6) + 'https://frg.example/very/long/unbroken/reference/' + 'x'.repeat(160);
+  await p.fill('#msaExceptions', longExc); await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(900);
+  const ovf = await p.evaluate(() => ({ page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    wide: [...document.querySelectorAll('#view-deal *')].filter((e) => e.offsetParent && e.getBoundingClientRect().right > document.documentElement.clientWidth + 2).map((e) => e.tagName + '#' + e.id + '.' + e.className).slice(0, 8) }));
+  check('Long MSA exception text wraps – nothing runs off the screen', ovf.page <= 0 && ovf.wide.length === 0, JSON.stringify(ovf));
+  await p.screenshot({ path: path.join(out, 'long-exception.png'), fullPage: true });
+  check('MSA exception needs approval (prices not re-approved): drafts', (await p.textContent('#review')).includes('Needs Amith') && !(await p.textContent('#genHint')).includes('final') && !(await p.textContent('#review')).includes('Loyalty: special price'));
+  await p.click('#steps div[data-step="3"]'); await p.fill('#msaExceptions', ''); await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(900);
+  check('No exception: MSA final without approval; button Generate MSA', (await p.textContent('#genHint')).includes('final') && (await p.textContent('#btnGenerate')).trim() === 'Generate MSA');
+  await p.click('#btnGenerate'); await p.waitForTimeout(900); await p.click('#busyStay'); await p.waitForTimeout(400);
+  check('MSA generated with its number', store.deals['D-TEST-1'].status === 'MSA generated' && JSON.parse(store.deals['D-TEST-1'].input_json).docNos.MSA === 'OC-MSA-2026-0001');
+  p.on('dialog', (dlg) => dlg.accept(dlg.message().includes('designation') ? 'CEO' : 'Ahmed Hassan'));
+  await p.setInputFiles('#signedFile', { name: 'msa-signed.pdf', mimeType: 'application/pdf', buffer: require('fs').readFileSync(path.join(__dirname, 'fixtures-files', 'sample.pdf')) });
+  await p.waitForTimeout(900);
+  check('Rep records the signed MSA → deal Won', store.deals['D-TEST-1'].status === 'Won' && (await p.textContent('#busyBox')).includes('deal Won'));
+  p.removeAllListeners('dialog');
+  await p.click('#busyStay'); await p.waitForTimeout(200);
 
   // ---------- pipeline, dashboard, admin ----------
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
-  await menu('D-TEST-1', '[data-status="Sent"][data-id="D-TEST-1"]'); await p.waitForTimeout(500);
-  check('Pipeline status Sent saved', store.deals['D-TEST-1'].status === 'Sent');
+  await p.click('[data-menu="D-TEST-1"]'); await p.waitForTimeout(150);
+  check('Won deal: no Mark Sent; Lost available', !(await p.$('.menu:not(.hidden) [data-status="Sent"]')) && !!(await p.$('.menu:not(.hidden) [data-status="Lost"]')));
+  await p.click('body');
   await p.fill('#fText', 'nomatch'); await p.waitForTimeout(100);
   check('Search filter works', (await p.textContent('#dealList')).includes('match the filter'));
   await p.fill('#fText', '');
@@ -255,7 +282,7 @@ const api = {
   await p.click('#steps div[data-step="2"]'); check('Price-freeze notice shown on step 2', (await p.isVisible('#priceFreeze')));
   await p.click('#steps div[data-step="3"]'); await p.selectOption('#language', 'AR'); await p.waitForTimeout(200);
   const lh = await p.textContent('#langHint');
-  check('Language hint: Arabic MSA available, Order Form falls back to English', lh.includes('In Arabic: MSA') && lh.includes('Order Form'));
+  check('Language hint: Arabic MSA available at the MSA stage', lh.includes('In Arabic: MSA'));
   await p.click('nav a[data-view="admin"]'); await p.waitForTimeout(300);
   await p.fill('#tplUrl', 'https://docs.google.com/document/d/abc/edit'); await p.click('#tplCheck'); await p.waitForTimeout(300);
   check('Template check reports unknown tags', (await p.textContent('#tplResult')).includes('Typo'));

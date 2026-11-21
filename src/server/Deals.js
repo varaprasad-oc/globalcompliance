@@ -28,7 +28,7 @@ function newId_(prefix) {
 
 /** Short client id C-0001 (falls back to a timestamp id if Numbering has no CLIENT row). Caller holds the script lock. */
 function newClientId_() {
-  try { return nextDocNo('CLIENT', true); } catch (e) { return newId_('C'); }
+  try { return nextDocNo_('CLIENT', true); } catch (e) { return newId_('C'); }
 }
 
 /** Server-owned: the client's signed MSA (Clients tab) on the deal, so the contract stage knows Agreement vs Order Form only. */
@@ -87,7 +87,7 @@ function upsertClient_(deal, userEmail) {
 /** Lists for the deal form. */
 function apiFormLists() {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   return {
     countries: m.Countries,
     entities: m.Entities.filter(function (e) { return isTrue(e.active); }).map(function (e) { return { id: e.entity_id, name: e.legal_name, type: e.type, country: e.country }; }),
@@ -110,8 +110,8 @@ function safeJson_(s) { try { return JSON.parse(s || '{}'); } catch (e) { return
 function apiEvaluateDeal(deal) {
   var user = requireUser_();
   var stored = deal.dealId ? findDeal_(deal.dealId) : null;
-  var snap = stored && canAccessDeal(user, stored.created_by, getMaster().Users) && !deal.refreshPrices ? JSON.parse(stored.input_json).pricingSnapshot : null;
-  var m = withSnapshot(getMaster(), snap);
+  var snap = stored && canAccessDeal(user, stored.created_by, getMaster_().Users) && !deal.refreshPrices ? JSON.parse(stored.input_json).pricingSnapshot : null;
+  var m = withSnapshot(getMaster_(), snap);
   applyCountryDefaults(m, deal);
   attachClientMsa_(deal);
   return { deal: deal, evaluation: evaluateDeal(m, deal) };
@@ -120,7 +120,7 @@ function apiEvaluateDeal(deal) {
 /** Save (create or update) a draft. Returns the saved deal and its evaluation. */
 function apiSaveDeal(deal) {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -129,7 +129,7 @@ function apiSaveDeal(deal) {
     if (existing && !canAccessDeal(user, existing.created_by, m.Users)) throw new Error('You do not have access to this deal.');
     deal = protectDealFields(deal, existing ? JSON.parse(existing.input_json) : null, existing ? existing.status : null, pricingSnapshot(m));
     applyCountryDefaults(m, deal);
-    if (!deal.dealId) { try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); } }  // short id D-yyyymm-0001 (falls back if Numbering has no DEAL row)
+    if (!deal.dealId) { try { deal.dealId = nextDocNo_('DEAL', true); } catch (e) { deal.dealId = newId_('D'); } }  // short id D-yyyymm-0001 (falls back if Numbering has no DEAL row)
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
     attachClientMsa_(deal);
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
@@ -145,7 +145,7 @@ function apiSaveDeal(deal) {
 
 function apiListDeals() {
   var user = requireUser_();
-  var users = getMaster().Users;
+  var users = getMaster_().Users;
   return readRecords_('Deals')
     .filter(function (r) { return canAccessDeal(user, r.created_by, users); })
     .map(dealSummary)
@@ -155,11 +155,11 @@ function apiListDeals() {
 function apiGetDeal(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster_().Users)) throw new Error('Deal not found or no access.');
   var deal = attachClientMsa_(JSON.parse(rec.input_json));
   deal.status = rec.status;
   audit_('DEAL_VIEWED', {}, dealId);
-  return { deal: deal, evaluation: evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal), summary: dealSummary(rec) };
+  return { deal: deal, evaluation: evaluateDeal(withSnapshot(getMaster_(), deal.pricingSnapshot), deal), summary: dealSummary(rec) };
 }
 
 function apiCloneDeal(dealId) {
@@ -174,7 +174,7 @@ function apiCloneDeal(dealId) {
 /** Stage 1 → 2: proposal accepted, prepare Quotation & Order Form + MSA (no new version, same document numbers). */
 function apiConvertToContract(dealId) {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -245,7 +245,7 @@ function apiDeleteDeals(dealIds, confirmText) {
 /** Won deal → new top-up deal (Order Form only, contracted prices, own term). Owner, manager or Superadmin. */
 function apiCreateTopUp(parentDealId) {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -254,7 +254,7 @@ function apiCreateTopUp(parentDealId) {
     var parent = attachClientMsa_(JSON.parse(rec.input_json));
     if (!canTopUp(parent, rec.status)) throw new Error('A top-up can be created only from a Won deal (not from another top-up).');
     var deal = makeTopUp(parent, evaluateDeal(withSnapshot(m, parent.pricingSnapshot), parent).quote);
-    try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); }
+    try { deal.dealId = nextDocNo_('DEAL', true); } catch (e) { deal.dealId = newId_('D'); }
     attachClientMsa_(deal);
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), null);

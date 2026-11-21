@@ -7,13 +7,13 @@
 function apiGenerateDocs(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster_().Users)) throw new Error('Deal not found or no access.');
   return generateForDeal_(dealId, user);
 }
 
 /** Internal: generate for a deal (caller has already checked access). Used by Generate and by Approve. */
 function generateForDeal_(dealId, user) {
-  var m = getMaster(true);
+  var m = getMaster_(true);
   var rec = findDeal_(dealId);
   var deal = JSON.parse(rec.input_json);
   var pm = withSnapshot(m, deal.pricingSnapshot);
@@ -24,7 +24,7 @@ function generateForDeal_(dealId, user) {
 
   // stable document numbers per deal
   deal.docNos = deal.docNos || {};
-  docNumbersNeeded(deal, plan.docTypes).forEach(function (t) { deal.docNos[t] = nextDocNo(t); });
+  docNumbersNeeded(deal, plan.docTypes).forEach(function (t) { deal.docNos[t] = nextDocNo_(t); });
 
   var owner = rec.created_by;
   var ownerUser = (m.Users || []).filter(function (u) { return String(u.email).toLowerCase() === String(owner).toLowerCase(); })[0] || {};
@@ -32,6 +32,7 @@ function generateForDeal_(dealId, user) {
   var ownerProfile = { name: ownerUser.name || user.name, email: owner, phone: ownerUser.phone || '' };
 
   archivePreviousVersions_(dealId, deal.version, plan.docTypes);
+  plan.docTypes.forEach(function (t) { revokeOpenAcceptances_(dealId, t); });  // links to an older version stop working
 
   var results = [];
   var related = relatedNumbers(deal);
@@ -40,7 +41,7 @@ function generateForDeal_(dealId, user) {
     var lang = docLanguage_(deal, t, pm);
     var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: related, language: lang });
     try {
-      var r = generateDocument(t, data, { clientName: clientName, version: deal.version, draft: plan.mode === 'DRAFT',
+      var r = generateDocument_(t, data, { clientName: clientName, version: deal.version, draft: plan.mode === 'DRAFT',
         language: lang, shareWith: shareWith });
       var tpl = getActiveTemplate_(t, lang);
       appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: lang, version: deal.version,
@@ -102,7 +103,7 @@ function withoutDocLinks_(list) {
 function apiDealDocuments(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('No access.');
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster_().Users)) throw new Error('No access.');
   return withoutDocLinks_(readRecords_('Documents').filter(function (d) { return d.deal_id === dealId; }).map(function (d) {
     return { docNo: d.doc_no, type: d.doc_type, label: DOC_LABEL[d.doc_type], version: Number(d.version), status: d.status,
       docUrl: d.doc_file_id ? 'https://docs.google.com/document/d/' + d.doc_file_id + '/edit' : '',
@@ -113,7 +114,7 @@ function apiDealDocuments(dealId) {
 
 /** Email every Superadmin that a deal is waiting for approval. */
 function notifyApprovers_(deal, ev, user) {
-  var to = (getMaster().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
+  var to = (getMaster_().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
   if (!to.length) return;
   var url = '';
   try { url = ScriptApp.getService().getUrl(); } catch (e) { /* not deployed */ }

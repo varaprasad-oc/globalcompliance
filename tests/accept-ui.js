@@ -1,0 +1,41 @@
+/* Browser test of the client acceptance page (mocked server). Usage: node tests/accept-ui.js [pdf] [screenshotDir] */
+const { chromium } = require('playwright'); const fs = require('fs'); const vm = require('vm'); const path = require('path');
+const root = '/home/user/globalcompliance';
+const ctx = vm.createContext({ console }); vm.runInContext(fs.readFileSync(root + '/src/server/AcceptPage.js', 'utf8'), ctx);
+const T = 'a'.repeat(64);
+const pdf = fs.readFileSync(process.argv[2] || (root + '/tests/fixtures-files/sample.pdf')).toString('base64');
+const out = process.argv[3] || '/tmp';
+(async () => {
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1000, height: 1100 } });
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  const mock = (state) => `<script>window.__calls=[];window.google={script:{run:new Proxy({},{get:function(t,k){var s=null,f=null;var o={withSuccessHandler:function(x){s=x;return o},withFailureHandler:function(x){f=x;return o}};return function(){return o}}})}};
+  (function(){var R={apiAcceptInfo:function(){return {state:'${state}',docLabel:'Quotation & Order Form',docNo:'OC-Q-2026-0009',clientName:'Fashion Retail Group S.A.E.',entityName:'RIS Services DMCC',repName:'Varaprasad SN',repEmail:'varaprasad@optculture.com',email:'ah***@frg.example',validUntil:'21st December 2026',pdf:'${pdf}',fileName:'OC-Q-2026-0009.pdf'}},
+  apiAcceptSendCode:function(){return {sentTo:'ah***@frg.example',minutes:15}},apiAcceptOnline:function(t,c,n,ti,a){if(c!=='123456')throw new Error('The code is not correct. 4 attempt(s) left.');if(!a)throw new Error('Please tick the box to confirm your acceptance.');return {ok:true,acceptedAt:'21 Nov 2026, 14:00 (Dubai time)'}}};
+  window.google={script:{run:new Proxy({},{get:function(_,k){var s,f;var o={withSuccessHandler:function(x){s=x;return o},withFailureHandler:function(x){f=x;return o}};if(k==='withSuccessHandler'||k==='withFailureHandler')return o[k];return o}})}};
+  var run={};var mk=function(){var s,f;var o={withSuccessHandler:function(x){s=x;return o},withFailureHandler:function(x){f=x;return o}};Object.keys(R).forEach(function(n){o[n]=function(){var args=arguments;window.__calls.push(n);setTimeout(function(){try{s(R[n].apply(null,args))}catch(e){f(e)}},10)}});return o};
+  window.google={script:{run:{withSuccessHandler:function(x){return mk().withSuccessHandler(x)}}}};})();</script>`;
+  const html = (state) => ctx.ACCEPT_PAGE_HTML.replace('__TOKEN__', T).replace('<head>', '<head>' + mock(state));
+  await p.route('**/*', (r) => r.fulfill({ contentType: 'text/html', body: html('OK') }));
+  await p.goto('http://x/'); await p.waitForTimeout(600);
+  const res = [];
+  const ck = (n, c) => { res.push((c ? '✓ ' : '✗ ') + n); };
+  ck('Shows document title, parties and validity', (await p.textContent('#state')).includes('OC-Q-2026-0009') && (await p.textContent('#state')).includes('RIS Services DMCC'));
+  ck('PDF embedded and downloadable (blob, no Drive link)', (await p.getAttribute('#pdf', 'src')).startsWith('blob:') && (await p.getAttribute('#dl', 'download')) === 'OC-Q-2026-0009.pdf');
+  await p.click('#send'); await p.waitForTimeout(100);
+  ck('Code sent message', (await p.textContent('#sent')).includes('ah***@frg.example'));
+  await p.fill('#nm', 'Ahmed Hassan'); await p.fill('#ti', 'CEO');
+  await p.click('#accept'); await p.waitForTimeout(50);
+  ck('Accept without code asks for the code', (await p.textContent('#msg')).includes('6-digit code'));
+  await p.fill('#code', '999999'); await p.check('#agree'); await p.click('#accept'); await p.waitForTimeout(100);
+  ck('Wrong code shows attempts left', (await p.textContent('#msg')).includes('attempt(s) left'));
+  await p.screenshot({ path: out + '/accept-page.png', fullPage: true });
+  await p.fill('#code', '123456'); await p.click('#accept'); await p.waitForTimeout(150);
+  ck('Correct code + accept shows thank-you', (await p.textContent('#state')).includes('Thank you') && !(await p.isVisible('#act')));
+  await p.click('body');
+  await p.route('**/*', (r) => r.fulfill({ contentType: 'text/html', body: html('EXPIRED') }));
+  await p.goto('http://x/'); await p.waitForTimeout(400);
+  ck('Expired link: message, no document shown', (await p.textContent('#state')).includes('expired') && !(await p.isVisible('#doc')));
+  ck('No page errors', errors.length === 0);
+  console.log(res.join('\n')); if (errors.length) console.log(errors);
+  await b.close();
+})();

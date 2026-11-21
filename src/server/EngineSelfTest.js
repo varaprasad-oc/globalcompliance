@@ -4,7 +4,8 @@
  * and logs the result URLs and any warnings. Expected: 0 warnings.
  */
 function engineSelfTest() {
-  var master = getMaster(true);
+  requireOperator_();
+  var master = getMaster_(true);
   var deal = {
     dealId: 'SELFTEST', version: 1,
     client: { legalName: 'Sample Retail LLC', shortName: 'Sample', country: 'United Arab Emirates', address: 'Dubai, UAE',
@@ -36,7 +37,7 @@ function engineSelfTest() {
   b.appendParagraph('Valid until {{ValidUntil}}. Prepared by {{RepName}}.');
   tplDoc.saveAndClose();
 
-  var res = generateDocument('PROPOSAL', data, { templateFileId: tplDoc.getId(), clientName: 'SELFTEST', version: 1 });
+  var res = generateDocument_('PROPOSAL', data, { templateFileId: tplDoc.getId(), clientName: 'SELFTEST', version: 1 });
   DriveApp.getFileById(tplDoc.getId()).setTrashed(true);
   console.log(JSON.stringify(res, null, 2));
   return res;
@@ -48,7 +49,8 @@ function engineSelfTest() {
  * Output goes to the normal folders under client "SAMPLE – …". Logs links + warnings.
  */
 function generateSampleDocs() {
-  var master = getMaster(true);
+  requireOperator_();
+  var master = getMaster_(true);
   var user = getCurrentUser();
   var deals = [
     {
@@ -86,7 +88,7 @@ function generateSampleDocs() {
     DOC_TYPES.forEach(function (type) {
       var data = buildDocData(type, master, deal, quote, { docNo: related[type], docDate: new Date(), user: user, related: related });
       try {
-        var r = generateDocument(type, data, { clientName: 'SAMPLE – ' + deal.client.shortName, version: 1 });
+        var r = generateDocument_(type, data, { clientName: 'SAMPLE – ' + deal.client.shortName, version: 1 });
         results.push({ deal: deal.dealId, type: type, doc: r.docUrl, pdf: r.pdfUrl, warnings: r.warnings });
       } catch (e) {
         results.push({ deal: deal.dealId, type: type, error: String(e) });

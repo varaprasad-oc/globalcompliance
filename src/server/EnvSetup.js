@@ -3,6 +3,7 @@
  * Values come from docs/ENVIRONMENT.md (IDs, not secrets).
  */
 function setupScriptProperties() {
+  requireOperator_();
   PropertiesService.getScriptProperties().setProperties({
     ROOT_FOLDER_ID: '0ANyaAwry0iF7Uk9PVA',
     MASTER_SHEET_ID: '1JhduuRvkkn1m--MqBz6WwKD4Gj2uLCFcF14onzr6fKk',
@@ -18,7 +19,8 @@ function setupScriptProperties() {
 
 /** Health check: confirms the app can read the Master Sheet and folders. Run after setupScriptProperties(). */
 function healthCheck() {
-  var m = getMaster(true);
+  requireOperator_();
+  var m = getMaster_(true);
   var out = {
     masterTabs: Object.keys(m).length,
     users: m.Users.length,

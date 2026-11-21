@@ -52,7 +52,7 @@ test('MSA: parties, online ToS/DPA/SLA links, initial Order Form, exceptions or 
   eq([d.fields.EntityName, d.fields.ClientLegalName, d.fields.InitialOrderFormNo, d.flags.HasInitialOrderForm], ['Congineer Business Solutions', 'Fashion Retail Group S.A.E.', 'OC-Q-2026-0004', true]);
   eq([d.fields.TosUrl, d.fields.DpaUrl, d.fields.SlaUrl], ['https://optculture.com/terms-of-service/', 'https://optculture.com/DPA/', 'https://optculture.com/SLA/']);
   eq([d.texts.MsaExceptions, d.flags.HasExceptions, d.fields.ClientNoticeEmail, d.fields.OptCultureNoticeEmail], ['None.', false, 'a@frg.example', 'legal@optculture.com']);
-  deal.msaExceptions = 'Clause 3: 60 days cure period.\nClause 5: courts of Cairo.';
+  deal.msaExceptions = 'Clause 3: 60 days cure period.\nClause 5: courts of Cairo.'; deal.stage = 'MSA';
   d = C().buildDocData('MSA', global.M, deal, C().buildQuote(global.M, deal.commercial), ctx);
   eq([d.texts.MsaExceptions, d.flags.HasExceptions], ['Clause 3: 60 days cure period.\n\nClause 5: courts of Cairo.', true]);
 });

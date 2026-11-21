@@ -1,6 +1,6 @@
 /**
  * Sprint 4: Google Docs template engine.
- * generateDocument(docType, data, opts) copies the active template, fills it with data from buildDocData(),
+ * generateDocument_(docType, data, opts) copies the active template, fills it with data from buildDocData(),
  * saves it to the right folder, exports a PDF (unless draft), shares it, and records it in the Documents tab.
  *
  * Template syntax: see docs/PLACEHOLDERS.md.
@@ -16,7 +16,7 @@ var TABLE_STYLE = { headerBg: '#7B3FE4', headerFg: '#ffffff', border: '#c9d2dc',
  * @param {Object} opts { language, clientName, version, draft (bool), shareWith: [emails], templateFileId (override, for tests) }
  * @return {Object} { docId, docUrl, pdfId, pdfUrl, name, warnings }
  */
-function generateDocument(docType, data, opts) {
+function generateDocument_(docType, data, opts) {
   opts = opts || {};
   var tpl = opts.templateFileId ? { file_id: opts.templateFileId } : getActiveTemplate_(docType, opts.language || 'EN');
   var folder = getOutputFolder_(docType, opts.clientName);
@@ -67,7 +67,7 @@ function generateDocument(docType, data, opts) {
 // ---------------- templates & folders ----------------
 
 function getActiveTemplate_(docType, lang) {
-  var t = (getMaster().Templates || []).filter(function (r) {
+  var t = (getMaster_().Templates || []).filter(function (r) {
     return r.doc_type === docType && String(r.language || 'EN') === lang && isTrue(r.active) && r.file_id;
   })[0];
   if (!t) throw new Error('No active ' + lang + ' template for ' + docType + '. Add one in the Templates tab.');

@@ -4,7 +4,7 @@
 
 function apiListApprovals() {
   requireUser_([CONFIG.ROLES.SUPERADMIN]);
-  var users = getMaster().Users;
+  var users = getMaster_().Users;
   var deals = {};
   readRecords_('Deals').forEach(function (r) { deals[r.deal_id] = r; });
   return readRecords_('Approvals').filter(function (a) { return !a.decision; }).map(function (a) {
@@ -16,12 +16,12 @@ function apiListApprovals() {
       approvalId: a.approval_id, dealId: a.deal_id, version: Number(a.version), requestedAt: a.requested_at instanceof Date ? a.requested_at.toISOString() : String(a.requested_at),
       requestedBy: owner.name || rec.created_by, reasons: String(a.reasons || '').split(' | '), note: d.approvalNote || '',
       items: approvalItemsFor_(d), what: d.dealType === 'TOPUP' ? 'Top-up Order Form (of ' + ((d.topupOf || {}).dealId || '') + ')' :
-        (d.stage === 'CONTRACT' ? (contractMode(d) === 'NEW_MSA' ? 'Quotation & Order Form + MSA' : 'Quotation & Order Form') : 'Proposal'),
+        (d.stage === 'MSA' ? 'Master Services Agreement (§7 exceptions)' : d.stage === 'CONTRACT' ? 'Quotation & Order Form' : 'Proposal'),
       client: d.client.legalName, country: d.client.country, currency: rec.currency, summary: dealSummary(rec),
       packages: q ? q.packages.map(function (p) { return { name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite,
         specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal }; }) : [],
       comms: q ? (q.comms || []).filter(function (c) { return c.specialPrice !== null; }) : [],
-      changes: q ? changesSinceProposal(getMaster(), d.proposalBaseline, d, q) : [],
+      changes: q ? changesSinceProposal(getMaster_(), d.proposalBaseline, d, q) : [],
       documents: apiDealDocuments(a.deal_id).filter(function (x) { return Number(x.version) === Number(a.version); })
     };
   }).filter(Boolean);
@@ -29,7 +29,7 @@ function apiListApprovals() {
 
 /** Fresh, structured list of what needs approval (from the deal's frozen prices). */
 function approvalItemsFor_(deal) {
-  try { return evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal).approvalItems || []; } catch (e) { return []; }
+  try { return evaluateDeal(withSnapshot(getMaster_(), deal.pricingSnapshot), deal).approvalItems || []; } catch (e) { return []; }
 }
 
 /** Approve or reject. Approve → final documents are generated automatically. */
@@ -79,8 +79,11 @@ function apiDecideApproval(approvalId, decision, comment) {
 function apiSetDealStatus(dealId, status) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('No access.');
-  if (!canSetStatus(rec.status, status)) throw new Error('A deal can be marked ' + status + ' only after its documents are generated.');
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster_().Users)) throw new Error('No access.');
+  if (!canSetStatus(rec.status, status, user.role === CONFIG.ROLES.SUPERADMIN)) {
+    throw new Error(status === 'Won' ? 'A deal becomes Won when the client accepts the MSA (or the Order Form, if they already have an MSA). Only the Superadmin can mark Won by hand.'
+      : 'A deal can be marked ' + status + ' only after its documents are generated.');
+  }
   var deal = JSON.parse(rec.input_json);
   deal.status = status; rec.status = status; rec.input_json = JSON.stringify(deal); rec.updated_at = new Date().toISOString();
   writeRecord_('Deals', rec, rec._row);
@@ -92,16 +95,16 @@ function apiSetDealStatus(dealId, status) {
 /** Dashboard for every role. Rep: own deals. Manager: own + team. Superadmin: everyone. */
 function apiDashboard(opts) {
   var user = requireUser_();  // everyone: rep = own, manager = team, superadmin = all
-  var users = getMaster().Users;
+  var users = getMaster_().Users;
   var rows = readRecords_('Deals').filter(function (r) { return canAccessDeal(user, r.created_by, users); }).map(dealSummary);
   return { stats: dashboardStats(rows, users, new Date(), { periodDays: (opts || {}).periodDays || 0, staleDays: staleDaysSetting_(),
-    partners: user.role === CONFIG.ROLES.SUPERADMIN ? getMaster().Partners || [] : null }), deals: rows };
+    partners: user.role === CONFIG.ROLES.SUPERADMIN ? getMaster_().Partners || [] : null }), deals: rows };
 }
 
 /** Superadmin tool: re-apply file sharing (owner + current manager) on every final/draft document, e.g. after a team change. */
 function apiResyncSharing() {
   requireUser_([CONFIG.ROLES.SUPERADMIN]);
-  var users = getMaster().Users, deals = {}, n = 0;
+  var users = getMaster_().Users, deals = {}, n = 0;
   readRecords_('Deals').forEach(function (r) { deals[r.deal_id] = r; });
   readRecords_('Documents').forEach(function (d) {
     var rec = deals[d.deal_id];
@@ -115,6 +118,6 @@ function apiResyncSharing() {
 }
 
 function staleDaysSetting_() {
-  var r = (getMaster().CommercialTerms || []).filter(function (x) { return x.key === 'stale_days'; })[0];
+  var r = (getMaster_().CommercialTerms || []).filter(function (x) { return x.key === 'stale_days'; })[0];
   return r && Number(r.value) > 0 ? Number(r.value) : 60;
 }

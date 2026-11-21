@@ -132,7 +132,7 @@
                 <div class="wide"><label>OptCulture entity or local partner <span class="req">*</span> <span class="muted">(set from country; partners for countries without an OptCulture entity)</span></label><select data-f="entityId" id="entity"></select></div>
                 <div><label>Referral partner <span class="muted">(internal only – never shown in documents)</span></label><select data-f="referralPartnerId" id="partner"></select></div>
               </div>
-              <div data-stage="CONTRACT">
+              <div data-stage="CONTRACT,MSA">
                 <h3>Contract details</h3>
                 <div class="grid">
                   <div class="wide"><label>Registered address <span class="req">*</span></label><input data-f="client.address"></div>
@@ -159,6 +159,7 @@
             <div class="card step hidden" data-step="2">
               <div id="topupBox" class="topup-only"></div>
               <div class="not-topup">
+              <p data-stage="MSA" style="margin-top:0"><span class="badge warn">Commercials are locked – the client accepted the Order Form. Start a new deal or a top-up for any change.</span></p>
               <p data-stage="CONTRACT" class="muted" style="margin-top:0">Carried over from the proposal. Changing prices here needs approval again if they go below standard.</p>
               <h3 style="margin-top:0">Pricing basis</h3>
               <div class="grid">
@@ -224,6 +225,10 @@
                 <h3>What will be generated</h3>
                 <div id="contractPack" class="card" style="margin:0 0 10px;padding:12px 14px">—</div>
                 <label id="newMsaBox" class="hidden" style="display:inline-flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" data-f="newMsa" style="width:auto"> Issue a new MSA anyway (e.g. new entity or the old MSA expired)</label>
+              </div>
+              <div data-stage="MSA">
+                <h3>Master Services Agreement</h3>
+                <div id="msaPack" class="card" style="margin:0 0 10px;padding:12px 14px">—</div>
                 <div id="msaBox">
                   <h3>MSA – Special Terms and Exceptions (§7)</h3>
                   <p class="muted" style="margin-top:0">Type any exceptions agreed with the customer, naming the clause they change (one per line). Leave empty to print “None.”. <b>Anything typed here needs Amith’s approval</b> and applies to all Order Forms under this MSA. The ToS, DPA and SLA are not generated – the MSA incorporates them from optculture.com.</p>
@@ -237,6 +242,7 @@
               <h3 style="margin-top:0">Review</h3>
               <div id="review"></div>
               <div class="grid" style="margin-top:10px"><div class="wide"><label>Note to Amith (shown with the approval request, e.g. why the special price)</label><textarea data-f="approvalNote" style="min-height:50px"></textarea></div></div>
+              <div id="acceptBox" data-stage="CONTRACT,MSA"></div>
               <div id="genResult"></div>
               <div id="docList"></div>
               <div id="genBlockers" class="hidden"></div>
@@ -375,9 +381,9 @@
     $('busyX').onclick = busyClose;
   }
   function genSteps(deal) {
-    var com = stageOf(deal) === 'CONTRACT', msa = com && !(LAST && LAST.contract && LAST.contract.mode === 'ORDER_ONLY');
-    return ['Saving the deal'].concat(!com ? ['Creating the Proposal from the template', 'Filling prices, packages and features'] :
-      msa ? ['Reserving the Order Form and MSA numbers', 'Creating the Quotation & Order Form', 'Creating the MSA (with special terms)'] : ['Creating the Quotation & Order Form', 'Filling prices and terms'])
+    var st = stageOf(deal);
+    return ['Saving the deal'].concat(st === 'PROPOSAL' ? ['Creating the Proposal from the template', 'Filling prices, packages and features'] :
+      st === 'MSA' ? ['Creating the MSA from the standard text', 'Adding the §7 special terms'] : ['Creating the Quotation & Order Form', 'Filling prices and payment terms'])
       .concat(['Converting to PDF', 'Saving to Drive, sharing and emailing the links']);
   }
   function resultsTable(g) {
@@ -571,7 +577,7 @@
     });
     d.commercial.termMonths = Number(d.commercial.termMonths || 12);
     d.stage = stageOf(DEAL);
-    d.docs = d.stage === 'PROPOSAL' ? { PROPOSAL: true } : { ORDER_FORM: true, MSA: true };
+    d.docs = d.stage === 'PROPOSAL' ? { PROPOSAL: true } : d.stage === 'MSA' ? { MSA: true } : { ORDER_FORM: true };
     d.commercial.packages = selectedPackages();
     var byPkg = {}, all = [];
     d.commercial.packages.forEach(function (p) { byPkg[p] = []; });
@@ -812,23 +818,74 @@
   /** Hybrid contract pack: first contract = one Agreement (MSA + annexures); existing MSA = standalone Order Form. */
   function renderContractPack(ev) {
     var c = ev && ev.contract;
+    renderAcceptBox();
     if (!c) return;
-    var msa = c.msa, newMsa = c.mode === 'NEW_MSA';
-    if (isTopup(DEAL)) {
-      $('newMsaBox').classList.add('hidden'); $('msaBox').classList.add('hidden');
-      $('btnGenerate').textContent = 'Generate Top-up Order Form';
-      $('contractPack').innerHTML = '<b>Top-up Quotation &amp; Order Form</b> – supplements Order Form <b>' + esc((DEAL.topupOf || {}).orderFormNo || '—') + '</b> under MSA <b>' + esc((msa || {}).no || '—') + '</b>. Only the added items are listed, for the term chosen above.';
+    var msa = c.msa;
+    if (c.stage === 'MSA') {
+      $('btnGenerate').textContent = 'Generate MSA';
+      var of = ((DEAL && DEAL.acceptance) || {}).ORDER_FORM || {};
+      $('msaPack').innerHTML = '<b>Master Services Agreement</b> – standard text; it cites Order Form <b>' + esc((DEAL.docNos || {}).ORDER_FORM || '') + '</b> and incorporates the online ToS, DPA and SLA.' +
+        (of.status ? '<p class="muted" style="margin:6px 0 0">Order Form ' + esc(of.status.toLowerCase()) + (of.name ? ' by ' + esc(of.name) : '') + (of.at ? ' on ' + esc(String(of.at).slice(0, 10)) : '') + '.</p>' : '');
       return;
     }
-    $('newMsaBox').classList.toggle('hidden', !msa);
-    $('msaBox').classList.toggle('hidden', !newMsa);
-    $('btnGenerate').textContent = newMsa ? 'Generate Order Form & MSA' : 'Generate Order Form';
-    $('contractPack').innerHTML = newMsa
-      ? '<b>Two documents</b><br>&nbsp;&nbsp;• Quotation &amp; Order Form – cites the Proposal and the MSA number<br>&nbsp;&nbsp;• Master Services Agreement – cites this Order Form; incorporates the online ToS, DPA and SLA' +
-        '<p class="muted" style="margin:6px 0 0">When this deal is marked <b>Won</b>, the MSA is saved on the client, so later deals produce only an Order Form.</p>'
-      : '<b>Quotation &amp; Order Form only</b> – under the client’s existing MSA <b>' + esc(msa.no) + '</b>' +
-        (msa.dealId ? ' (signed with deal ' + esc(msa.dealId) + (msa.date ? ', ' + esc(msa.date) : '') + ')' : ' (entered in “Existing MSA reference”)') + '.';
+    $('newMsaBox').classList.toggle('hidden', !msa || isTopup(DEAL));
+    if (isTopup(DEAL)) {
+      $('btnGenerate').textContent = 'Generate Top-up Order Form';
+      $('contractPack').innerHTML = '<b>Top-up Quotation &amp; Order Form</b> – supplements Order Form <b>' + esc((DEAL.topupOf || {}).orderFormNo || '—') + '</b> under MSA <b>' + esc((msa || {}).no || '—') + '</b>. When the client accepts it, the top-up is Won.';
+      return;
+    }
+    $('btnGenerate').textContent = 'Generate Order Form';
+    $('contractPack').innerHTML = c.mode === 'NEW_MSA'
+      ? '<b>Quotation &amp; Order Form</b> – commercial terms only. Until an MSA is signed it is governed by the online Terms of Service, DPA and SLA.' +
+        '<p class="muted" style="margin:6px 0 0">Send it to the client from the Review step. When they accept, you prepare the MSA (stage 3); the deal is Won when the MSA is accepted.</p>'
+      : '<b>Quotation &amp; Order Form</b> – under the client’s existing MSA <b>' + esc(msa.no) + '</b>' +
+        (msa.dealId ? ' (signed with deal ' + esc(msa.dealId) + (msa.date ? ', ' + esc(msa.date) : '') + ')' : ' (entered in “Existing MSA reference”)') + '. When the client accepts it, the deal is Won.';
   }
+
+  /** Client acceptance panel (Review step): status, Send to client, Record signed copy. */
+  function renderAcceptBox() {
+    var box = $('acceptBox'); if (!box) return;
+    var st = stageOf(DEAL);
+    if (!DEAL || !DEAL.dealId || (st !== 'CONTRACT' && st !== 'MSA')) { box.innerHTML = ''; return; }
+    var type = st === 'MSA' ? 'MSA' : 'ORDER_FORM', label = type === 'MSA' ? 'MSA' : 'Order Form';
+    var acc = (DEAL.acceptance || {})[type] || {}, status = DEAL.status || '';
+    var ready = type === 'MSA' ? ['MSA generated', 'MSA sent'].indexOf(status) !== -1 : ['Order Form generated', 'Order Form sent', 'Contract generated'].indexOf(status) !== -1;
+    var line = acc.at ? '<span class="badge ok">' + esc(acc.status || 'Accepted') + '</span> ' + (acc.name ? 'by ' + esc(acc.name) + (acc.title ? ', ' + esc(acc.title) : '') + ' ' : '') + 'on ' + esc(String(acc.at).slice(0, 10))
+      : acc.sentAt ? '<span class="badge warn">Waiting for client</span> sent to ' + esc(acc.to) + ' on ' + esc(String(acc.sentAt).slice(0, 10)) + (acc.validUntil ? ' · link valid until ' + esc(String(acc.validUntil).slice(0, 10)) : '')
+      : ready ? '<span class="badge">Not sent yet</span>' : '<span class="muted">Generate the final ' + label + ' first (after any approval), then send it to the client.</span>';
+    box.innerHTML = '<div class="card" style="margin:10px 0;padding:12px 14px"><b>Client acceptance – ' + label + '</b><p style="margin:6px 0">' + line + '</p>' +
+      (ready && !acc.at ? '<div class="bar" style="justify-content:flex-start;gap:8px"><button id="btnSendClient">' + (acc.sentAt ? 'Resend link' : 'Send to client') + '</button>' +
+        '<button class="secondary" id="btnRecordSigned">Record signed copy (received by email)</button><input type="file" id="signedFile" accept="application/pdf,.pdf" class="hidden"></div>' +
+        '<p class="muted" style="margin:6px 0 0;font-size:12px">The client gets the PDF and a secure link: they verify with a code sent to their email and accept online or upload a signed copy. Resending cancels the previous link.</p>' : '') + '</div>';
+    if ($('btnSendClient')) $('btnSendClient').onclick = function () { sendToClient(type); };
+    if ($('btnRecordSigned')) { $('btnRecordSigned').onclick = function () { $('signedFile').click(); }; $('signedFile').onchange = function () { recordSigned(type, this.files[0]); }; }
+  }
+  function sendToClient(type) {
+    var c = (DEAL && DEAL.client) || {};
+    var to = window.prompt('Send the ' + (type === 'MSA' ? 'MSA' : 'Order Form') + ' for acceptance to this client email:', c.signatoryEmail || (c.businessContact || {}).email || '');
+    if (to === null) return;
+    busyStart('Sending to the client…', ['Creating a secure one-document link', 'Emailing the PDF and the link to the client (you are in CC)']);
+    run('apiSendForAcceptance', DEAL.dealId, type, to.trim()).then(function (r) {
+      APPROVAL = r.summary && r.summary.approvalStatus; fill(r.deal); go(4);
+      busyDone('Sent to ' + r.sentTo, '<p>The client received the PDF and a secure link (valid until ' + esc(String(r.validUntil).slice(0, 10)) + '). You will get an email when they accept or upload a signed copy.</p>', 'list');
+    }).catch(function (e) { busyFail(e.message); });
+  }
+  function recordSigned(type, f) {
+    if (!f) return;
+    if (f.size > 10485760) { toast('The file is larger than 10 MB'); return; }
+    var name = window.prompt('Who signed for the client? (name)', ((DEAL.client || {}).signatoryName) || ''); if (name === null) return;
+    var title = window.prompt('Their designation', ((DEAL.client || {}).signatoryTitle) || ''); if (title === null) return;
+    busyStart('Recording the signed copy…', ['Uploading the signed PDF', 'Updating the deal']);
+    var rd = new FileReader();
+    rd.onload = function () {
+      run('apiRecordSignedCopy', DEAL.dealId, type, f.name, String(rd.result).split(',')[1], name, title).then(function (r) {
+        fill(r.deal); go(4); loadDocs(r.deal.dealId);
+        busyDone(r.status === 'Won' ? 'Signed copy recorded – deal Won' : 'Signed copy recorded', '<p>' + (r.status === 'Won' ? 'The deal is now Won.' : 'Next: prepare the MSA (stage 3) and send it to the client.') + '</p>', 'list');
+      }).catch(function (e) { busyFail(e.message); });
+    };
+    rd.readAsDataURL(f);
+  }
+
 
 
   function renderSideTopup(ev, d) {
@@ -904,7 +961,7 @@
     h += '<table><tr><th colspan="2">Deal</th></tr>' +
       '<tr><td>Client</td><td>' + esc(c.legalName) + (c.shortName ? ' (' + esc(c.shortName) + ')' : '') + ', ' + esc(c.country) + '</td></tr>' +
       '<tr><td>Contracting party</td><td>' + esc(ent ? ent.name : '—') + '</td></tr>' +
-      '<tr><td>Documents</td><td>' + (stageOf(d) === 'PROPOSAL' ? ['PROPOSAL'] : ev.contract && ev.contract.mode === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['ORDER_FORM', 'MSA']).map(function (k) { return DOC_LABEL[k]; }).join(', ') + '</td></tr>' +
+      '<tr><td>Documents</td><td>' + (stageOf(d) === 'PROPOSAL' ? ['PROPOSAL'] : stageOf(d) === 'MSA' ? ['MSA'] : ['ORDER_FORM']).map(function (k) { return DOC_LABEL[k]; }).join(', ') + '</td></tr>' +
       (ev.msaExceptions ? '<tr><td>MSA special terms</td><td class="wraptext" style="white-space:pre-wrap">' + esc(ev.msaExceptions) + ' <span class="badge warn">Needs Amith’s approval</span></td></tr>' : '') +
       (stageOf(d) === 'CONTRACT' ? '<tr><td>Order Form</td><td>' + esc(com.orderPackage || '') + ' · ' + esc(com.termMonths) + ' months · ' + esc(com.billingCycle) + '</td></tr>' : '') + '</table>';
     if (q) {
@@ -1001,8 +1058,8 @@
     var isSA = BOOT.user.role === 'Superadmin';
     $('dealList').innerHTML = '<table><tr>' + (isSA ? '<th style="width:28px"><input type="checkbox" id="selAllDeals" style="width:auto" title="Select all on this page"></th>' : '') + '<th>Client</th><th>Country</th><th>Package</th><th class="num">First-year value</th><th>Status</th><th>Approval</th><th>Last activity</th>' +
       (showOwner ? '<th>Owner</th>' : '') + '<th></th></tr>' + rows.map(function (r) {
-        return '<tr>' + (isSA ? '<td><input type="checkbox" data-sel="' + esc(r.dealId) + '" style="width:auto"' + (SELECTED[r.dealId] ? ' checked' : '') + '></td>' : '') + '<td><a href="#" class="dealname" data-open="' + esc(r.dealId) + '">' + esc(r.clientName) + '</a><br><span class="muted">' + esc(r.dealId) + ' · v' + r.version + ' · ' + (r.dealType === 'TOPUP' ? '<span class="badge">Top-up of ' + esc(r.parentDealId) + '</span>' : (r.stage || 'PROPOSAL') === 'CONTRACT' ? 'Order Form stage' : 'Proposal stage') + '</span></td><td>' + esc(r.country) + '</td><td>' + esc(r.orderPackage || r.packages) + '</td>' +
-          '<td class="num">' + (r.value ? money(r.currency, r.value) : '') + '</td><td>' + esc(r.status) + (isStale(r) ? '<br><span class="badge warn">⚠ No update ' + daysAgo(r.updatedAt) + ' days</span>' : '') + '</td><td>' +
+        return '<tr>' + (isSA ? '<td><input type="checkbox" data-sel="' + esc(r.dealId) + '" style="width:auto"' + (SELECTED[r.dealId] ? ' checked' : '') + '></td>' : '') + '<td><a href="#" class="dealname" data-open="' + esc(r.dealId) + '">' + esc(r.clientName) + '</a><br><span class="muted">' + esc(r.dealId) + ' · v' + r.version + ' · ' + (r.dealType === 'TOPUP' ? '<span class="badge">Top-up of ' + esc(r.parentDealId) + '</span>' : (r.stage || 'PROPOSAL') === 'MSA' ? 'MSA stage' : (r.stage || 'PROPOSAL') === 'CONTRACT' ? 'Order Form stage' : 'Proposal stage') + '</span></td><td>' + esc(r.country) + '</td><td>' + esc(r.orderPackage || r.packages) + '</td>' +
+          '<td class="num">' + (r.value ? money(r.currency, r.value) : '') + '</td><td>' + esc(r.status) + (r.awaiting ? '<br><span class="badge warn">Waiting for client · ' + daysAgo(r.awaiting.sentAt) + ' day(s)</span>' : '') + (isStale(r) ? '<br><span class="badge warn">⚠ No update ' + daysAgo(r.updatedAt) + ' days</span>' : '') + '</td><td>' +
           (r.needsApproval ? '<span class="badge ' + (r.approvalStatus === 'Approved' ? 'ok' : r.approvalStatus === 'Rejected' ? 'err' : 'warn') + '">' + esc(r.approvalStatus) + '</span>' : '<span class="badge ok">Not required</span>') +
           '</td><td>' + esc(String(activityOf(r)).slice(0, 10)) + '<br><span class="muted" style="font-size:12px">' + (r.lastGeneratedAt ? 'generated' : 'updated') + '</span></td>' + (showOwner ? '<td>' + esc(r.createdBy === mine ? 'Me' : r.createdBy) + '</td>' : '') +
           '<td style="text-align:right">' + rowMenu(r) + '</td></tr>';
@@ -1037,10 +1094,14 @@
   function rowMenu(r) {
     var id = esc(r.dealId), items = '<button data-open="' + id + '">' + ICON.open + 'Open</button><button data-clone="' + id + '">' + ICON.clone + 'Clone as new deal</button>';
     if ((r.stage || 'PROPOSAL') === 'PROPOSAL' && ['Proposal generated', 'Sent'].indexOf(r.status) !== -1) items += '<button data-convert="' + id + '">' + ICON.convert + 'Convert to Order Form</button>';
-    if (r.status === 'Won' && r.dealType !== 'TOPUP' && r.stage === 'CONTRACT') items += '<button data-topup="' + id + '">' + ICON.convert + 'Top-up (add licences, add-ons, credits)</button>';
-    if (['Generated', 'Proposal generated', 'Contract generated', 'Sent', 'Won', 'Lost'].indexOf(r.status) !== -1) {
-      items += '<div class="sep"></div><div class="grp">Mark as</div>' + ['Sent', 'Won', 'Lost'].filter(function (x) { return x !== r.status; }).map(function (x) {
-        return '<button data-status="' + x + '" data-id="' + id + '">' + ICON[x] + x + '</button>';
+    if (r.status === 'Won' && r.dealType !== 'TOPUP' && (r.stage === 'CONTRACT' || r.stage === 'MSA')) items += '<button data-topup="' + id + '">' + ICON.convert + 'Top-up (add licences, add-ons, credits)</button>';
+    var marks = [];
+    if (['Proposal generated', 'Generated'].indexOf(r.status) !== -1) marks.push('Sent');
+    if (['Draft', 'Contract draft', 'Pending approval', 'Rejected', 'Lost'].indexOf(r.status) === -1) marks.push('Lost');
+    if (BOOT.user.role === 'Superadmin' && ['Won', 'Draft', 'Contract draft', 'Pending approval', 'Rejected'].indexOf(r.status) === -1) marks.push('Won');
+    if (marks.length) {
+      items += '<div class="sep"></div><div class="grp">Mark as</div>' + marks.map(function (x) {
+        return '<button data-status="' + x + '" data-id="' + id + '">' + ICON[x] + x + (x === 'Won' ? ' (override)' : '') + '</button>';
       }).join('');
     }
     return '<div class="menu-wrap"><button class="kebab" data-menu="' + id + '" title="Actions" aria-label="Actions">⋯</button><div class="menu hidden" data-menufor="' + id + '">' + items + '</div></div>';
@@ -1077,7 +1138,9 @@
       // action needed
       var a = s.actions, acts = [];
       a.toConvert.forEach(function (x) { acts.push(['Proposal sent – convert to Order Form when accepted', x, 'convert']); });
-      a.notSent.forEach(function (x) { acts.push(['Order Form generated – send it and mark Sent', x, 'open']); });
+      a.notSent.forEach(function (x) { acts.push(['Generated – send it to the client for acceptance', x, 'open']); });
+      (a.awaitingClient || []).forEach(function (x) { acts.push(['Waiting for client (' + (x.docType === 'MSA' ? 'MSA' : 'Order Form') + ') · ' + x.days + ' day(s)', x, 'open']); });
+      (a.withLegal || []).forEach(function (x) { acts.push(['Order Form accepted – prepare and send the MSA', x, 'open']); });
       a.rejected.forEach(function (x) { acts.push(['Pricing rejected – revise and regenerate', x, 'open']); });
       a.pending.forEach(function (x) { acts.push(['Waiting for Amith’s approval', x, role === 'Superadmin' ? 'appr' : '']); });
       h += '<div class="card"><h3 style="margin-top:0">Action needed</h3>' + (acts.length ? '<table><tr><th>What</th><th>Client</th><th class="num">Value (USD)</th>' + (role !== 'Rep' ? '<th>Owner</th>' : '') + '<th></th></tr>' +
@@ -1179,23 +1242,34 @@
 
   // ---------- stages ----------
   var STAGE_UI = {
-    PROPOSAL: { banner: '<b>Stage 1 of 2 – Proposal.</b> Enter the client, pricing and proposal text, then generate the proposal. When the client accepts, click <b>Convert to Order Form</b>.',
+    PROPOSAL: { banner: '<b>Stage 1 of 3 – Proposal.</b> Enter the client, pricing and proposal text, then generate the proposal. When the client accepts, click <b>Convert to Order Form</b>.',
       steps: ['1 · Client', '2 · Commercials', '3 · Proposal', '4 · Review'], gen: 'Generate proposal' },
-    CONTRACT: { banner: '<b>Stage 2 of 2 – Order Form.</b> Add contract details and Order Form terms; the Quotation &amp; Order Form and the MSA are generated together (Order Form only if the client already has an MSA).',
-      steps: ['1 · Contract details', '2 · Commercials', '3 · Order Form & documents', '4 · Review'], gen: 'Generate Order Form & MSA' }
+    CONTRACT: { banner: '<b>Stage 2 of 3 – Quotation &amp; Order Form.</b> Add contract details and Order Form terms, generate the Order Form, then <b>send it to the client</b> to accept online or sign.',
+      steps: ['1 · Contract details', '2 · Commercials', '3 · Order Form terms', '4 · Review & send'], gen: 'Generate Order Form' },
+    MSA: { banner: '<b>Stage 3 of 3 – MSA.</b> The client accepted the Order Form. The MSA text is standard: add any agreed deviations in <b>§7</b>, generate, then send it to the client. The deal is Won when the client accepts the MSA.',
+      steps: ['1 · Contract details', '2 · Commercials (locked)', '3 · MSA §7', '4 · Review & send'], gen: 'Generate MSA' }
   };
   function stageOf(d) { return (d && d.stage) || 'PROPOSAL'; }
   function applyStage(stage) {
     var ui = STAGE_UI[stage];
     $('stageBanner').innerHTML = ui.banner;
     qa('#steps div').forEach(function (el, i) { el.textContent = ui.steps[i]; });
-    qa('[data-stage]').forEach(function (el) { el.classList.toggle('hidden', el.dataset.stage !== stage); });
+    qa('[data-stage]').forEach(function (el) { el.classList.toggle('hidden', el.dataset.stage.split(',').indexOf(stage) === -1); });
+    // MSA stage: the accepted Order Form's commercials and parties are locked (server enforces it too)
+    var lockMsa = stage === 'MSA';
+    qa('#view-deal .step[data-step="1"] [data-f], #view-deal .step[data-step="2"] input, #view-deal .step[data-step="2"] select, #view-deal .step[data-step="2"] textarea, #view-deal .step[data-step="3"] [data-stage="CONTRACT"] [data-f]').forEach(function (el) {
+      if (el.id === 'currency') return;
+      var signer = /^client\.(signatoryName|signatoryTitle|signatoryEmail|noticeEmail)$/.test(el.dataset.f || '');
+      if (lockMsa && !signer && !el.disabled) { el.disabled = true; el.dataset.msaLocked = '1'; }
+      else if (!lockMsa && el.dataset.msaLocked) { el.disabled = false; delete el.dataset.msaLocked; }  // only undo our own lock
+    });
     $('btnGenerate').textContent = ui.gen;
     if (isTopup(DEAL)) {
       $('stageBanner').innerHTML = '<b>Top-up</b> of deal ' + esc(DEAL.topupOf.dealId) + ' – add licences, add-ons, communication packs, WhatsApp credits or services. Generates a Top-up Quotation &amp; Order Form under the client’s MSA.';
       qa('#steps div').forEach(function (el, i) { el.textContent = ['1 · Client details', '2 · Top-up items', '3 · Order Form terms', '4 · Review'][i]; });
       $('btnGenerate').textContent = 'Generate Top-up Order Form';
     }
+    renderAcceptBox();
     var canConvert = stage === 'PROPOSAL' && DEAL && DEAL.dealId && ['Proposal generated', 'Sent'].indexOf(DEAL.status) !== -1;
     $('btnConvert').classList.toggle('hidden', !canConvert);
   }
@@ -1222,7 +1296,7 @@
     if (!LISTS || !LISTS.languages) return;
     var lang = $('language').value, names = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', MSA: 'MSA' };
     if (lang === 'EN') { $('langHint').textContent = ''; return; }
-    var sel = stageOf(DEAL) === 'PROPOSAL' ? ['PROPOSAL'] : (LAST && LAST.contract && LAST.contract.mode === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['ORDER_FORM', 'MSA']);
+    var sel = stageOf(DEAL) === 'PROPOSAL' ? ['PROPOSAL'] : stageOf(DEAL) === 'MSA' ? ['MSA'] : ['ORDER_FORM'];
     var yes = sel.filter(function (t) { return (LISTS.languages[t] || []).indexOf(lang) !== -1; }), no = sel.filter(function (t) { return yes.indexOf(t) === -1; });
     $('langHint').innerHTML = (yes.length ? 'In ' + (lang === 'AR' ? 'Arabic' : 'bilingual') + ': ' + yes.map(function (t) { return names[t]; }).join(', ') + '. ' : '') +
       (no.length ? '<span class="badge warn">No ' + (lang === 'AR' ? 'Arabic' : 'bilingual') + ' template yet for ' + no.map(function (t) { return names[t]; }).join(', ') + ' – these will be generated in English.</span>' : '');

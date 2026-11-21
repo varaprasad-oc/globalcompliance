@@ -172,3 +172,13 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## No Google Doc links for anyone (2026-11-16, Varaprasad)
 - Amith (Superadmin) also gets PDF links only – emails, generation dialog, Generated documents / version history and approval cards. Google Docs stay in the Shared Drive only.
+
+## Flow v2: Order Form first, client acceptance, MSA later (2026-11-21, Varaprasad)
+- Proposal → **Quotation & Order Form** (commercial essentials only) → **sent to the client** → client **accepts online** (name, designation, one-time code by email, "I accept") **or uploads a signed PDF** → **MSA stage** (standard MSA, deviations only in §7, Amith approves §7) → MSA sent → accepted/uploaded → **Won**.
+- Clients with an existing MSA, and top-ups: **Won when the Order Form is accepted**.
+- Interim terms: until the MSA is signed, the Order Form is governed by the online ToS, DPA and SLA (governing line in the Order Form).
+- Won only after the MSA (manual "Mark Won" = Superadmin override only). Commercials and parties are locked at the MSA stage.
+- Link delivery: the app emails the client (PDF attached, secure link), reply-to/CC = rep. Links: random 64-hex token (only its SHA-256 stored, Acceptances tab), one document + version, expire (Order Form: quote validity; MSA: 30 days), single use, revoked on resend/regeneration, locked after 5 wrong codes. Client never gets Drive access (PDF streamed into the page; uploads saved by the app).
+- Online acceptance adds an "Electronic Acceptance Certificate" page (name, designation, verified email, date/time Dubai + UTC, reference) to the accepted PDF. Reps can also record a signed copy received by email.
+- Public page = a second deployment of the same project with access "Anyone" (Script property PUBLIC_EXEC_URL; optional ACCEPT_BASE_URL via Netlify /accept/:token). Every internal API still requires an @optculture.com user; owner tools require owner/Superadmin (requireOperator_); internal workers are private (getMaster_, nextDocNo_, generateDocument_).
+- Open: Amith/legal to confirm electronic acceptance with email code for UAE, Egypt, KSA, India.

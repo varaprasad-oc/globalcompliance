@@ -17,7 +17,7 @@ function readTable_(ss, tab) {
 }
 
 /** All master tabs (cached). Pass true to bypass the cache, e.g. after an admin edit. */
-function getMaster(noCache) {
+function getMaster_(noCache) {
   var cache = CacheService.getScriptCache();
   if (!noCache) {
     var hit = cache.get('MASTER');
@@ -32,7 +32,10 @@ function getMaster(noCache) {
   return m;
 }
 
-function clearMasterCache() {
+/** Editor/owner tool (Run menu). Pages cannot use it: only the script owner or a Superadmin. */
+function clearMasterCache() { requireOperator_(); clearMasterCache_(); console.log('Master cache cleared'); }
+
+function clearMasterCache_() {
   CacheService.getScriptCache().remove('MASTER');
 }
 

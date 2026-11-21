@@ -4,7 +4,7 @@
  * A row whose year is "-" never resets and has no year in the number (doc_type CLIENT → C-0001).
  * A row whose year holds a month (yyyymm, e.g. 202611) counts per month (doc_type DEAL → D-202611-0001).
  */
-function nextDocNo(docType, callerHoldsLock) {
+function nextDocNo_(docType, callerHoldsLock) {
   var lock = LockService.getScriptLock();
   if (!callerHoldsLock) lock.waitLock(30000);
   try {

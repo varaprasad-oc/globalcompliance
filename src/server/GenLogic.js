@@ -23,7 +23,8 @@ function planGeneration(deal, evaluation, approvalStatus) {
     ok: true,
     mode: draft ? 'DRAFT' : 'FINAL',
     docTypes: docTypes,
-    status: draft ? DEAL_STATUS.PENDING : (deal.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_GENERATED : deal.stage === 'PROPOSAL' ? DEAL_STATUS.PROPOSAL_GENERATED : DEAL_STATUS.GENERATED),
+    status: draft ? DEAL_STATUS.PENDING : (deal.stage === 'CONTRACT' ? DEAL_STATUS.ORDER_FORM_GENERATED : deal.stage === 'MSA' ? DEAL_STATUS.MSA_GENERATED :
+      deal.stage === 'PROPOSAL' ? DEAL_STATUS.PROPOSAL_GENERATED : DEAL_STATUS.GENERATED),
     reason: draft ? 'Special pricing needs Amith’s approval: DRAFT documents (no PDF) are created now; final PDFs are generated after approval.' : ''
   };
 }
@@ -62,7 +63,7 @@ function generationEmails(deal, results, mode) {
 /** Email to the approver: only what needs approval, item by item (structured), plus rep note and a link. */
 function approvalEmailBody(deal, ev, user, url) {
   var c = deal.client || {}, cur = (deal.commercial || {}).currency || '';
-  var what = deal.dealType === 'TOPUP' ? 'Top-up Order Form' : deal.stage === 'CONTRACT' ? (contractMode(deal) === 'NEW_MSA' ? 'Quotation & Order Form + MSA' : 'Quotation & Order Form') : 'Proposal';
+  var what = deal.dealType === 'TOPUP' ? 'Top-up Order Form' : deal.stage === 'MSA' ? 'Master Services Agreement' : deal.stage === 'CONTRACT' ? 'Quotation & Order Form' : 'Proposal';
   var lines = (ev.approvalItems || []).map(function (it) {
     if (it.text) return '• ' + it.area + ':\n    "' + it.text.replace(/\n/g, '\n     ') + '"';
     var ref = it.reference === null || it.reference === undefined ? '' : ' vs ' + it.referenceLabel.toLowerCase() + ' ' + formatMoney(cur, it.reference);

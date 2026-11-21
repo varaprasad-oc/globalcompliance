@@ -39,7 +39,7 @@ function callGemini_(prompt, model, temperature) {
 /** Draft the proposal narrative. opts = { tone: 'formal' | 'concise', language: 'EN' | 'AR' } */
 function apiDraftNarrative(deal, opts) {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   var row = (m.AIPrompts || []).filter(function (r) { return r.key === 'PROPOSAL_NARRATIVE'; })[0] || {};
   var raw = callGemini_(buildNarrativePrompt(m, deal, opts), row.model, row.temperature);
   var res = sanitizeNarrative(raw, m);
@@ -50,6 +50,7 @@ function apiDraftNarrative(deal, opts) {
 
 /** Editor check: run once after linking the Cloud project. */
 function aiHealthCheck() {
+  requireOperator_();
   var t = callGemini_('Return JSON {"ok": true, "model": "<your model name>"}', null, 0);
   console.log(t);
   return t;

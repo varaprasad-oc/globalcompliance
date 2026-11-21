@@ -374,6 +374,12 @@ var SEED = {
     kind: 'record',
     headers: ['approval_id', 'deal_id', 'version', 'requested_by', 'requested_at', 'reasons', 'decision', 'decided_by', 'decided_at', 'comment']
   },
+  Acceptances: {
+    kind: 'record',
+    headers: ['token_hash', 'deal_id', 'doc_type', 'doc_no', 'version', 'client_email', 'created_at', 'expires_at', 'status',
+      'otp_hash', 'otp_expires', 'otp_attempts', 'otp_sends', 'sent_by', 'accepted_name', 'accepted_title', 'accepted_email',
+      'accepted_at', 'method', 'signed_file_id']
+  },
   AuditLog: {
     kind: 'record',
     headers: ['timestamp', 'user_email', 'action', 'deal_id', 'doc_no', 'details']
@@ -1050,11 +1056,18 @@ function checkTemplateTokens(text, data) {
  */
 
 var DEAL_STATUS = { DRAFT: 'Draft', PENDING: 'Pending approval', APPROVED: 'Approved', REJECTED: 'Rejected', GENERATED: 'Generated',
-  PROPOSAL_GENERATED: 'Proposal generated', CONTRACT_DRAFT: 'Contract draft', CONTRACT_GENERATED: 'Contract generated', SENT: 'Sent', WON: 'Won', LOST: 'Lost' };
+  PROPOSAL_GENERATED: 'Proposal generated', CONTRACT_DRAFT: 'Contract draft', CONTRACT_GENERATED: 'Contract generated', SENT: 'Sent', WON: 'Won', LOST: 'Lost',
+  ORDER_FORM_GENERATED: 'Order Form generated', ORDER_FORM_SENT: 'Order Form sent', ORDER_FORM_ACCEPTED: 'Order Form accepted',
+  MSA_GENERATED: 'MSA generated', MSA_SENT: 'MSA sent' };
 
-/** Two-stage flow: PROPOSAL (proposal only) → CONTRACT (Quotation & Order Form + MSA, or Order Form only under an existing MSA). */
-var STAGE_DOCS = { PROPOSAL: ['PROPOSAL'], CONTRACT: ['ORDER_FORM', 'MSA'] };  // ToS, DPA and SLA are online documents incorporated by the MSA
-var GENERATED_STATUSES = ['Generated', 'Proposal generated', 'Contract generated', 'Sent', 'Won', 'Lost'];
+/**
+ * Flow (decision 2026-11-21): PROPOSAL → CONTRACT (Quotation & Order Form only; client accepts online or uploads a signed copy)
+ * → MSA (standard MSA, deviations only in §7; client accepts or uploads) → Won. A client who already has an MSA, and every
+ * top-up, is Won as soon as the Order Form is accepted. ToS, DPA and SLA are online documents incorporated by the MSA.
+ */
+var STAGE_DOCS = { PROPOSAL: ['PROPOSAL'], CONTRACT: ['ORDER_FORM'], MSA: ['MSA'] };
+var GENERATED_STATUSES = ['Generated', 'Proposal generated', 'Contract generated', 'Sent', 'Won', 'Lost',
+  'Order Form generated', 'Order Form sent', 'MSA generated', 'MSA sent'];
 
 /** A proposal that has been generated (and possibly sent) can be converted to the contract stage. */
 function canConvertToContract(deal, status) {
@@ -1113,7 +1126,7 @@ function convertToContract(deal, quote) {
   d.proposalBaseline = proposalBaseline(deal, quote);
   d.stage = 'CONTRACT';
   d.status = DEAL_STATUS.CONTRACT_DRAFT;
-  d.docs = { ORDER_FORM: true, MSA: true };
+  d.docs = { ORDER_FORM: true };
   d.commercial = d.commercial || {};
   if (!d.commercial.orderPackage || (d.commercial.packages || []).indexOf(d.commercial.orderPackage) === -1) d.commercial.orderPackage = (d.commercial.packages || [])[0];
   return d;
@@ -1148,7 +1161,7 @@ function existingMsa(deal) {
 }
 
 function contractMode(deal) {
-  if (deal.stage !== 'CONTRACT') return null;
+  if (deal.stage !== 'CONTRACT' && deal.stage !== 'MSA') return null;
   if (deal.dealType === 'TOPUP') return 'ORDER_ONLY';  // a top-up is always an Order Form under the existing MSA
   return existingMsa(deal) && !deal.newMsa ? 'ORDER_ONLY' : 'NEW_MSA';
 }
@@ -1164,13 +1177,14 @@ function relatedNumbers(deal) {
 
 /** MSA §7 exceptions that will be printed (only when an MSA is generated). Any text needs Superadmin approval. */
 function msaExceptions(deal) {
-  if (deal.stage !== 'CONTRACT' || contractMode(deal) !== 'NEW_MSA') return '';
+  if (deal.stage !== 'MSA' || contractMode(deal) !== 'NEW_MSA') return '';
   var t = String(deal.msaExceptions || '').trim();
   return /^none\.?$/i.test(t) ? '' : t;
 }
 
 function selectedDocs(deal) {
-  if (deal.stage === 'CONTRACT') return contractMode(deal) === 'ORDER_ONLY' ? ['ORDER_FORM'] : ['ORDER_FORM', 'MSA'];
+  if (deal.stage === 'CONTRACT') return ['ORDER_FORM'];
+  if (deal.stage === 'MSA') return ['MSA'];
   var d = deal.docs || {};
   var allowed = deal.stage ? STAGE_DOCS[deal.stage] : DOC_TYPES;
   return DOC_TYPES.filter(function (t) { return d[t] && allowed.indexOf(t) !== -1; });
@@ -1203,13 +1217,14 @@ function evaluateDeal(master, deal) {
     quote: quote.ok ? quote : null,
     missing: missing,
     readyToGenerate: errors.length === 0 && Object.keys(missing).length === 0,
-    needsApproval: quote.ok ? quote.needsApproval || !!msaExceptions(deal) : false,
-    approvalReasons: quote.ok ? quote.approvalReasons.concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
+    // MSA stage: prices were agreed in the accepted Order Form – only §7 exceptions can need approval
+    needsApproval: quote.ok ? (deal.stage === 'MSA' ? false : quote.needsApproval) || !!msaExceptions(deal) : false,
+    approvalReasons: quote.ok ? (deal.stage === 'MSA' ? [] : quote.approvalReasons).concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
     msaExceptions: msaExceptions(deal),
-    approvalItems: quote.ok ? (quote.approvalItems || []).concat(msaExceptions(deal) ? [{ area: 'MSA special terms', item: '§7 Special Terms and Exceptions', referenceLabel: 'Standard MSA',
+    approvalItems: quote.ok ? (deal.stage === 'MSA' ? [] : (quote.approvalItems || [])).concat(msaExceptions(deal) ? [{ area: 'MSA special terms', item: '§7 Special Terms and Exceptions', referenceLabel: 'Standard MSA',
       reference: null, proposed: null, unit: '', diffPct: null, note: '', text: msaExceptions(deal) }] : []) : [],
     changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : [],
-    contract: deal.stage === 'CONTRACT' ? { mode: contractMode(deal), msa: existingMsa(deal) } : null
+    contract: deal.stage === 'CONTRACT' || deal.stage === 'MSA' ? { mode: contractMode(deal), msa: existingMsa(deal), stage: deal.stage } : null
   };
 }
 
@@ -1280,6 +1295,7 @@ function dealSummary(rec) {
     createdBy: rec.created_by, createdAt: rec.created_at instanceof Date ? rec.created_at.toISOString() : String(rec.created_at || ''), updatedAt: rec.updated_at instanceof Date ? rec.updated_at.toISOString() : String(rec.updated_at || ''),
     version: Number(rec.version || 1),
     lastGeneratedAt: d.lastGeneratedAt || '',
+    awaiting: (function () { var a = d.acceptance || {}, t = d.stage === 'MSA' ? 'MSA' : 'ORDER_FORM'; return a[t] && a[t].sentAt && !a[t].at ? { docType: t, sentAt: a[t].sentAt, to: a[t].to || '' } : null; })(),
     dealType: d.dealType || '', parentDealId: (d.topupOf || {}).dealId || '',
     referralPartnerId: d.referralPartnerId || '',
     stage: d.stage || '',
@@ -1293,8 +1309,40 @@ function dealSummary(rec) {
 
 /** Owner may move a generated deal along the sales pipeline. */
 var PIPELINE_STATUSES = ['Sent', 'Won', 'Lost'];
-function canSetStatus(currentStatus, newStatus) {
-  return PIPELINE_STATUSES.indexOf(newStatus) !== -1 && GENERATED_STATUSES.indexOf(currentStatus) !== -1;
+/**
+ * Manual status changes. Sent: a generated proposal. Lost: any generated or accepted deal. Won is set by the client's
+ * acceptance (Order Form under an existing MSA / top-up, or the MSA); only the Superadmin can mark Won by hand.
+ */
+function canSetStatus(currentStatus, newStatus, isSuperadmin) {
+  var open = GENERATED_STATUSES.concat([DEAL_STATUS.ORDER_FORM_ACCEPTED]);
+  if (newStatus === 'Sent') return ['Proposal generated', 'Generated'].indexOf(currentStatus) !== -1;
+  if (newStatus === 'Lost') return open.indexOf(currentStatus) !== -1 && currentStatus !== 'Lost';
+  if (newStatus === 'Won') return !!isSuperadmin && open.indexOf(currentStatus) !== -1 && currentStatus !== 'Won';
+  return false;
+}
+
+/** Can this document be sent to the client for acceptance now? (final documents of the current stage) */
+function canSendForAcceptance(deal, status, docType) {
+  if (docType === 'ORDER_FORM') return deal.stage === 'CONTRACT' && ['Order Form generated', 'Order Form sent', 'Contract generated'].indexOf(status) !== -1;
+  if (docType === 'MSA') return deal.stage === 'MSA' && ['MSA generated', 'MSA sent'].indexOf(status) !== -1;
+  return false;
+}
+
+/**
+ * Client accepted (online or signed upload). Order Form: Won when the client already has an MSA (or it is a top-up),
+ * otherwise the deal moves to the MSA stage. MSA: Won. info = { method, name, title, email, at, signedFileId, ref }.
+ */
+function applyAcceptance(deal, docType, info) {
+  var d = JSON.parse(JSON.stringify(deal));
+  d.acceptance = d.acceptance || {};
+  d.acceptance[docType] = Object.assign({}, d.acceptance[docType] || {}, info, { status: info.method === 'upload' ? 'Signed copy uploaded' : 'Accepted online' });
+  if (docType === 'ORDER_FORM') {
+    if (contractMode(d) === 'ORDER_ONLY') { d.status = DEAL_STATUS.WON; }
+    else { d.stage = 'MSA'; d.status = DEAL_STATUS.ORDER_FORM_ACCEPTED; d.docs = { MSA: true }; }
+  } else if (docType === 'MSA') {
+    d.status = DEAL_STATUS.WON;
+  }
+  return d;
 }
 
 /** Dashboard numbers from deal summaries (amounts in USD for comparability). now = Date for the monthly window. */
@@ -1309,7 +1357,7 @@ function dashboardStats(summaries, users, now, opts) {
   (users || []).forEach(function (u) { nameOf[String(u.email).toLowerCase()] = u.name; });
   var s = { deals: summaries.length, pipelineUsd: 0, wonUsd: 0, pendingApprovals: 0, avgDiscountPct: 0, winRate: null, conversionRate: null,
     topups: { count: 0, openUsd: 0, wonUsd: 0 },
-    byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], stale: [], staleDays: staleDays, periodDays: periodDays, actions: { toConvert: [], pending: [], notSent: [], rejected: [] } };
+    byStatus: {}, byRep: {}, byCountry: {}, byPackage: {}, funnel: [], byMonth: [], topOpen: [], stale: [], staleDays: staleDays, periodDays: periodDays, actions: { toConvert: [], pending: [], notSent: [], rejected: [], awaitingClient: [], withLegal: [] } };
   var discSum = 0, discN = 0;
   function add(map, key, sm) {
     key = key || '—';
@@ -1332,12 +1380,14 @@ function dashboardStats(summaries, users, now, opts) {
     var stage = sm.stage || 'PROPOSAL';
     if (sm.status === 'Won') f.won++;
     else if (sm.status === 'Lost') f.lost++;
-    else if (stage === 'CONTRACT') f.contract++;
+    else if (stage === 'CONTRACT' || stage === 'MSA') f.contract++;
     else if (['Proposal generated', 'Sent', 'Generated'].indexOf(sm.status) !== -1) f.proposal++;
     else f.draft++;
     if (stage === 'PROPOSAL' && ['Proposal generated', 'Sent'].indexOf(sm.status) !== -1) s.actions.toConvert.push(mini(sm));
     if (sm.approvalStatus === 'Pending') s.actions.pending.push(mini(sm));
-    if (sm.status === 'Contract generated') s.actions.notSent.push(mini(sm));
+    if (['Contract generated', 'Order Form generated', 'MSA generated'].indexOf(sm.status) !== -1) s.actions.notSent.push(mini(sm));
+    if (sm.awaiting) s.actions.awaitingClient.push(Object.assign(mini(sm), { docType: sm.awaiting.docType, days: daysSince(sm.awaiting.sentAt) }));
+    if (stage === 'MSA' && ['Order Form accepted', 'MSA generated', 'Pending approval', 'Rejected'].indexOf(sm.status) !== -1) s.actions.withLegal.push(mini(sm));
     if (sm.status === 'Rejected') s.actions.rejected.push(mini(sm));
   });
   // partner performance (Superadmin only: opts.partners is passed for Superadmin)
@@ -1414,6 +1464,13 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   d.proposalBaseline = stored.proposalBaseline;
   d.clientId = stored.clientId;
   if (stored.dealType) d.dealType = stored.dealType; else delete d.dealType;
+  d.acceptance = stored.acceptance;  // client acceptance records: server-owned
+  if (stored.stage === 'MSA') {
+    // Order Form accepted: commercials and party details are locked; only MSA fields can change
+    var keepClient = JSON.parse(JSON.stringify(stored.client || {})), inc = d.client || {};
+    ['signatoryName', 'signatoryTitle', 'signatoryEmail', 'noticeEmail'].forEach(function (k) { if (inc[k] !== undefined) keepClient[k] = inc[k]; });
+    d.client = keepClient; d.commercial = stored.commercial; d.entityId = stored.entityId; d.topup = stored.topup;
+  }
   if (stored.topupOf) d.topupOf = stored.topupOf; else delete d.topupOf;
   d.pricingSnapshot = refresh || !stored.pricingSnapshot ? freshSnapshot : stored.pricingSnapshot;
   d.stage = stored.stage;
@@ -1425,7 +1482,7 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   }
   var revised = GENERATED_STATUSES.indexOf(existingStatus) !== -1;
   d.version = Number(stored.version || 1) + (revised ? 1 : 0);
-  var draftStatus = d.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_DRAFT : DEAL_STATUS.DRAFT;
+  var draftStatus = d.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_DRAFT : d.stage === 'MSA' ? DEAL_STATUS.ORDER_FORM_ACCEPTED : DEAL_STATUS.DRAFT;
   d.status = revised || existingStatus === DEAL_STATUS.REJECTED ? draftStatus : (existingStatus || draftStatus);
   return d;
 }
@@ -1477,7 +1534,7 @@ function topupInput(deal) {
 
 /** Top-up is offered on Won deals that are not themselves top-ups. */
 function canTopUp(deal, status) {
-  return status === DEAL_STATUS.WON && deal.dealType !== 'TOPUP' && (deal.stage === 'CONTRACT');
+  return status === DEAL_STATUS.WON && deal.dealType !== 'TOPUP' && (deal.stage === 'CONTRACT' || deal.stage === 'MSA');
 }
 
 /**
@@ -1590,7 +1647,8 @@ function planGeneration(deal, evaluation, approvalStatus) {
     ok: true,
     mode: draft ? 'DRAFT' : 'FINAL',
     docTypes: docTypes,
-    status: draft ? DEAL_STATUS.PENDING : (deal.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_GENERATED : deal.stage === 'PROPOSAL' ? DEAL_STATUS.PROPOSAL_GENERATED : DEAL_STATUS.GENERATED),
+    status: draft ? DEAL_STATUS.PENDING : (deal.stage === 'CONTRACT' ? DEAL_STATUS.ORDER_FORM_GENERATED : deal.stage === 'MSA' ? DEAL_STATUS.MSA_GENERATED :
+      deal.stage === 'PROPOSAL' ? DEAL_STATUS.PROPOSAL_GENERATED : DEAL_STATUS.GENERATED),
     reason: draft ? 'Special pricing needs Amith’s approval: DRAFT documents (no PDF) are created now; final PDFs are generated after approval.' : ''
   };
 }
@@ -1629,7 +1687,7 @@ function generationEmails(deal, results, mode) {
 /** Email to the approver: only what needs approval, item by item (structured), plus rep note and a link. */
 function approvalEmailBody(deal, ev, user, url) {
   var c = deal.client || {}, cur = (deal.commercial || {}).currency || '';
-  var what = deal.dealType === 'TOPUP' ? 'Top-up Order Form' : deal.stage === 'CONTRACT' ? (contractMode(deal) === 'NEW_MSA' ? 'Quotation & Order Form + MSA' : 'Quotation & Order Form') : 'Proposal';
+  var what = deal.dealType === 'TOPUP' ? 'Top-up Order Form' : deal.stage === 'MSA' ? 'Master Services Agreement' : deal.stage === 'CONTRACT' ? 'Quotation & Order Form' : 'Proposal';
   var lines = (ev.approvalItems || []).map(function (it) {
     if (it.text) return '• ' + it.area + ':\n    "' + it.text.replace(/\n/g, '\n     ') + '"';
     var ref = it.reference === null || it.reference === undefined ? '' : ' vs ' + it.referenceLabel.toLowerCase() + ' ' + formatMoney(cur, it.reference);
@@ -1799,6 +1857,102 @@ function goLiveFindings(master, props) {
   return out;
 }
 
+// ===================== AcceptLogic.js =====================
+/**
+ * Client acceptance (decision 2026-11-21) – pure rules, tested in Node.
+ * A client receives one secure link per document (Order Form or MSA). On that page they enter a one-time code sent to the
+ * client email on the deal, then either accept online (name, title, "I accept") or upload a signed PDF. The link opens only
+ * that one document; the client never gets Drive access.
+ */
+
+var ACCEPT = { codeMinutes: 15, maxAttempts: 5, maxCodes: 5, maxUploadBytes: 10 * 1024 * 1024, msaValidDays: 30, orderFormValidDays: 30 };
+
+/** State of an acceptance record: OK | EXPIRED | DONE | LOCKED | REVOKED. rec = Acceptances row. */
+function acceptanceState(rec, now) {
+  if (!rec) return 'REVOKED';
+  var st = String(rec.status || '');
+  if (st === 'Accepted' || st === 'Uploaded') return 'DONE';
+  if (st === 'Revoked') return 'REVOKED';
+  if (st === 'Locked' || Number(rec.otp_attempts || 0) >= ACCEPT.maxAttempts) return 'LOCKED';
+  var exp = Date.parse(rec.expires_at instanceof Date ? rec.expires_at.toISOString() : String(rec.expires_at || ''));
+  if (!isNaN(exp) && new Date(now).getTime() > exp) return 'EXPIRED';
+  return 'OK';
+}
+
+/** May a new code be sent? */
+function canSendCode(rec, now) {
+  var s = acceptanceState(rec, now);
+  if (s !== 'OK') return { ok: false, reason: s };
+  if (Number(rec.otp_sends || 0) >= ACCEPT.maxCodes) return { ok: false, reason: 'TOO_MANY_CODES' };
+  return { ok: true };
+}
+
+/**
+ * Check a code. codeHash = hash of the code the client typed (same salt as stored). Returns { ok, reason, attemptsLeft }.
+ * The caller increments otp_attempts on every failed check.
+ */
+function checkCode(rec, codeHash, now) {
+  var s = acceptanceState(rec, now);
+  if (s !== 'OK') return { ok: false, reason: s, attemptsLeft: 0 };
+  var left = ACCEPT.maxAttempts - Number(rec.otp_attempts || 0);
+  if (!rec.otp_hash) return { ok: false, reason: 'NO_CODE', attemptsLeft: left };
+  var exp = Date.parse(rec.otp_expires instanceof Date ? rec.otp_expires.toISOString() : String(rec.otp_expires || ''));
+  if (isNaN(exp) || new Date(now).getTime() > exp) return { ok: false, reason: 'CODE_EXPIRED', attemptsLeft: left };
+  if (String(codeHash) !== String(rec.otp_hash)) return { ok: false, reason: 'WRONG_CODE', attemptsLeft: left - 1 };
+  return { ok: true, attemptsLeft: left };
+}
+
+/** Upload checks: a PDF (by header and name), not empty, at most 10 MB. headerText = first bytes as text. */
+function uploadErrors(fileName, sizeBytes, headerText) {
+  var e = [];
+  if (!/\.pdf$/i.test(String(fileName || ''))) e.push('Please upload a PDF file.');
+  if (String(headerText || '').indexOf('%PDF') !== 0) e.push('The file is not a valid PDF.');
+  if (!(sizeBytes > 0)) e.push('The file is empty.');
+  if (sizeBytes > ACCEPT.maxUploadBytes) e.push('The file is larger than 10 MB.');
+  return e;
+}
+
+/** Required signer details. */
+function signerErrors(name, title) {
+  var e = [];
+  if (String(name || '').trim().length < 2) e.push('Please enter your full name.');
+  if (String(title || '').trim().length < 2) e.push('Please enter your designation.');
+  return e;
+}
+
+function maskEmail(email) {
+  var m = String(email || '').match(/^([^@]{1,2})[^@]*(@.*)$/);
+  return m ? m[1] + '***' + m[2] : '';
+}
+
+/** Rows of the "Electronic acceptance certificate" page added to the accepted PDF. */
+function certificateRows(info) {
+  return [
+    ['Document', info.docLabel + ' No. ' + info.docNo + ' (version ' + info.version + ')'],
+    ['Parties', info.entityName + ' and ' + info.clientName],
+    ['Accepted by', info.name + ', ' + info.title],
+    ['Verified email', info.email + ' (one-time code sent to this address and entered by the signer)'],
+    ['Accepted on', info.atText],
+    ['Method', 'Online acceptance on the OptCulture acceptance page: the signer reviewed the document and confirmed "I accept".'],
+    ['Reference', info.ref]
+  ];
+}
+
+/** Email to the client with the acceptance link (reply-to/CC = the rep). */
+function acceptanceEmail(o) {
+  var subject = o.docLabel + ' ' + o.docNo + ' for your review and acceptance – ' + o.clientName;
+  var lines = [
+    'Dear ' + (o.contactName || o.clientName) + ',', '',
+    'Please find attached the ' + o.docLabel + ' ' + o.docNo + ' from ' + o.entityName + '.', '',
+    'You can review it and either accept it online or upload a signed copy here:', o.link, '',
+    'For security, the page sends a one-time code to this email address before you can accept.',
+    'The link is valid until ' + o.validUntil + ' and opens only this document.', '',
+    'If you have any questions, simply reply to this email.', '',
+    'Kind regards,', o.repName, o.repEmail + (o.repPhone ? ' · ' + o.repPhone : ''), 'OptCulture'
+  ];
+  return { subject: subject, body: lines.join('\n') };
+}
+
 // ===================== MasterData.js =====================
 /** Reads the Master Sheet into { TabName: [objects] } with a short cache. */
 
@@ -1819,7 +1973,7 @@ function readTable_(ss, tab) {
 }
 
 /** All master tabs (cached). Pass true to bypass the cache, e.g. after an admin edit. */
-function getMaster(noCache) {
+function getMaster_(noCache) {
   var cache = CacheService.getScriptCache();
   if (!noCache) {
     var hit = cache.get('MASTER');
@@ -1834,7 +1988,10 @@ function getMaster(noCache) {
   return m;
 }
 
-function clearMasterCache() {
+/** Editor/owner tool (Run menu). Pages cannot use it: only the script owner or a Superadmin. */
+function clearMasterCache() { requireOperator_(); clearMasterCache_(); console.log('Master cache cleared'); }
+
+function clearMasterCache_() {
   CacheService.getScriptCache().remove('MASTER');
 }
 
@@ -1862,9 +2019,23 @@ function getCurrentUser() {
   var email = String(Session.getActiveUser().getEmail() || '').toLowerCase();
   if (!email) return { ok: false, reason: 'Could not read your Google account. Please sign in with your @' + CONFIG.ALLOWED_DOMAIN + ' account.' };
   if (email.split('@')[1] !== CONFIG.ALLOWED_DOMAIN) return { ok: false, email: email, reason: 'Only @' + CONFIG.ALLOWED_DOMAIN + ' accounts can use this app.' };
-  var u = (getMaster().Users || []).filter(function (r) { return String(r.email).toLowerCase() === email; })[0];
+  var u = (getMaster_().Users || []).filter(function (r) { return String(r.email).toLowerCase() === email; })[0];
   if (!u || !isTrue(u.active)) return { ok: false, email: email, reason: 'Your account is not set up yet. Please ask Amith (superadmin) to add you.' };
   return { ok: true, email: email, name: u.name, role: u.role, managerEmail: u.manager_email, region: u.region, phone: u.phone };
+}
+
+/**
+ * Owner/Superadmin-only tools (setup, triggers, backups, self-tests, health checks). Every top-level function can be called
+ * from a web page via google.script.run, so these refuse anyone who is not the script owner (running from the editor) or a
+ * Superadmin. Anonymous visitors of the public acceptance page have no active user and are always refused.
+ */
+function requireOperator_() {
+  var email = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  var owner = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  if (email && email === owner) return;
+  var u = getCurrentUser();
+  if (u.ok && u.role === CONFIG.ROLES.SUPERADMIN) return;
+  throw new Error('Not allowed.');
 }
 
 function requireUser_(allowedRoles) {
@@ -1879,7 +2050,7 @@ function visibleOwners_(user) {
   if (user.role === CONFIG.ROLES.SUPERADMIN) return null;
   var emails = [user.email];
   if (user.role === CONFIG.ROLES.MANAGER) {
-    (getMaster().Users || []).forEach(function (r) {
+    (getMaster_().Users || []).forEach(function (r) {
       if (String(r.manager_email).toLowerCase() === user.email) emails.push(String(r.email).toLowerCase());
     });
   }
@@ -1893,7 +2064,7 @@ function visibleOwners_(user) {
  * A row whose year is "-" never resets and has no year in the number (doc_type CLIENT → C-0001).
  * A row whose year holds a month (yyyymm, e.g. 202611) counts per month (doc_type DEAL → D-202611-0001).
  */
-function nextDocNo(docType, callerHoldsLock) {
+function nextDocNo_(docType, callerHoldsLock) {
   var lock = LockService.getScriptLock();
   if (!callerHoldsLock) lock.waitLock(30000);
   try {
@@ -1962,7 +2133,7 @@ function newId_(prefix) {
 
 /** Short client id C-0001 (falls back to a timestamp id if Numbering has no CLIENT row). Caller holds the script lock. */
 function newClientId_() {
-  try { return nextDocNo('CLIENT', true); } catch (e) { return newId_('C'); }
+  try { return nextDocNo_('CLIENT', true); } catch (e) { return newId_('C'); }
 }
 
 /** Server-owned: the client's signed MSA (Clients tab) on the deal, so the contract stage knows Agreement vs Order Form only. */
@@ -2021,7 +2192,7 @@ function upsertClient_(deal, userEmail) {
 /** Lists for the deal form. */
 function apiFormLists() {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   return {
     countries: m.Countries,
     entities: m.Entities.filter(function (e) { return isTrue(e.active); }).map(function (e) { return { id: e.entity_id, name: e.legal_name, type: e.type, country: e.country }; }),
@@ -2044,8 +2215,8 @@ function safeJson_(s) { try { return JSON.parse(s || '{}'); } catch (e) { return
 function apiEvaluateDeal(deal) {
   var user = requireUser_();
   var stored = deal.dealId ? findDeal_(deal.dealId) : null;
-  var snap = stored && canAccessDeal(user, stored.created_by, getMaster().Users) && !deal.refreshPrices ? JSON.parse(stored.input_json).pricingSnapshot : null;
-  var m = withSnapshot(getMaster(), snap);
+  var snap = stored && canAccessDeal(user, stored.created_by, getMaster_().Users) && !deal.refreshPrices ? JSON.parse(stored.input_json).pricingSnapshot : null;
+  var m = withSnapshot(getMaster_(), snap);
   applyCountryDefaults(m, deal);
   attachClientMsa_(deal);
   return { deal: deal, evaluation: evaluateDeal(m, deal) };
@@ -2054,7 +2225,7 @@ function apiEvaluateDeal(deal) {
 /** Save (create or update) a draft. Returns the saved deal and its evaluation. */
 function apiSaveDeal(deal) {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -2063,7 +2234,7 @@ function apiSaveDeal(deal) {
     if (existing && !canAccessDeal(user, existing.created_by, m.Users)) throw new Error('You do not have access to this deal.');
     deal = protectDealFields(deal, existing ? JSON.parse(existing.input_json) : null, existing ? existing.status : null, pricingSnapshot(m));
     applyCountryDefaults(m, deal);
-    if (!deal.dealId) { try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); } }  // short id D-yyyymm-0001 (falls back if Numbering has no DEAL row)
+    if (!deal.dealId) { try { deal.dealId = nextDocNo_('DEAL', true); } catch (e) { deal.dealId = newId_('D'); } }  // short id D-yyyymm-0001 (falls back if Numbering has no DEAL row)
     deal.clientId = upsertClient_(deal, user.email) || deal.clientId || '';
     attachClientMsa_(deal);
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
@@ -2079,7 +2250,7 @@ function apiSaveDeal(deal) {
 
 function apiListDeals() {
   var user = requireUser_();
-  var users = getMaster().Users;
+  var users = getMaster_().Users;
   return readRecords_('Deals')
     .filter(function (r) { return canAccessDeal(user, r.created_by, users); })
     .map(dealSummary)
@@ -2089,11 +2260,11 @@ function apiListDeals() {
 function apiGetDeal(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster_().Users)) throw new Error('Deal not found or no access.');
   var deal = attachClientMsa_(JSON.parse(rec.input_json));
   deal.status = rec.status;
   audit_('DEAL_VIEWED', {}, dealId);
-  return { deal: deal, evaluation: evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal), summary: dealSummary(rec) };
+  return { deal: deal, evaluation: evaluateDeal(withSnapshot(getMaster_(), deal.pricingSnapshot), deal), summary: dealSummary(rec) };
 }
 
 function apiCloneDeal(dealId) {
@@ -2108,7 +2279,7 @@ function apiCloneDeal(dealId) {
 /** Stage 1 → 2: proposal accepted, prepare Quotation & Order Form + MSA (no new version, same document numbers). */
 function apiConvertToContract(dealId) {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -2179,7 +2350,7 @@ function apiDeleteDeals(dealIds, confirmText) {
 /** Won deal → new top-up deal (Order Form only, contracted prices, own term). Owner, manager or Superadmin. */
 function apiCreateTopUp(parentDealId) {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -2188,7 +2359,7 @@ function apiCreateTopUp(parentDealId) {
     var parent = attachClientMsa_(JSON.parse(rec.input_json));
     if (!canTopUp(parent, rec.status)) throw new Error('A top-up can be created only from a Won deal (not from another top-up).');
     var deal = makeTopUp(parent, evaluateDeal(withSnapshot(m, parent.pricingSnapshot), parent).quote);
-    try { deal.dealId = nextDocNo('DEAL', true); } catch (e) { deal.dealId = newId_('D'); }
+    try { deal.dealId = nextDocNo_('DEAL', true); } catch (e) { deal.dealId = newId_('D'); }
     attachClientMsa_(deal);
     var ev = evaluateDeal(withSnapshot(m, deal.pricingSnapshot), deal);
     var newRec = dealRecord(deal, ev, user.email, new Date().toISOString(), null);
@@ -2204,7 +2375,7 @@ function apiCreateTopUp(parentDealId) {
 // ===================== DocEngine.js =====================
 /**
  * Sprint 4: Google Docs template engine.
- * generateDocument(docType, data, opts) copies the active template, fills it with data from buildDocData(),
+ * generateDocument_(docType, data, opts) copies the active template, fills it with data from buildDocData(),
  * saves it to the right folder, exports a PDF (unless draft), shares it, and records it in the Documents tab.
  *
  * Template syntax: see docs/PLACEHOLDERS.md.
@@ -2220,7 +2391,7 @@ var TABLE_STYLE = { headerBg: '#7B3FE4', headerFg: '#ffffff', border: '#c9d2dc',
  * @param {Object} opts { language, clientName, version, draft (bool), shareWith: [emails], templateFileId (override, for tests) }
  * @return {Object} { docId, docUrl, pdfId, pdfUrl, name, warnings }
  */
-function generateDocument(docType, data, opts) {
+function generateDocument_(docType, data, opts) {
   opts = opts || {};
   var tpl = opts.templateFileId ? { file_id: opts.templateFileId } : getActiveTemplate_(docType, opts.language || 'EN');
   var folder = getOutputFolder_(docType, opts.clientName);
@@ -2271,7 +2442,7 @@ function generateDocument(docType, data, opts) {
 // ---------------- templates & folders ----------------
 
 function getActiveTemplate_(docType, lang) {
-  var t = (getMaster().Templates || []).filter(function (r) {
+  var t = (getMaster_().Templates || []).filter(function (r) {
     return r.doc_type === docType && String(r.language || 'EN') === lang && isTrue(r.active) && r.file_id;
   })[0];
   if (!t) throw new Error('No active ' + lang + ' template for ' + docType + '. Add one in the Templates tab.');
@@ -2684,7 +2855,7 @@ function callGemini_(prompt, model, temperature) {
 /** Draft the proposal narrative. opts = { tone: 'formal' | 'concise', language: 'EN' | 'AR' } */
 function apiDraftNarrative(deal, opts) {
   var user = requireUser_();
-  var m = getMaster();
+  var m = getMaster_();
   var row = (m.AIPrompts || []).filter(function (r) { return r.key === 'PROPOSAL_NARRATIVE'; })[0] || {};
   var raw = callGemini_(buildNarrativePrompt(m, deal, opts), row.model, row.temperature);
   var res = sanitizeNarrative(raw, m);
@@ -2695,6 +2866,7 @@ function apiDraftNarrative(deal, opts) {
 
 /** Editor check: run once after linking the Cloud project. */
 function aiHealthCheck() {
+  requireOperator_();
   var t = callGemini_('Return JSON {"ok": true, "model": "<your model name>"}', null, 0);
   console.log(t);
   return t;
@@ -2710,13 +2882,13 @@ function aiHealthCheck() {
 function apiGenerateDocs(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('Deal not found or no access.');
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster_().Users)) throw new Error('Deal not found or no access.');
   return generateForDeal_(dealId, user);
 }
 
 /** Internal: generate for a deal (caller has already checked access). Used by Generate and by Approve. */
 function generateForDeal_(dealId, user) {
-  var m = getMaster(true);
+  var m = getMaster_(true);
   var rec = findDeal_(dealId);
   var deal = JSON.parse(rec.input_json);
   var pm = withSnapshot(m, deal.pricingSnapshot);
@@ -2727,7 +2899,7 @@ function generateForDeal_(dealId, user) {
 
   // stable document numbers per deal
   deal.docNos = deal.docNos || {};
-  docNumbersNeeded(deal, plan.docTypes).forEach(function (t) { deal.docNos[t] = nextDocNo(t); });
+  docNumbersNeeded(deal, plan.docTypes).forEach(function (t) { deal.docNos[t] = nextDocNo_(t); });
 
   var owner = rec.created_by;
   var ownerUser = (m.Users || []).filter(function (u) { return String(u.email).toLowerCase() === String(owner).toLowerCase(); })[0] || {};
@@ -2735,6 +2907,7 @@ function generateForDeal_(dealId, user) {
   var ownerProfile = { name: ownerUser.name || user.name, email: owner, phone: ownerUser.phone || '' };
 
   archivePreviousVersions_(dealId, deal.version, plan.docTypes);
+  plan.docTypes.forEach(function (t) { revokeOpenAcceptances_(dealId, t); });  // links to an older version stop working
 
   var results = [];
   var related = relatedNumbers(deal);
@@ -2743,7 +2916,7 @@ function generateForDeal_(dealId, user) {
     var lang = docLanguage_(deal, t, pm);
     var data = buildDocData(t, pm, deal, ev.quote, { docNo: deal.docNos[t], docDate: new Date(), user: ownerProfile, related: related, language: lang });
     try {
-      var r = generateDocument(t, data, { clientName: clientName, version: deal.version, draft: plan.mode === 'DRAFT',
+      var r = generateDocument_(t, data, { clientName: clientName, version: deal.version, draft: plan.mode === 'DRAFT',
         language: lang, shareWith: shareWith });
       var tpl = getActiveTemplate_(t, lang);
       appendRecord_('Documents', { doc_no: deal.docNos[t], deal_id: dealId, doc_type: t, language: lang, version: deal.version,
@@ -2805,7 +2978,7 @@ function withoutDocLinks_(list) {
 function apiDealDocuments(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('No access.');
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster_().Users)) throw new Error('No access.');
   return withoutDocLinks_(readRecords_('Documents').filter(function (d) { return d.deal_id === dealId; }).map(function (d) {
     return { docNo: d.doc_no, type: d.doc_type, label: DOC_LABEL[d.doc_type], version: Number(d.version), status: d.status,
       docUrl: d.doc_file_id ? 'https://docs.google.com/document/d/' + d.doc_file_id + '/edit' : '',
@@ -2816,7 +2989,7 @@ function apiDealDocuments(dealId) {
 
 /** Email every Superadmin that a deal is waiting for approval. */
 function notifyApprovers_(deal, ev, user) {
-  var to = (getMaster().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
+  var to = (getMaster_().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
   if (!to.length) return;
   var url = '';
   try { url = ScriptApp.getService().getUrl(); } catch (e) { /* not deployed */ }
@@ -2831,6 +3004,388 @@ function docLanguage_(deal, docType, master) {
   return (availableLanguages(master)[docType] || []).indexOf(want) !== -1 ? want : 'EN';
 }
 
+// ===================== Accept.js =====================
+/**
+ * Client acceptance (decision 2026-11-21): the rep sends the final Order Form (then the MSA) to the client; the client opens a
+ * secure one-document link, verifies with a one-time code, and accepts online or uploads a signed PDF.
+ *
+ * Security
+ *  - Link = 64-hex random token; only its SHA-256 hash is stored (Acceptances tab). One link = one document + version.
+ *  - The client never gets Drive access: the PDF is streamed into the page, uploads are saved by the app.
+ *  - Public functions (apiAccept*) accept only a token; everything else in the app requires an @optculture.com user,
+ *    and operator tools require the owner/Superadmin (requireOperator_).
+ *  - Links expire, are single-use, are revoked when the document is regenerated or resent, and lock after 5 wrong codes.
+ */
+
+var ACCEPT_TAB = 'Acceptances';
+
+function sha256Hex_(s) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(s), Utilities.Charset.UTF_8)
+    .map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
+}
+
+function newToken_() { return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, ''); }
+
+/** Public link base: Script property ACCEPT_BASE_URL (e.g. https://salestools.optculturecx.com/accept/) or PUBLIC_EXEC_URL + "?a=". */
+function acceptBaseUrl_() {
+  var b = getProp_('ACCEPT_BASE_URL');
+  if (b) return b;
+  var x = getProp_('PUBLIC_EXEC_URL');
+  if (x) return x + '?a=';
+  throw new Error('The client acceptance page is not set up yet (Script property ACCEPT_BASE_URL). Ask the app owner.');
+}
+
+/** The final (not draft) generated document of this type and version. */
+function finalDocFor_(dealId, docType, version) {
+  return readRecords_('Documents').filter(function (d) {
+    return d.deal_id === dealId && d.doc_type === docType && Number(d.version) === Number(version) && d.status === 'Final' && d.pdf_file_id;
+  })[0] || null;
+}
+
+/** Revoke every open link for this deal (and document type, if given) – after a resend or a regeneration. */
+function revokeOpenAcceptances_(dealId, docType) {
+  readRecords_(ACCEPT_TAB).forEach(function (a) {
+    if (a.deal_id !== dealId || (docType && a.doc_type !== docType)) return;
+    if (['Sent', 'Locked'].indexOf(String(a.status)) === -1) return;
+    a.status = 'Revoked';
+    writeRecord_(ACCEPT_TAB, a, a._row);
+  });
+}
+
+function dubaiTime_(d) { return Utilities.formatDate(d, 'Asia/Dubai', 'd MMM yyyy, HH:mm') + ' (Dubai time)'; }
+
+function ownerProfile_(createdBy) {
+  var u = (getMaster_().Users || []).filter(function (x) { return String(x.email).toLowerCase() === String(createdBy).toLowerCase(); })[0] || {};
+  return { email: createdBy, name: u.name || createdBy, phone: u.phone || '', manager: u.manager_email || '' };
+}
+
+// ---------------- internal (rep) API ----------------
+
+/** Send the final Order Form / MSA to the client for acceptance. toEmail defaults to the signatory or business contact. */
+function apiSendForAcceptance(dealId, docType, toEmail) {
+  var user = requireUser_();
+  var m = getMaster_();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var rec = findDeal_(dealId);
+    if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
+    var deal = attachClientMsa_(JSON.parse(rec.input_json));
+    if (!canSendForAcceptance(deal, rec.status, docType)) throw new Error('Generate the final ' + DOC_LABEL[docType] + ' first. Drafts waiting for approval cannot be sent.');
+    var doc = finalDocFor_(dealId, docType, deal.version);
+    if (!doc) throw new Error('No final ' + DOC_LABEL[docType] + ' PDF found for version ' + deal.version + '. Generate it again.');
+    var c = deal.client || {};
+    toEmail = String(toEmail || c.signatoryEmail || (c.businessContact || {}).email || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(toEmail)) throw new Error('Enter a valid client email address.');
+    revokeOpenAcceptances_(dealId, docType);
+    var terms = {};
+    (m.CommercialTerms || []).forEach(function (r) { terms[r.key] = r.value; });
+    var days = docType === 'MSA' ? ACCEPT.msaValidDays : Number(terms.quote_valid_days || ACCEPT.orderFormValidDays);
+    var expires = new Date(Date.now() + days * 86400000);
+    var token = newToken_();
+    appendRecord_(ACCEPT_TAB, { token_hash: sha256Hex_(token), deal_id: dealId, doc_type: docType, doc_no: doc.doc_no, version: deal.version,
+      client_email: toEmail, created_at: new Date(), expires_at: expires.toISOString(), status: 'Sent', otp_hash: '', otp_expires: '',
+      otp_attempts: 0, otp_sends: 0, sent_by: user.email, accepted_name: '', accepted_title: '', accepted_email: '', accepted_at: '', method: '', signed_file_id: '' });
+    var entity = (m.Entities || []).filter(function (e) { return e.entity_id === deal.entityId; })[0] || {};
+    var rep = ownerProfile_(user.email);
+    var mail = acceptanceEmail({ docLabel: DOC_LABEL[docType], docNo: doc.doc_no, clientName: c.legalName, contactName: c.signatoryName || (c.businessContact || {}).name,
+      entityName: entity.legal_name || 'OptCulture', link: acceptBaseUrl_() + token, validUntil: formatLongDate(expires), repName: rep.name, repEmail: user.email, repPhone: rep.phone });
+    MailApp.sendEmail({ to: toEmail, cc: user.email, replyTo: user.email, name: 'OptCulture – ' + rep.name, subject: mail.subject, body: mail.body,
+      attachments: [DriveApp.getFileById(doc.pdf_file_id).getBlob()] });
+    deal.acceptance = deal.acceptance || {};
+    deal.acceptance[docType] = { sentAt: new Date().toISOString(), to: toEmail, docNo: doc.doc_no, version: deal.version, sentBy: user.email, validUntil: expires.toISOString() };
+    deal.status = docType === 'MSA' ? DEAL_STATUS.MSA_SENT : DEAL_STATUS.ORDER_FORM_SENT;
+    rec.input_json = JSON.stringify(deal); rec.status = deal.status; rec.updated_at = new Date().toISOString();
+    writeRecord_('Deals', rec, rec._row);
+    audit_('SENT_FOR_ACCEPTANCE', { docType: docType, docNo: doc.doc_no, to: toEmail }, dealId, doc.doc_no);
+    return { sentTo: toEmail, validUntil: expires.toISOString(), summary: dealSummary(rec), deal: deal };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** The rep received a signed copy by email: upload it here (same effect as the client uploading it). */
+function apiRecordSignedCopy(dealId, docType, fileName, base64, signerName, signerTitle) {
+  var user = requireUser_();
+  var m = getMaster_();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var rec = findDeal_(dealId);
+    if (!rec || !canAccessDeal(user, rec.created_by, m.Users)) throw new Error('Deal not found or no access.');
+    var deal = attachClientMsa_(JSON.parse(rec.input_json));
+    if (!canSendForAcceptance(deal, rec.status, docType)) throw new Error('The final ' + DOC_LABEL[docType] + ' must be generated before a signed copy can be recorded.');
+    var doc = finalDocFor_(dealId, docType, deal.version);
+    if (!doc) throw new Error('No final ' + DOC_LABEL[docType] + ' found for version ' + deal.version + '.');
+    var fileId = saveSignedPdf_(doc, fileName, base64);
+    revokeOpenAcceptances_(dealId, docType);
+    var info = { method: 'upload', name: String(signerName || '').trim(), title: String(signerTitle || '').trim(), email: '', at: new Date().toISOString(),
+      signedFileId: fileId, recordedBy: user.email, ref: 'recorded by ' + user.email };
+    var res = finalizeAcceptance_(dealId, docType, doc, info, user.email);
+    return res;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Saves a signed PDF next to the generated document (app-owned; nobody gets new access except the deal owner/manager). */
+function saveSignedPdf_(doc, fileName, base64) {
+  var bytes = Utilities.base64Decode(String(base64 || ''));
+  var header = bytes.slice(0, 5).map(function (b) { return String.fromCharCode(b & 255); }).join('');
+  var errs = uploadErrors(fileName, bytes.length, header);
+  if (errs.length) throw new Error(errs.join(' '));
+  var folder = DriveApp.getFileById(doc.pdf_file_id).getParents().next();
+  var name = doc.doc_no + '_SIGNED_' + Utilities.formatDate(new Date(), 'Asia/Dubai', 'yyyyMMdd-HHmm') + '.pdf';
+  return folder.createFile(Utilities.newBlob(bytes, 'application/pdf', name)).getId();
+}
+
+/** Online acceptance: copy the final Google Doc, add the certificate page, export it as the accepted PDF. */
+function makeCertificatePdf_(doc, info) {
+  var src = DriveApp.getFileById(doc.doc_file_id);
+  var folder = DriveApp.getFileById(doc.pdf_file_id).getParents().next();
+  var copy = src.makeCopy(doc.doc_no + '_ACCEPTED_tmp', folder);
+  try {
+    var d = DocumentApp.openById(copy.getId()), body = d.getBody();
+    body.appendPageBreak();
+    body.appendParagraph('Electronic Acceptance Certificate').setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    body.appendParagraph('This page was added by the OptCulture acceptance system and forms part of the accepted document.');
+    var t = body.appendTable(certificateRows(info));
+    t.setBorderColor(TABLE_STYLE.border);
+    for (var r = 0; r < t.getNumRows(); r++) {
+      t.getRow(r).getCell(0).setBackgroundColor(TABLE_STYLE.firstColBg).editAsText().setBold(true);
+      for (var c = 0; c < 2; c++) t.getRow(r).getCell(c).setPaddingTop(6).setPaddingBottom(6).setPaddingLeft(8).setPaddingRight(8).editAsText().setFontSize(10);
+    }
+    d.saveAndClose();
+    var pdf = folder.createFile(copy.getAs(MimeType.PDF)).setName(doc.doc_no + '_ACCEPTED.pdf');
+    return pdf.getId();
+  } finally {
+    try { copy.setTrashed(true); } catch (e) { /* ignore */ }
+  }
+}
+
+/** Common end of an acceptance (client online/upload or rep upload): deal status, Documents row, sharing, emails, audit. */
+function finalizeAcceptance_(dealId, docType, doc, info, actor) {
+  var rec = findDeal_(dealId);
+  var deal = attachClientMsa_(JSON.parse(rec.input_json));
+  var nd = applyAcceptance(deal, docType, info);
+  rec.input_json = JSON.stringify(nd); rec.status = nd.status; rec.updated_at = new Date().toISOString();
+  writeRecord_('Deals', rec, rec._row);
+  appendRecord_('Documents', { doc_no: doc.doc_no, deal_id: dealId, doc_type: docType, language: doc.language || '', version: doc.version,
+    template_version: '', doc_file_id: '', pdf_file_id: info.signedFileId, created_by: actor, created_at: new Date(),
+    status: info.method === 'upload' ? 'Signed copy' : 'Accepted online' });
+  var owner = ownerProfile_(rec.created_by);
+  shareFiles_([info.signedFileId], [owner.email, owner.manager].filter(Boolean));
+  if (nd.status === DEAL_STATUS.WON) { try { recordClientMsa_(nd); } catch (e) { notifyFailure_('Recording client MSA for ' + dealId, e); } }
+  var c = nd.client || {};
+  var what = DOC_LABEL[docType] + ' ' + doc.doc_no;
+  var how = info.method === 'upload' ? 'A signed copy was uploaded' + (info.recordedBy ? ' by ' + info.recordedBy : ' by the client') : 'Accepted online by ' + info.name + ' (' + info.title + ', ' + info.email + ')';
+  var next = nd.status === DEAL_STATUS.WON ? 'The deal is now WON.' : 'Next: open the deal, prepare the MSA (add any §7 exceptions) and send it to the client.';
+  var to = [owner.email].concat((getMaster_().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; }));
+  try {
+    MailApp.sendEmail({ to: to.filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(','), subject: '[Accepted] ' + what + ' – ' + (c.shortName || c.legalName),
+      body: what + ' for ' + c.legalName + ' (deal ' + dealId + '):\n\n' + how + ' on ' + dubaiTime_(new Date()) + '.\n\n' + next + '\n\nThe signed PDF is attached.\n\n— OptCulture Sales Docs',
+      name: CONFIG.APP_NAME, attachments: [DriveApp.getFileById(info.signedFileId).getBlob()] });
+  } catch (e) { console.warn('acceptance email failed: ' + e); }
+  audit_('CLIENT_ACCEPTED', { docType: docType, docNo: doc.doc_no, method: info.method, by: info.name || actor, status: nd.status }, dealId, doc.doc_no);
+  return { status: nd.status, stage: nd.stage, summary: dealSummary(rec), deal: nd };
+}
+
+// ---------------- public (client) API – token only ----------------
+
+function findAcceptance_(token) {
+  if (!/^[a-f0-9]{64}$/.test(String(token || ''))) return null;
+  var h = sha256Hex_(token);
+  return readRecords_(ACCEPT_TAB).filter(function (r) { return r.token_hash === h; })[0] || null;
+}
+
+/** What the client page shows. The PDF is returned only while the link is open. */
+function apiAcceptInfo(token) {
+  var a = findAcceptance_(token);
+  var state = acceptanceState(a, new Date());
+  if (!a) return { state: 'REVOKED' };
+  var rec = findDeal_(a.deal_id);
+  var deal = rec ? JSON.parse(rec.input_json) : {};
+  var m = getMaster_();
+  var entity = (m.Entities || []).filter(function (e) { return e.entity_id === deal.entityId; })[0] || {};
+  var rep = ownerProfile_(rec ? rec.created_by : '');
+  var out = { state: state, docLabel: DOC_LABEL[a.doc_type], docNo: a.doc_no, clientName: (deal.client || {}).legalName || '', entityName: entity.legal_name || 'OptCulture',
+    repName: rep.name, repEmail: rep.email, email: maskEmail(a.client_email), validUntil: formatLongDate(new Date(a.expires_at)),
+    acceptedAt: a.accepted_at ? dubaiTime_(new Date(a.accepted_at)) : '', method: a.method };
+  if (state === 'OK') {
+    var doc = finalDocFor_(a.deal_id, a.doc_type, a.version);
+    if (!doc) { out.state = 'REVOKED'; return out; }
+    out.pdf = Utilities.base64Encode(DriveApp.getFileById(doc.pdf_file_id).getBlob().getBytes());
+    out.fileName = doc.doc_no + '.pdf';
+  }
+  return out;
+}
+
+function apiAcceptSendCode(token) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var a = findAcceptance_(token);
+    var can = canSendCode(a, new Date());
+    if (!can.ok) throw new Error(acceptMessage_(can.reason));
+    var code = String(100000 + Math.floor(Math.random() * 900000));
+    a.otp_hash = sha256Hex_(a.token_hash + code);
+    a.otp_expires = new Date(Date.now() + ACCEPT.codeMinutes * 60000).toISOString();
+    a.otp_sends = Number(a.otp_sends || 0) + 1;
+    writeRecord_(ACCEPT_TAB, a, a._row);
+    MailApp.sendEmail({ to: a.client_email, name: 'OptCulture', subject: 'Your OptCulture verification code: ' + code,
+      body: 'Your verification code for ' + DOC_LABEL[a.doc_type] + ' ' + a.doc_no + ' is:\n\n' + code + '\n\nIt is valid for ' + ACCEPT.codeMinutes +
+        ' minutes. If you did not request it, you can ignore this email.\n\n— OptCulture' });
+    return { sentTo: maskEmail(a.client_email), minutes: ACCEPT.codeMinutes };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Verifies the code; counts wrong attempts and locks the link after the limit. */
+function verifyCode_(a, code) {
+  var r = checkCode(a, sha256Hex_(a.token_hash + String(code || '').trim()), new Date());
+  if (r.ok) return;
+  if (r.reason === 'WRONG_CODE') {
+    a.otp_attempts = Number(a.otp_attempts || 0) + 1;
+    if (a.otp_attempts >= ACCEPT.maxAttempts) a.status = 'Locked';
+    writeRecord_(ACCEPT_TAB, a, a._row);
+    throw new Error(a.status === 'Locked' ? acceptMessage_('LOCKED') : 'The code is not correct. ' + r.attemptsLeft + ' attempt(s) left.');
+  }
+  throw new Error(acceptMessage_(r.reason));
+}
+
+function apiAcceptOnline(token, code, name, title, agreed) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var a = findAcceptance_(token);
+    if (!a) throw new Error(acceptMessage_('REVOKED'));
+    verifyCode_(a, code);
+    var errs = signerErrors(name, title);
+    if (!agreed) errs.push('Please tick the box to confirm your acceptance.');
+    if (errs.length) throw new Error(errs.join(' '));
+    var doc = finalDocFor_(a.deal_id, a.doc_type, a.version);
+    if (!doc) throw new Error(acceptMessage_('REVOKED'));
+    var rec = findDeal_(a.deal_id), deal = JSON.parse(rec.input_json), m = getMaster_();
+    var entity = (m.Entities || []).filter(function (e) { return e.entity_id === deal.entityId; })[0] || {};
+    var now = new Date();
+    var info = { method: 'online', name: String(name).trim(), title: String(title).trim(), email: a.client_email, at: now.toISOString(), ref: a.token_hash.slice(0, 16) };
+    info.signedFileId = makeCertificatePdf_(doc, { docLabel: DOC_LABEL[a.doc_type], docNo: a.doc_no, version: a.version, entityName: entity.legal_name || 'OptCulture',
+      clientName: (deal.client || {}).legalName, name: info.name, title: info.title, email: a.client_email,
+      atText: dubaiTime_(now) + ' / ' + Utilities.formatDate(now, 'UTC', 'd MMM yyyy, HH:mm') + ' UTC', ref: info.ref });
+    a.status = 'Accepted'; a.accepted_name = info.name; a.accepted_title = info.title; a.accepted_email = a.client_email; a.accepted_at = info.at;
+    a.method = 'online'; a.signed_file_id = info.signedFileId;
+    writeRecord_(ACCEPT_TAB, a, a._row);
+    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email);
+    return { ok: true, acceptedAt: dubaiTime_(now) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function apiAcceptUpload(token, code, name, title, fileName, base64) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var a = findAcceptance_(token);
+    if (!a) throw new Error(acceptMessage_('REVOKED'));
+    verifyCode_(a, code);
+    var errs = signerErrors(name, title);
+    if (errs.length) throw new Error(errs.join(' '));
+    var doc = finalDocFor_(a.deal_id, a.doc_type, a.version);
+    if (!doc) throw new Error(acceptMessage_('REVOKED'));
+    var fileId = saveSignedPdf_(doc, fileName, base64);
+    var info = { method: 'upload', name: String(name).trim(), title: String(title).trim(), email: a.client_email, at: new Date().toISOString(), signedFileId: fileId, ref: a.token_hash.slice(0, 16) };
+    a.status = 'Uploaded'; a.accepted_name = info.name; a.accepted_title = info.title; a.accepted_email = a.client_email; a.accepted_at = info.at;
+    a.method = 'upload'; a.signed_file_id = fileId;
+    writeRecord_(ACCEPT_TAB, a, a._row);
+    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email);
+    return { ok: true, acceptedAt: dubaiTime_(new Date()) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function acceptMessage_(reason) {
+  return {
+    EXPIRED: 'This link has expired. Please ask your OptCulture contact for a new one.',
+    DONE: 'This document has already been accepted. Thank you.',
+    LOCKED: 'Too many wrong codes. This link is locked – please ask your OptCulture contact for a new one.',
+    REVOKED: 'This link is no longer valid (the document may have been updated). Please ask your OptCulture contact for the latest link.',
+    TOO_MANY_CODES: 'Too many codes were requested. Please ask your OptCulture contact for a new link.',
+    NO_CODE: 'Please request a verification code first.',
+    CODE_EXPIRED: 'The code has expired. Please request a new one.'
+  }[reason] || 'This link cannot be used.';
+}
+
+// ===================== AcceptPage.js =====================
+/**
+ * The client's acceptance page (?a=<token>). Self-contained HTML (no extra project file). It only calls the token-based
+ * apiAccept* functions. The document is shown from the PDF bytes returned for that token; the client never gets a Drive link.
+ */
+function acceptPage_(token) {
+  var safe = /^[a-f0-9]{64}$/.test(String(token || '')) ? token : '';
+  var html = ACCEPT_PAGE_HTML.replace('__TOKEN__', safe);
+  return HtmlService.createHtmlOutput(html).setTitle('OptCulture – Review & accept')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+}
+
+var ACCEPT_PAGE_HTML = [
+  '<!doctype html><html><head><meta charset="utf-8"><style>',
+  ':root{--brand:#B6262B;--purple:#7B3FE4;--ink:#1d2733;--muted:#6b7785;--line:#dfe3ea;--bg:#f6f7fb}',
+  'body{margin:0;font-family:Arial,Helvetica,sans-serif;color:var(--ink);background:var(--bg)}',
+  'header{background:#fff;border-bottom:3px solid var(--brand);padding:14px 20px;font-weight:bold;font-size:18px}',
+  'header span{color:var(--brand)}main{max-width:860px;margin:0 auto;padding:16px}',
+  '.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:14px}',
+  'h1{font-size:20px;margin:0 0 6px}h2{font-size:16px;margin:0 0 10px;color:var(--brand)}.muted{color:var(--muted);font-size:14px}',
+  'iframe{width:100%;height:560px;border:1px solid var(--line);border-radius:8px;background:#fff}',
+  'label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}input[type=text],input[type=email]{width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:15px}',
+  'button{background:var(--brand);color:#fff;border:0;border-radius:6px;padding:11px 18px;font-size:15px;cursor:pointer}button.secondary{background:#fff;color:var(--ink);border:1px solid var(--line)}',
+  'button:disabled{opacity:.5;cursor:default}.tabs{display:flex;gap:8px;margin:12px 0}.tabs button{flex:1}.tabs button.on{background:var(--purple)}',
+  '.err{color:#c62828;margin-top:10px}.ok{color:#2e7d32}.hidden{display:none}.row{display:flex;gap:10px;flex-wrap:wrap}.row>div{flex:1;min-width:200px}',
+  '.check{display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:14px}.check input{margin-top:3px}',
+  '</style></head><body><header><span>Opt</span>Culture <span class="muted" style="font-weight:normal;font-size:14px">· Review &amp; accept</span></header><main>',
+  '<div id="state" class="card">Loading…</div>',
+  '<div id="doc" class="card hidden"><h2>1. Review the document</h2><iframe id="pdf" title="Document"></iframe>',
+  '<p class="muted"><a id="dl" href="#" download>Download the PDF</a> to read or print it.</p></div>',
+  '<div id="verify" class="card hidden"><h2>2. Verify your email</h2><p class="muted">We will send a 6-digit code to <b id="em"></b>.</p>',
+  '<button id="send">Send me a code</button> <span id="sent" class="muted"></span>',
+  '<label for="code">Verification code</label><input id="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="max-width:180px"></div>',
+  '<div id="act" class="card hidden"><h2>3. Accept online or upload a signed copy</h2>',
+  '<div class="row"><div><label for="nm">Your full name</label><input id="nm" type="text"></div><div><label for="ti">Your designation</label><input id="ti" type="text"></div></div>',
+  '<div class="tabs"><button class="on" id="tOnline">Accept online</button><button class="secondary" id="tUpload">Upload signed PDF</button></div>',
+  '<div id="pOnline"><div class="check"><input type="checkbox" id="agree"><label for="agree" style="margin:0;color:var(--ink);font-size:14px" id="agreeText"></label></div>',
+  '<p><button id="accept">Accept</button></p></div>',
+  '<div id="pUpload" class="hidden"><label for="file">Signed PDF (max 10 MB)</label><input id="file" type="file" accept="application/pdf,.pdf">',
+  '<p><button id="upload">Upload signed copy</button></p></div>',
+  '<div id="msg" class="err"></div></div>',
+  '<p class="muted" style="text-align:center">This page opens only the document sent to you. Questions? Reply to the email you received.</p>',
+  '</main><script>',
+  'var T="__TOKEN__",INFO=null,MODE="online";function $(i){return document.getElementById(i)}',
+  'function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]})}',
+  'function call(fn){var a=[].slice.call(arguments,1);return new Promise(function(ok,ko){var r=google.script.run.withSuccessHandler(ok).withFailureHandler(function(e){ko(e)});r[fn].apply(r,a)})}',
+  'function msg(t,ok){$("msg").className=ok?"ok":"err";$("msg").textContent=t||""}',
+  'function done(when){["doc","verify","act"].forEach(function(i){$(i).classList.add("hidden")});$("state").innerHTML="<h1 class=ok>Thank you</h1><p>"+esc(INFO.docLabel)+" "+esc(INFO.docNo)+" was received on "+esc(when)+". "+esc(INFO.repName)+" has been notified and will be in touch.</p>"}',
+  'function show(i){INFO=i;var head="<h1>"+esc(i.docLabel||"Document")+" "+esc(i.docNo||"")+"</h1><p class=muted>From "+esc(i.entityName||"OptCulture")+" for "+esc(i.clientName||"")+"</p>";',
+  ' if(i.state==="DONE"){$("state").innerHTML=head+"<p class=ok>This document has already been accepted"+(i.acceptedAt?" on "+esc(i.acceptedAt):"")+". Thank you.</p>";return}',
+  ' if(i.state!=="OK"){$("state").innerHTML=head+"<p class=err>"+({EXPIRED:"This link has expired.",LOCKED:"This link is locked after too many wrong codes.",REVOKED:"This link is no longer valid."}[i.state]||"This link cannot be used.")+" Please contact "+esc(i.repName||"your OptCulture contact")+(i.repEmail?" ("+esc(i.repEmail)+")":"")+" for a new link.</p>";return}',
+  ' $("state").innerHTML=head+"<p class=muted>Please review the document, verify your email and then accept it online or upload a signed copy. Link valid until "+esc(i.validUntil)+".</p>";',
+  ' var bin=atob(i.pdf),u8=new Uint8Array(bin.length);for(var k=0;k<bin.length;k++)u8[k]=bin.charCodeAt(k);var url=URL.createObjectURL(new Blob([u8],{type:"application/pdf"}));',
+  ' $("pdf").src=url;$("dl").href=url;$("dl").setAttribute("download",i.fileName||"document.pdf");$("em").textContent=i.email;',
+  ' $("agreeText").textContent="I have reviewed the "+i.docLabel+" "+i.docNo+" and accept it on behalf of "+i.clientName+", and I confirm I am authorised to do so.";',
+  ' ["doc","verify","act"].forEach(function(x){$(x).classList.remove("hidden")})}',
+  '$("send").onclick=function(){var b=$("send");b.disabled=true;msg("");call("apiAcceptSendCode",T).then(function(r){$("sent").textContent="Code sent to "+r.sentTo+" – valid "+r.minutes+" minutes.";setTimeout(function(){b.disabled=false;b.textContent="Send a new code"},30000)}).catch(function(e){b.disabled=false;msg(e.message)})};',
+  '$("tOnline").onclick=function(){MODE="online";$("tOnline").className="on";$("tUpload").className="secondary";$("pOnline").classList.remove("hidden");$("pUpload").classList.add("hidden")};',
+  '$("tUpload").onclick=function(){MODE="upload";$("tUpload").className="on";$("tOnline").className="secondary";$("pUpload").classList.remove("hidden");$("pOnline").classList.add("hidden")};',
+  'function need(){var c=$("code").value.trim();if(!/^\\d{6}$/.test(c)){msg("Enter the 6-digit code from your email (step 2).");return null}return c}',
+  '$("accept").onclick=function(){var c=need();if(!c)return;var b=$("accept");b.disabled=true;msg("Recording your acceptance…",true);call("apiAcceptOnline",T,c,$("nm").value,$("ti").value,$("agree").checked).then(function(r){done(r.acceptedAt)}).catch(function(e){b.disabled=false;msg(e.message)})};',
+  '$("upload").onclick=function(){var c=need();if(!c)return;var f=$("file").files[0];if(!f){msg("Choose the signed PDF to upload.");return}if(f.size>10485760){msg("The file is larger than 10 MB.");return}',
+  ' var b=$("upload");b.disabled=true;msg("Uploading…",true);var rd=new FileReader();rd.onload=function(){var b64=String(rd.result).split(",")[1];call("apiAcceptUpload",T,c,$("nm").value,$("ti").value,f.name,b64).then(function(r){done(r.acceptedAt)}).catch(function(e){b.disabled=false;msg(e.message)})};rd.readAsDataURL(f)};',
+  'if(!T){$("state").innerHTML="<p class=err>This link is not valid.</p>"}else{call("apiAcceptInfo",T).then(show).catch(function(e){$("state").innerHTML="<p class=err>"+esc(e.message)+"</p>"})}',
+  '</script></body></html>'
+].join('\n');
+
 // ===================== Approvals.js =====================
 /**
  * Sprint 8: approvals queue (Superadmin), pipeline status, dashboards, sharing re-sync.
@@ -2838,7 +3393,7 @@ function docLanguage_(deal, docType, master) {
 
 function apiListApprovals() {
   requireUser_([CONFIG.ROLES.SUPERADMIN]);
-  var users = getMaster().Users;
+  var users = getMaster_().Users;
   var deals = {};
   readRecords_('Deals').forEach(function (r) { deals[r.deal_id] = r; });
   return readRecords_('Approvals').filter(function (a) { return !a.decision; }).map(function (a) {
@@ -2850,12 +3405,12 @@ function apiListApprovals() {
       approvalId: a.approval_id, dealId: a.deal_id, version: Number(a.version), requestedAt: a.requested_at instanceof Date ? a.requested_at.toISOString() : String(a.requested_at),
       requestedBy: owner.name || rec.created_by, reasons: String(a.reasons || '').split(' | '), note: d.approvalNote || '',
       items: approvalItemsFor_(d), what: d.dealType === 'TOPUP' ? 'Top-up Order Form (of ' + ((d.topupOf || {}).dealId || '') + ')' :
-        (d.stage === 'CONTRACT' ? (contractMode(d) === 'NEW_MSA' ? 'Quotation & Order Form + MSA' : 'Quotation & Order Form') : 'Proposal'),
+        (d.stage === 'MSA' ? 'Master Services Agreement (§7 exceptions)' : d.stage === 'CONTRACT' ? 'Quotation & Order Form' : 'Proposal'),
       client: d.client.legalName, country: d.client.country, currency: rec.currency, summary: dealSummary(rec),
       packages: q ? q.packages.map(function (p) { return { name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite,
         specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal }; }) : [],
       comms: q ? (q.comms || []).filter(function (c) { return c.specialPrice !== null; }) : [],
-      changes: q ? changesSinceProposal(getMaster(), d.proposalBaseline, d, q) : [],
+      changes: q ? changesSinceProposal(getMaster_(), d.proposalBaseline, d, q) : [],
       documents: apiDealDocuments(a.deal_id).filter(function (x) { return Number(x.version) === Number(a.version); })
     };
   }).filter(Boolean);
@@ -2863,7 +3418,7 @@ function apiListApprovals() {
 
 /** Fresh, structured list of what needs approval (from the deal's frozen prices). */
 function approvalItemsFor_(deal) {
-  try { return evaluateDeal(withSnapshot(getMaster(), deal.pricingSnapshot), deal).approvalItems || []; } catch (e) { return []; }
+  try { return evaluateDeal(withSnapshot(getMaster_(), deal.pricingSnapshot), deal).approvalItems || []; } catch (e) { return []; }
 }
 
 /** Approve or reject. Approve → final documents are generated automatically. */
@@ -2913,8 +3468,11 @@ function apiDecideApproval(approvalId, decision, comment) {
 function apiSetDealStatus(dealId, status) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
-  if (!rec || !canAccessDeal(user, rec.created_by, getMaster().Users)) throw new Error('No access.');
-  if (!canSetStatus(rec.status, status)) throw new Error('A deal can be marked ' + status + ' only after its documents are generated.');
+  if (!rec || !canAccessDeal(user, rec.created_by, getMaster_().Users)) throw new Error('No access.');
+  if (!canSetStatus(rec.status, status, user.role === CONFIG.ROLES.SUPERADMIN)) {
+    throw new Error(status === 'Won' ? 'A deal becomes Won when the client accepts the MSA (or the Order Form, if they already have an MSA). Only the Superadmin can mark Won by hand.'
+      : 'A deal can be marked ' + status + ' only after its documents are generated.');
+  }
   var deal = JSON.parse(rec.input_json);
   deal.status = status; rec.status = status; rec.input_json = JSON.stringify(deal); rec.updated_at = new Date().toISOString();
   writeRecord_('Deals', rec, rec._row);
@@ -2926,16 +3484,16 @@ function apiSetDealStatus(dealId, status) {
 /** Dashboard for every role. Rep: own deals. Manager: own + team. Superadmin: everyone. */
 function apiDashboard(opts) {
   var user = requireUser_();  // everyone: rep = own, manager = team, superadmin = all
-  var users = getMaster().Users;
+  var users = getMaster_().Users;
   var rows = readRecords_('Deals').filter(function (r) { return canAccessDeal(user, r.created_by, users); }).map(dealSummary);
   return { stats: dashboardStats(rows, users, new Date(), { periodDays: (opts || {}).periodDays || 0, staleDays: staleDaysSetting_(),
-    partners: user.role === CONFIG.ROLES.SUPERADMIN ? getMaster().Partners || [] : null }), deals: rows };
+    partners: user.role === CONFIG.ROLES.SUPERADMIN ? getMaster_().Partners || [] : null }), deals: rows };
 }
 
 /** Superadmin tool: re-apply file sharing (owner + current manager) on every final/draft document, e.g. after a team change. */
 function apiResyncSharing() {
   requireUser_([CONFIG.ROLES.SUPERADMIN]);
-  var users = getMaster().Users, deals = {}, n = 0;
+  var users = getMaster_().Users, deals = {}, n = 0;
   readRecords_('Deals').forEach(function (r) { deals[r.deal_id] = r; });
   readRecords_('Documents').forEach(function (d) {
     var rec = deals[d.deal_id];
@@ -2949,7 +3507,7 @@ function apiResyncSharing() {
 }
 
 function staleDaysSetting_() {
-  var r = (getMaster().CommercialTerms || []).filter(function (x) { return x.key === 'stale_days'; })[0];
+  var r = (getMaster_().CommercialTerms || []).filter(function (x) { return x.key === 'stale_days'; })[0];
   return r && Number(r.value) > 0 ? Number(r.value) : 60;
 }
 
@@ -2991,7 +3549,7 @@ function apiAdminSaveRow(tab, rowNumber, obj, reason) {
     var before = rowNumber ? existing.filter(function (r) { return r._row === rowNumber; })[0] : null;
     if (rowNumber && !before) throw new Error('Row not found – reload and try again.');
     writeRecord_(tab, res.row, rowNumber || null);
-    clearMasterCache();
+    clearMasterCache_();
     var changed = before ? headers.filter(function (h) { return String(before[h]) !== String(res.row[h]); }) : headers;
     appendRecord_('ChangeLog', { date: new Date(), raised_by: user.email, area: tab, change: (before ? 'Edited ' : 'Added ') + res.row[key] + ': ' +
       changed.map(function (h) { return h + (before ? ' ' + before[h] + ' → ' : ' = ') + res.row[h]; }).join('; ') + (reason ? ' — ' + reason : ''),
@@ -3009,7 +3567,7 @@ function apiAdminCheckTemplate(fileIdOrUrl, docType) {
   var id = String(fileIdOrUrl).replace(/^.*\/d\/([a-zA-Z0-9_-]+).*$/, '$1');
   var doc = DocumentApp.openById(id);
   var text = [doc.getBody().getText(), doc.getHeader() ? doc.getHeader().getText() : '', doc.getFooter() ? doc.getFooter().getText() : ''].join('\n');
-  var m = getMaster();
+  var m = getMaster_();
   var sample = sampleDealForChecks_();
   var data = buildDocData(docType, m, sample, buildQuote(m, sample.commercial), { docNo: 'CHECK', related: { PROPOSAL: 'x', ORDER_FORM: 'x', MSA: 'x' } });
   var unknown = checkTemplateTokens(text, data).filter(function (t) { return ['label', 'amount', 'title', 'text'].indexOf(t) === -1; });
@@ -3055,6 +3613,10 @@ function backupMasterSheet() {
   try {
     var src = DriveApp.getFileById(getProp_('MASTER_SHEET_ID'));
     var folder = getOrCreateFolder_(DriveApp.getFolderById(getProp_('FOLDER_ARCHIVE')), 'Backups');
+    // Runs from the daily trigger; also callable by name from a page, so at most one backup per 20 hours (no flooding).
+    var latest = 0, chk = folder.getFiles();
+    while (chk.hasNext()) latest = Math.max(latest, chk.next().getDateCreated().getTime());
+    if (Date.now() - latest < 20 * 3600 * 1000) { console.log('Backup skipped: last backup is less than 20 hours old'); return; }
     src.makeCopy('Master DB backup ' + Utilities.formatDate(new Date(), 'Asia/Dubai', 'yyyy-MM-dd HH:mm'), folder);
     var files = [], it = folder.getFiles();
     while (it.hasNext()) files.push(it.next());
@@ -3069,6 +3631,7 @@ function backupMasterSheet() {
 
 /** Install the daily backup (02:00 Dubai). Safe to run more than once. */
 function installTriggers() {
+  requireOperator_();
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'backupMasterSheet') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('backupMasterSheet').timeBased().everyDays(1).atHour(2).inTimezone('Asia/Dubai').create();
   setProp_('BACKUP_TRIGGER', new Date().toISOString());
@@ -3078,7 +3641,7 @@ function installTriggers() {
 /** Email superadmins (and alert_email, if set) when something important fails. Never throws. */
 function notifyFailure_(context, err) {
   try {
-    var m = getMaster();
+    var m = getMaster_();
     var to = (m.Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
     var extra = ((m.CommercialTerms || []).filter(function (r) { return r.key === 'alert_email'; })[0] || {}).value;
     if (extra) to.push(extra);
@@ -3091,10 +3654,11 @@ function notifyFailure_(context, err) {
 
 /** Editor + Admin check before go-live. */
 function goLiveCheck() {
+  requireOperator_();
   var props = PropertiesService.getScriptProperties().getProperties();
-  var findings = goLiveFindings(getMaster(true), props);
+  var findings = goLiveFindings(getMaster_(true), props);
   // live checks: templates and logo can be opened
-  (getMaster().Templates || []).filter(function (t) { return isTrue(t.active); }).forEach(function (t) {
+  (getMaster_().Templates || []).filter(function (t) { return isTrue(t.active); }).forEach(function (t) {
     try { DriveApp.getFileById(t.file_id).getName(); } catch (e) { findings.push({ level: 'BLOCKER', item: 'Template ' + t.doc_type + ' ' + t.language, detail: 'file cannot be opened' }); }
   });
   findings.push({ level: MailApp.getRemainingDailyQuota() > 50 ? 'OK' : 'WARN', item: 'Email quota', detail: MailApp.getRemainingDailyQuota() + ' left today' });
@@ -3119,6 +3683,7 @@ function apiGoLiveCheck() {
  */
 
 function setupAll() {
+  requireOperator_();
   setupFolders();
   setupMasterSheet();
 }
@@ -3135,6 +3700,7 @@ function getOrCreateFolder_(parent, name) {
 }
 
 function setupFolders() {
+  requireOperator_();
   var root = getRootFolder_();
   var ids = {};
   Object.keys(CONFIG.FOLDERS).forEach(function (k) {
@@ -3146,6 +3712,7 @@ function setupFolders() {
 }
 
 function setupMasterSheet() {
+  requireOperator_();
   var ss;
   var id = getProp_('MASTER_SHEET_ID');
   if (id) {
@@ -3177,7 +3744,7 @@ function setupMasterSheet() {
 
   writeSchemaReadme_(ss);
   protectMasterTabs_(ss);
-  clearMasterCache();
+  clearMasterCache_();
   console.log('Master Sheet ready: ' + ss.getUrl());
   return ss.getUrl();
 }
@@ -3216,7 +3783,8 @@ function protectMasterTabs_(ss) {
  * and logs the result URLs and any warnings. Expected: 0 warnings.
  */
 function engineSelfTest() {
-  var master = getMaster(true);
+  requireOperator_();
+  var master = getMaster_(true);
   var deal = {
     dealId: 'SELFTEST', version: 1,
     client: { legalName: 'Sample Retail LLC', shortName: 'Sample', country: 'United Arab Emirates', address: 'Dubai, UAE',
@@ -3248,7 +3816,7 @@ function engineSelfTest() {
   b.appendParagraph('Valid until {{ValidUntil}}. Prepared by {{RepName}}.');
   tplDoc.saveAndClose();
 
-  var res = generateDocument('PROPOSAL', data, { templateFileId: tplDoc.getId(), clientName: 'SELFTEST', version: 1 });
+  var res = generateDocument_('PROPOSAL', data, { templateFileId: tplDoc.getId(), clientName: 'SELFTEST', version: 1 });
   DriveApp.getFileById(tplDoc.getId()).setTrashed(true);
   console.log(JSON.stringify(res, null, 2));
   return res;
@@ -3260,7 +3828,8 @@ function engineSelfTest() {
  * Output goes to the normal folders under client "SAMPLE – …". Logs links + warnings.
  */
 function generateSampleDocs() {
-  var master = getMaster(true);
+  requireOperator_();
+  var master = getMaster_(true);
   var user = getCurrentUser();
   var deals = [
     {
@@ -3298,7 +3867,7 @@ function generateSampleDocs() {
     DOC_TYPES.forEach(function (type) {
       var data = buildDocData(type, master, deal, quote, { docNo: related[type], docDate: new Date(), user: user, related: related });
       try {
-        var r = generateDocument(type, data, { clientName: 'SAMPLE – ' + deal.client.shortName, version: 1 });
+        var r = generateDocument_(type, data, { clientName: 'SAMPLE – ' + deal.client.shortName, version: 1 });
         results.push({ deal: deal.dealId, type: type, doc: r.docUrl, pdf: r.pdfUrl, warnings: r.warnings });
       } catch (e) {
         results.push({ deal: deal.dealId, type: type, error: String(e) });
@@ -3315,6 +3884,7 @@ function generateSampleDocs() {
  * Values come from docs/ENVIRONMENT.md (IDs, not secrets).
  */
 function setupScriptProperties() {
+  requireOperator_();
   PropertiesService.getScriptProperties().setProperties({
     ROOT_FOLDER_ID: '0ANyaAwry0iF7Uk9PVA',
     MASTER_SHEET_ID: '1JhduuRvkkn1m--MqBz6WwKD4Gj2uLCFcF14onzr6fKk',
@@ -3330,7 +3900,8 @@ function setupScriptProperties() {
 
 /** Health check: confirms the app can read the Master Sheet and folders. Run after setupScriptProperties(). */
 function healthCheck() {
-  var m = getMaster(true);
+  requireOperator_();
+  var m = getMaster_(true);
   var out = {
     masterTabs: Object.keys(m).length,
     users: m.Users.length,
@@ -3348,7 +3919,8 @@ function healthCheck() {
 // ===================== Code.js =====================
 /** Web app entry point and client-callable API (google.script.run). */
 
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.a) return acceptPage_(e.parameter.a);  // client acceptance page (public deployment)
   var t = uiTemplate_();
   return t.evaluate()
     .setTitle(CONFIG.APP_NAME)
@@ -3364,7 +3936,7 @@ function include(name) {
 function apiBootstrap() {
   var user = getCurrentUser();
   if (!user.ok) return { user: user };
-  var m = getMaster();
+  var m = getMaster_();
   return {
     user: user,
     lists: {
@@ -3384,7 +3956,7 @@ function apiBootstrap() {
 /** Live price preview (Sprint 3 / used by the deal wizard in Sprint 6). */
 function apiPreviewQuote(input) {
   requireUser_();
-  return buildQuote(getMaster(), input);
+  return buildQuote(getMaster_(), input);
 }
 
 /** UI file is "ui/Index" when pushed with clasp, "Index" when pasted from dist/. */

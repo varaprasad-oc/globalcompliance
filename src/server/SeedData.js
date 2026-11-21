@@ -282,6 +282,12 @@ var SEED = {
     kind: 'record',
     headers: ['approval_id', 'deal_id', 'version', 'requested_by', 'requested_at', 'reasons', 'decision', 'decided_by', 'decided_at', 'comment']
   },
+  Acceptances: {
+    kind: 'record',
+    headers: ['token_hash', 'deal_id', 'doc_type', 'doc_no', 'version', 'client_email', 'created_at', 'expires_at', 'status',
+      'otp_hash', 'otp_expires', 'otp_attempts', 'otp_sends', 'sent_by', 'accepted_name', 'accepted_title', 'accepted_email',
+      'accepted_at', 'method', 'signed_file_id']
+  },
   AuditLog: {
     kind: 'record',
     headers: ['timestamp', 'user_email', 'action', 'deal_id', 'doc_no', 'details']
