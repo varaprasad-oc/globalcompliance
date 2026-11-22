@@ -185,3 +185,9 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 
 ## Superadmin account (2026-11-22, Varaprasad)
 - Amith's Superadmin account is **amith@optculture.com** (replaces amith.lulla@optculture.com permanently). All approvals are done from this account. Live Users tab, manager of Varaprasad and CommercialTerms.executive_contact_email updated.
+
+## Acceptance page v2 + client emails (2026-11-22, Varaprasad)
+- Client page: enter the code → **Verify** → "Verified as …" → step 3 (accept online / upload) unlocks for 30 minutes (separate session ticket; code is single-use).
+- Client may add up to 5 extra addresses ("Also send the signed copy to"); saved on the deal (clientCc) and CC'd on later emails (MSA link and confirmations, top-ups).
+- After acceptance/upload: ONE confirmation email with the signed PDF – To: client; CC: added addresses, rep (deal owner + sender) and Amith; reply-to rep. The separate internal "[Accepted]" email is dropped (next steps show in Action needed).
+- Client email wording lives in the **EmailTemplates** tab (OF_SENT, CODE, OF_CONFIRMED, MSA_SENT, MSA_CONFIRMED) and is **editable by the Superadmin in Admin**; placeholders {Name} are validated on save. Every email carries the "system generated – contact your rep for changes" note. Users tab has a `title` column for the rep signature.

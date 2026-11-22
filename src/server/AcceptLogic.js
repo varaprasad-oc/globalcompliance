@@ -78,7 +78,72 @@ function certificateRows(info) {
   ];
 }
 
-/** Email to the client with the acceptance link (reply-to/CC = the rep). */
+/**
+ * Client emails come from the EmailTemplates tab (Superadmin can edit them in Admin). Placeholders are written {Name}.
+ * Allowed placeholders per template – anything else is rejected when the template is saved.
+ */
+var EMAIL_VARS = {
+  common: ['DocTitle', 'DocNo', 'Client', 'ClientContact', 'Entity', 'RepName', 'RepTitle', 'RepEmail', 'RepPhone', 'RepSignature', 'OrderFormNo', 'MsaNo'],
+  OF_SENT: ['Link', 'ValidUntil'],
+  MSA_SENT: ['Link', 'ValidUntil', 'SpecialTermsSentence'],
+  CODE: ['Code', 'Minutes'],
+  OF_CONFIRMED: ['AcceptedHow', 'AcceptedAt', 'NextStep'],
+  MSA_CONFIRMED: ['AcceptedHow', 'AcceptedAt']
+};
+var EMAIL_TEMPLATE_KEYS = ['OF_SENT', 'CODE', 'OF_CONFIRMED', 'MSA_SENT', 'MSA_CONFIRMED'];
+
+/** Placeholders used in a template that are not allowed for its key. */
+function unknownEmailPlaceholders(key, subject, body) {
+  var allowed = EMAIL_VARS.common.concat(EMAIL_VARS[key] || []);
+  var used = (String(subject || '') + '\n' + String(body || '')).match(/\{([A-Za-z]+)\}/g) || [];
+  return used.map(function (t) { return t.slice(1, -1); }).filter(function (n, i, a) { return allowed.indexOf(n) === -1 && a.indexOf(n) === i; });
+}
+
+/** Fill a template: {Name} → value. Lines that end up empty because of an empty value-only line are dropped. */
+function renderEmailTemplate(tpl, vars) {
+  var fill = function (t) { return String(t || '').replace(/\{([A-Za-z]+)\}/g, function (m, n) { return vars[n] === undefined || vars[n] === null ? '' : String(vars[n]); }); };
+  var lines = String(tpl.body || '').split('\n').filter(function (line) {
+    var only = line.trim().match(/^\{([A-Za-z]+)\}$/);
+    return !(only && !String(vars[only[1]] || '').trim());
+  });
+  return { subject: fill(tpl.subject).trim(), body: fill(lines.join('\n')).replace(/\n{3,}/g, '\n\n').trim() };
+}
+
+/** Rep signature block (empty parts skipped). */
+function repSignature(rep, entityName) {
+  return [rep.name + (rep.title ? ' · ' + rep.title : ''), [rep.email, rep.phone].filter(String).join(' · '), entityName].filter(function (x) { return String(x || '').trim(); }).join('\n');
+}
+
+/** "Also send the signed copy to": up to 5 valid, de-duplicated addresses. */
+function parseCcEmails(input) {
+  var list = Array.isArray(input) ? input : String(input || '').split(/[,;\s]+/);
+  var emails = [], errors = [];
+  list.map(function (e) { return String(e || '').trim().toLowerCase(); }).filter(String).forEach(function (e) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) errors.push('Not a valid email address: ' + e);
+    else if (emails.indexOf(e) === -1) emails.push(e);
+  });
+  if (emails.length > 5) errors.push('Please add at most 5 email addresses.');
+  return { emails: emails.slice(0, 5), errors: errors };
+}
+
+/** After the code is verified the client has a 30-minute session (a separate random ticket) to accept or upload. */
+var ACCEPT_SESSION_MINUTES = 30;
+function checkSession(rec, ticketHash, now) {
+  var s = acceptanceState(rec, now);
+  if (s !== 'OK') return { ok: false, reason: s };
+  if (!rec.session_hash || String(ticketHash) !== String(rec.session_hash)) return { ok: false, reason: 'NOT_VERIFIED' };
+  var exp = Date.parse(rec.session_expires instanceof Date ? rec.session_expires.toISOString() : String(rec.session_expires || ''));
+  if (isNaN(exp) || new Date(now).getTime() > exp) return { ok: false, reason: 'SESSION_EXPIRED' };
+  return { ok: true };
+}
+
+/** Next-step sentence of the Order Form confirmation. */
+function orderFormNextStep(needsMsa, msaNo) {
+  return needsMsa ? 'Our team will shortly share the Master Services Agreement for your review.'
+    : 'Your order is confirmed' + (msaNo ? ' under Master Services Agreement ' + msaNo : '') + '. Our team will be in touch about the next steps.';
+}
+
+/** Email to the client with the acceptance link (legacy helper kept for tests; the live emails use the templates). */
 function acceptanceEmail(o) {
   var subject = o.docLabel + ' ' + o.docNo + ' for your review and acceptance – ' + o.clientName;
   var lines = [

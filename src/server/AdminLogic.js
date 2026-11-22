@@ -18,7 +18,8 @@ var ADMIN_TABS = {
   Partners: { key: 'partner_id', bool: ['active'], numeric: ['commission_pct'] },
   SubProcessors: { key: 'name', bool: ['active'], numeric: ['display_order'] },
   Templates: { key: 'file_id', bool: ['active'], numeric: [] },
-  AIPrompts: { key: 'key', bool: [], numeric: ['temperature'] }
+  AIPrompts: { key: 'key', bool: [], numeric: ['temperature'] },
+  EmailTemplates: { key: 'template_key', bool: [], numeric: [] }
 };
 
 /** Pricing tabs frozen into each deal so old deals keep their prices after a price-list change. */
@@ -50,6 +51,12 @@ function coerceAdminRow(tab, headers, obj) {
   if (tab === 'Currencies' && !(row.fx_rate > 0)) errors.push('fx_rate must be greater than 0');
   if (tab === 'CommsTiers' && row.floor_usd !== '' && row.list_usd !== '' && row.floor_usd > row.list_usd) errors.push('floor_usd cannot be above list_usd');
   if (tab === 'Features') ['Engagement', 'Loyalty', 'Advanced'].forEach(function (p) { if (p in row && ['Included', 'Not included', 'Add-on'].indexOf(row[p]) === -1) errors.push(p + ' must be Included, Not included or Add-on'); });
+  if (tab === 'EmailTemplates') {
+    if (EMAIL_TEMPLATE_KEYS.indexOf(row.template_key) === -1) errors.push('template_key must be one of ' + EMAIL_TEMPLATE_KEYS.join(', '));
+    if (!String(row.subject || '').trim() || !String(row.body || '').trim()) errors.push('Subject and body are required');
+    var bad = unknownEmailPlaceholders(row.template_key, row.subject, row.body);
+    if (bad.length) errors.push('Unknown placeholder(s): ' + bad.map(function (b) { return '{' + b + '}'; }).join(', ') + '. Allowed: ' + EMAIL_VARS.common.concat(EMAIL_VARS[row.template_key] || []).map(function (b) { return '{' + b + '}'; }).join(' '));
+  }
   if (tab === 'Templates' && ['PROPOSAL', 'ORDER_FORM', 'MSA'].indexOf(row.doc_type) === -1) errors.push('doc_type must be PROPOSAL, ORDER_FORM or MSA');
   if (tab === 'Templates' && ['EN', 'AR', 'BI'].indexOf(row.language) === -1) errors.push('language must be EN, AR or BI');
   return { ok: errors.length === 0, row: row, errors: errors };

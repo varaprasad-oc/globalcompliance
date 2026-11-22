@@ -99,10 +99,10 @@ function sheetSafe(v) {
 var SEED = {
   Users: {
     kind: 'master',
-    headers: ['email', 'name', 'role', 'manager_email', 'region', 'phone', 'active'],
+    headers: ['email', 'name', 'role', 'manager_email', 'region', 'phone', 'active', 'title'],
     rows: [
-      ['amith@optculture.com', 'Amith Lulla', 'Superadmin', '', 'Global', '', true],
-      ['varaprasad@optculture.com', 'Varaprasad SN', 'Manager', 'amith@optculture.com', 'MEA', '+971 52 904 5457', true]
+      ['amith@optculture.com', 'Amith Lulla', 'Superadmin', '', 'Global', '', true, 'Chief Executive Officer'],
+      ['varaprasad@optculture.com', 'Varaprasad SN', 'Manager', 'amith@optculture.com', 'MEA', '+971 52 904 5457', true, '']
     ]
   },
 
@@ -341,6 +341,19 @@ var SEED = {
     rows: []
   },
 
+  // Client emails (acceptance flow). Superadmin can edit subject/body in Admin; placeholders {Name} are validated.
+  EmailTemplates: {
+    kind: 'master',
+    headers: ['template_key', 'subject', 'body', 'notes'],
+    rows: [
+      ["OF_SENT", "{DocTitle} {DocNo} – {Client} – for your review and acceptance", "Dear {ClientContact},\n\nThank you for choosing OptCulture. Please find attached our {DocTitle} {DocNo} for {Client}, setting out the subscription, fees and payment terms we discussed.\n\nReview and accept online:\n{Link}\n\nOn that page you can accept the document online or upload a signed copy. For security, a one-time verification code will be sent to this email address. The link opens only this document and is valid until {ValidUntil}.\n\nUntil a Master Services Agreement is signed, this Order Form is governed by the OptCulture Terms of Service, Data Processing Agreement and Service Level Agreement available at optculture.com.\n\nKind regards,\n{RepSignature}\n\nThis email and the attached document are system generated. For any changes, please contact {RepName} ({RepEmail}).", "Sent with the Order Form (and top-up Order Form) acceptance link."],
+      ["CODE", "Your OptCulture verification code: {Code}", "Your verification code for {DocTitle} {DocNo} is: {Code}\n\nIt is valid for {Minutes} minutes.\n\nIf you did not request this code, please ignore this email or let {RepName} ({RepEmail}) know.\n\nThis email is system generated. Please do not reply to it; contact {RepName} for any questions.", "One-time code on the acceptance page. Sent to the client only."],
+      ["OF_CONFIRMED", "Confirmed: {DocTitle} {DocNo} – {Client}", "Dear {ClientContact},\n\nThank you. We confirm that {DocTitle} {DocNo} for {Client} was {AcceptedHow} on {AcceptedAt}.\n\nA copy of the accepted document is attached for your records.\n\nNext step: {NextStep}\n\nKind regards,\n{RepSignature}\n\nThis email and the attached document are system generated. For any changes, please contact {RepName} ({RepEmail}).", "To the client; CC added addresses, rep, sender and Amith. Signed PDF attached."],
+      ["MSA_SENT", "Master Services Agreement {MsaNo} – {Client} – for your review and acceptance", "Dear {ClientContact},\n\nFollowing your acceptance of Order Form {OrderFormNo}, please find attached the Master Services Agreement {MsaNo} between {Entity} and {Client}. {SpecialTermsSentence}\n\nReview and accept online:\n{Link}\n\nAs before, you can accept online or upload a signed copy after verifying your email. The link is valid until {ValidUntil}.\n\nKind regards,\n{RepSignature}\n\nThis email and the attached document are system generated. For any changes, please contact {RepName} ({RepEmail}).", "Sent with the MSA acceptance link (CC saved client addresses and the rep)."],
+      ["MSA_CONFIRMED", "Confirmed: Master Services Agreement {MsaNo} – {Client} – welcome to OptCulture", "Dear {ClientContact},\n\nThank you. We confirm that Master Services Agreement {MsaNo} was {AcceptedHow} on {AcceptedAt}. Together with Order Form {OrderFormNo}, your agreement with OptCulture is now complete.\n\nA copy is attached for your records. Our onboarding team will contact you shortly to plan the next steps.\n\nKind regards,\n{RepSignature}\n\nThis email and the attached document are system generated. For any changes, please contact {RepName} ({RepEmail}).", "To the client; CC added addresses, rep, sender and Amith. Signed PDF attached."]
+    ]
+  },
+
   AIPrompts: {
     kind: 'master',
     headers: ['key', 'model', 'temperature', 'prompt'],
@@ -378,7 +391,7 @@ var SEED = {
     kind: 'record',
     headers: ['token_hash', 'deal_id', 'doc_type', 'doc_no', 'version', 'client_email', 'created_at', 'expires_at', 'status',
       'otp_hash', 'otp_expires', 'otp_attempts', 'otp_sends', 'sent_by', 'accepted_name', 'accepted_title', 'accepted_email',
-      'accepted_at', 'method', 'signed_file_id']
+      'accepted_at', 'method', 'signed_file_id', 'session_hash', 'session_expires', 'cc_emails']
   },
   AuditLog: {
     kind: 'record',
@@ -1441,7 +1454,7 @@ function cloneDeal(deal, newId) {
   c.status = DEAL_STATUS.DRAFT;
   c.client = c.client || {};
   delete c.docNos; delete c.pricingSnapshot; delete c.approvalNote; delete c.aiDraft;  // a clone gets new numbers and today's prices
-  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true }; delete c.proposalBaseline; delete c.dealType; delete c.topupOf; delete c.topup;
+  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true }; delete c.proposalBaseline; delete c.dealType; delete c.topupOf; delete c.topup; delete c.clientCc; delete c.acceptance;
   return c;
 }
 
@@ -1454,7 +1467,7 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   var refresh = !!d.refreshPrices;
   delete d.refreshPrices;
   if (!stored) {
-    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT; delete d.dealType; delete d.topupOf;
+    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT; delete d.dealType; delete d.topupOf; delete d.clientCc; delete d.acceptance;
     delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId; delete d.proposalBaseline;
     d.stage = 'PROPOSAL'; d.docs = { PROPOSAL: true };
     return d;
@@ -1465,6 +1478,7 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   d.clientId = stored.clientId;
   if (stored.dealType) d.dealType = stored.dealType; else delete d.dealType;
   d.acceptance = stored.acceptance;  // client acceptance records: server-owned
+  d.clientCc = stored.clientCc;      // addresses the client added on the acceptance page
   if (stored.stage === 'MSA') {
     // Order Form accepted: commercials and party details are locked; only MSA fields can change
     var keepClient = JSON.parse(JSON.stringify(stored.client || {})), inc = d.client || {};
@@ -1548,7 +1562,7 @@ function makeTopUp(parent, parentQuote) {
   return {
     dealType: 'TOPUP', stage: 'CONTRACT', status: DEAL_STATUS.CONTRACT_DRAFT, version: 1,
     client: JSON.parse(JSON.stringify(parent.client || {})), clientId: parent.clientId, entityId: parent.entityId,
-    language: parent.language, referralPartnerId: parent.referralPartnerId || '',
+    language: parent.language, referralPartnerId: parent.referralPartnerId || '', clientCc: (parent.clientCc || []).slice(),
     pricingSnapshot: parent.pricingSnapshot,
     topupOf: { dealId: parent.dealId, orderFormNo: (parent.docNos || {}).ORDER_FORM || '', msaNo: msaNo, package: pkg,
       contractedPricePerSite: op.finalPricePerSite || null, baseSites: Number(com.stores || 0) + Number(com.ecomSites || 0),
@@ -1752,7 +1766,8 @@ var ADMIN_TABS = {
   Partners: { key: 'partner_id', bool: ['active'], numeric: ['commission_pct'] },
   SubProcessors: { key: 'name', bool: ['active'], numeric: ['display_order'] },
   Templates: { key: 'file_id', bool: ['active'], numeric: [] },
-  AIPrompts: { key: 'key', bool: [], numeric: ['temperature'] }
+  AIPrompts: { key: 'key', bool: [], numeric: ['temperature'] },
+  EmailTemplates: { key: 'template_key', bool: [], numeric: [] }
 };
 
 /** Pricing tabs frozen into each deal so old deals keep their prices after a price-list change. */
@@ -1784,6 +1799,12 @@ function coerceAdminRow(tab, headers, obj) {
   if (tab === 'Currencies' && !(row.fx_rate > 0)) errors.push('fx_rate must be greater than 0');
   if (tab === 'CommsTiers' && row.floor_usd !== '' && row.list_usd !== '' && row.floor_usd > row.list_usd) errors.push('floor_usd cannot be above list_usd');
   if (tab === 'Features') ['Engagement', 'Loyalty', 'Advanced'].forEach(function (p) { if (p in row && ['Included', 'Not included', 'Add-on'].indexOf(row[p]) === -1) errors.push(p + ' must be Included, Not included or Add-on'); });
+  if (tab === 'EmailTemplates') {
+    if (EMAIL_TEMPLATE_KEYS.indexOf(row.template_key) === -1) errors.push('template_key must be one of ' + EMAIL_TEMPLATE_KEYS.join(', '));
+    if (!String(row.subject || '').trim() || !String(row.body || '').trim()) errors.push('Subject and body are required');
+    var bad = unknownEmailPlaceholders(row.template_key, row.subject, row.body);
+    if (bad.length) errors.push('Unknown placeholder(s): ' + bad.map(function (b) { return '{' + b + '}'; }).join(', ') + '. Allowed: ' + EMAIL_VARS.common.concat(EMAIL_VARS[row.template_key] || []).map(function (b) { return '{' + b + '}'; }).join(' '));
+  }
   if (tab === 'Templates' && ['PROPOSAL', 'ORDER_FORM', 'MSA'].indexOf(row.doc_type) === -1) errors.push('doc_type must be PROPOSAL, ORDER_FORM or MSA');
   if (tab === 'Templates' && ['EN', 'AR', 'BI'].indexOf(row.language) === -1) errors.push('language must be EN, AR or BI');
   return { ok: errors.length === 0, row: row, errors: errors };
@@ -1938,7 +1959,72 @@ function certificateRows(info) {
   ];
 }
 
-/** Email to the client with the acceptance link (reply-to/CC = the rep). */
+/**
+ * Client emails come from the EmailTemplates tab (Superadmin can edit them in Admin). Placeholders are written {Name}.
+ * Allowed placeholders per template – anything else is rejected when the template is saved.
+ */
+var EMAIL_VARS = {
+  common: ['DocTitle', 'DocNo', 'Client', 'ClientContact', 'Entity', 'RepName', 'RepTitle', 'RepEmail', 'RepPhone', 'RepSignature', 'OrderFormNo', 'MsaNo'],
+  OF_SENT: ['Link', 'ValidUntil'],
+  MSA_SENT: ['Link', 'ValidUntil', 'SpecialTermsSentence'],
+  CODE: ['Code', 'Minutes'],
+  OF_CONFIRMED: ['AcceptedHow', 'AcceptedAt', 'NextStep'],
+  MSA_CONFIRMED: ['AcceptedHow', 'AcceptedAt']
+};
+var EMAIL_TEMPLATE_KEYS = ['OF_SENT', 'CODE', 'OF_CONFIRMED', 'MSA_SENT', 'MSA_CONFIRMED'];
+
+/** Placeholders used in a template that are not allowed for its key. */
+function unknownEmailPlaceholders(key, subject, body) {
+  var allowed = EMAIL_VARS.common.concat(EMAIL_VARS[key] || []);
+  var used = (String(subject || '') + '\n' + String(body || '')).match(/\{([A-Za-z]+)\}/g) || [];
+  return used.map(function (t) { return t.slice(1, -1); }).filter(function (n, i, a) { return allowed.indexOf(n) === -1 && a.indexOf(n) === i; });
+}
+
+/** Fill a template: {Name} → value. Lines that end up empty because of an empty value-only line are dropped. */
+function renderEmailTemplate(tpl, vars) {
+  var fill = function (t) { return String(t || '').replace(/\{([A-Za-z]+)\}/g, function (m, n) { return vars[n] === undefined || vars[n] === null ? '' : String(vars[n]); }); };
+  var lines = String(tpl.body || '').split('\n').filter(function (line) {
+    var only = line.trim().match(/^\{([A-Za-z]+)\}$/);
+    return !(only && !String(vars[only[1]] || '').trim());
+  });
+  return { subject: fill(tpl.subject).trim(), body: fill(lines.join('\n')).replace(/\n{3,}/g, '\n\n').trim() };
+}
+
+/** Rep signature block (empty parts skipped). */
+function repSignature(rep, entityName) {
+  return [rep.name + (rep.title ? ' · ' + rep.title : ''), [rep.email, rep.phone].filter(String).join(' · '), entityName].filter(function (x) { return String(x || '').trim(); }).join('\n');
+}
+
+/** "Also send the signed copy to": up to 5 valid, de-duplicated addresses. */
+function parseCcEmails(input) {
+  var list = Array.isArray(input) ? input : String(input || '').split(/[,;\s]+/);
+  var emails = [], errors = [];
+  list.map(function (e) { return String(e || '').trim().toLowerCase(); }).filter(String).forEach(function (e) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) errors.push('Not a valid email address: ' + e);
+    else if (emails.indexOf(e) === -1) emails.push(e);
+  });
+  if (emails.length > 5) errors.push('Please add at most 5 email addresses.');
+  return { emails: emails.slice(0, 5), errors: errors };
+}
+
+/** After the code is verified the client has a 30-minute session (a separate random ticket) to accept or upload. */
+var ACCEPT_SESSION_MINUTES = 30;
+function checkSession(rec, ticketHash, now) {
+  var s = acceptanceState(rec, now);
+  if (s !== 'OK') return { ok: false, reason: s };
+  if (!rec.session_hash || String(ticketHash) !== String(rec.session_hash)) return { ok: false, reason: 'NOT_VERIFIED' };
+  var exp = Date.parse(rec.session_expires instanceof Date ? rec.session_expires.toISOString() : String(rec.session_expires || ''));
+  if (isNaN(exp) || new Date(now).getTime() > exp) return { ok: false, reason: 'SESSION_EXPIRED' };
+  return { ok: true };
+}
+
+/** Next-step sentence of the Order Form confirmation. */
+function orderFormNextStep(needsMsa, msaNo) {
+  return needsMsa ? 'Our team will shortly share the Master Services Agreement for your review.'
+    : 'Your order is confirmed' + (msaNo ? ' under Master Services Agreement ' + msaNo : '') + '. Our team will be in touch about the next steps.';
+}
+
+/** Email to the client with the acceptance link (legacy helper kept for tests; the live emails use the templates). */
 function acceptanceEmail(o) {
   var subject = o.docLabel + ' ' + o.docNo + ' for your review and acceptance – ' + o.clientName;
   var lines = [
@@ -3056,7 +3142,36 @@ function dubaiTime_(d) { return Utilities.formatDate(d, 'Asia/Dubai', 'd MMM yyy
 
 function ownerProfile_(createdBy) {
   var u = (getMaster_().Users || []).filter(function (x) { return String(x.email).toLowerCase() === String(createdBy).toLowerCase(); })[0] || {};
-  return { email: createdBy, name: u.name || createdBy, phone: u.phone || '', manager: u.manager_email || '' };
+  return { email: createdBy, name: u.name || createdBy, phone: u.phone || '', manager: u.manager_email || '', title: u.title || '' };
+}
+
+/** Email template (EmailTemplates tab, editable by the Superadmin) – falls back to the seeded wording. */
+function emailTemplate_(key) {
+  var rows = (getMaster_().EmailTemplates || []).filter(function (r) { return r.template_key === key && String(r.subject || '').trim() && String(r.body || '').trim(); });
+  if (rows.length) return rows[0];
+  var seed = (SEED.EmailTemplates.rows || []).filter(function (r) { return r[0] === key; })[0];
+  return { template_key: key, subject: seed[1], body: seed[2] };
+}
+
+/** Placeholders shared by every client email of a deal. */
+function emailVars_(deal, docType, docNo, rep) {
+  var m = getMaster_(), c = deal.client || {};
+  var entity = (m.Entities || []).filter(function (e) { return e.entity_id === deal.entityId; })[0] || {};
+  var title = docType === 'MSA' ? 'Master Services Agreement' : (deal.dealType === 'TOPUP' ? 'Top-up Quotation & Order Form' : 'Quotation & Order Form');
+  var msaNo = (deal.docNos || {}).MSA || ((existingMsa(deal) || {}).no) || '';
+  return { DocTitle: title, DocNo: docNo, Client: c.legalName || '', ClientContact: c.signatoryName || (c.businessContact || {}).name || c.legalName || '',
+    Entity: entity.legal_name || 'OptCulture', RepName: rep.name, RepTitle: rep.title || '', RepEmail: rep.email, RepPhone: rep.phone || '',
+    RepSignature: repSignature(rep, entity.legal_name || 'OptCulture'), OrderFormNo: (deal.docNos || {}).ORDER_FORM || '', MsaNo: msaNo };
+}
+
+function uniqEmails_(list, exclude) {
+  var ex = (exclude || []).map(function (e) { return String(e).toLowerCase(); }), out = [];
+  list.forEach(function (e) { e = String(e || '').trim().toLowerCase(); if (e && ex.indexOf(e) === -1 && out.indexOf(e) === -1) out.push(e); });
+  return out;
+}
+
+function superadminEmails_() {
+  return (getMaster_().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
 }
 
 // ---------------- internal (rep) API ----------------
@@ -3086,11 +3201,13 @@ function apiSendForAcceptance(dealId, docType, toEmail) {
     appendRecord_(ACCEPT_TAB, { token_hash: sha256Hex_(token), deal_id: dealId, doc_type: docType, doc_no: doc.doc_no, version: deal.version,
       client_email: toEmail, created_at: new Date(), expires_at: expires.toISOString(), status: 'Sent', otp_hash: '', otp_expires: '',
       otp_attempts: 0, otp_sends: 0, sent_by: user.email, accepted_name: '', accepted_title: '', accepted_email: '', accepted_at: '', method: '', signed_file_id: '' });
-    var entity = (m.Entities || []).filter(function (e) { return e.entity_id === deal.entityId; })[0] || {};
     var rep = ownerProfile_(user.email);
-    var mail = acceptanceEmail({ docLabel: DOC_LABEL[docType], docNo: doc.doc_no, clientName: c.legalName, contactName: c.signatoryName || (c.businessContact || {}).name,
-      entityName: entity.legal_name || 'OptCulture', link: acceptBaseUrl_() + token, validUntil: formatLongDate(expires), repName: rep.name, repEmail: user.email, repPhone: rep.phone });
-    MailApp.sendEmail({ to: toEmail, cc: user.email, replyTo: user.email, name: 'OptCulture – ' + rep.name, subject: mail.subject, body: mail.body,
+    var vars = emailVars_(deal, docType, doc.doc_no, rep);
+    vars.Link = acceptBaseUrl_() + token; vars.ValidUntil = formatLongDate(expires);
+    vars.SpecialTermsSentence = msaExceptions(deal) ? 'Section 7 records the special terms we agreed.' : 'It contains our standard terms, with no special terms.';
+    var mail = renderEmailTemplate(emailTemplate_(docType === 'MSA' ? 'MSA_SENT' : 'OF_SENT'), vars);
+    var cc = uniqEmails_([user.email, rec.created_by].concat(deal.clientCc || []), [toEmail]);
+    MailApp.sendEmail({ to: toEmail, cc: cc.join(','), replyTo: user.email, name: 'OptCulture – ' + rep.name, subject: mail.subject, body: mail.body,
       attachments: [DriveApp.getFileById(doc.pdf_file_id).getBlob()] });
     deal.acceptance = deal.acceptance || {};
     deal.acceptance[docType] = { sentAt: new Date().toISOString(), to: toEmail, docNo: doc.doc_no, version: deal.version, sentBy: user.email, validUntil: expires.toISOString() };
@@ -3121,7 +3238,7 @@ function apiRecordSignedCopy(dealId, docType, fileName, base64, signerName, sign
     revokeOpenAcceptances_(dealId, docType);
     var info = { method: 'upload', name: String(signerName || '').trim(), title: String(signerTitle || '').trim(), email: '', at: new Date().toISOString(),
       signedFileId: fileId, recordedBy: user.email, ref: 'recorded by ' + user.email };
-    var res = finalizeAcceptance_(dealId, docType, doc, info, user.email);
+    var res = finalizeAcceptance_(dealId, docType, doc, info, user.email, []);
     return res;
   } finally {
     lock.releaseLock();
@@ -3164,10 +3281,11 @@ function makeCertificatePdf_(doc, info) {
 }
 
 /** Common end of an acceptance (client online/upload or rep upload): deal status, Documents row, sharing, emails, audit. */
-function finalizeAcceptance_(dealId, docType, doc, info, actor) {
+function finalizeAcceptance_(dealId, docType, doc, info, actor, ccEmails) {
   var rec = findDeal_(dealId);
   var deal = attachClientMsa_(JSON.parse(rec.input_json));
   var nd = applyAcceptance(deal, docType, info);
+  nd.clientCc = uniqEmails_((deal.clientCc || []).concat(ccEmails || []), []);  // saved for the MSA emails
   rec.input_json = JSON.stringify(nd); rec.status = nd.status; rec.updated_at = new Date().toISOString();
   writeRecord_('Deals', rec, rec._row);
   appendRecord_('Documents', { doc_no: doc.doc_no, deal_id: dealId, doc_type: docType, language: doc.language || '', version: doc.version,
@@ -3176,17 +3294,21 @@ function finalizeAcceptance_(dealId, docType, doc, info, actor) {
   var owner = ownerProfile_(rec.created_by);
   shareFiles_([info.signedFileId], [owner.email, owner.manager].filter(Boolean));
   if (nd.status === DEAL_STATUS.WON) { try { recordClientMsa_(nd); } catch (e) { notifyFailure_('Recording client MSA for ' + dealId, e); } }
-  var c = nd.client || {};
-  var what = DOC_LABEL[docType] + ' ' + doc.doc_no;
-  var how = info.method === 'upload' ? 'A signed copy was uploaded' + (info.recordedBy ? ' by ' + info.recordedBy : ' by the client') : 'Accepted online by ' + info.name + ' (' + info.title + ', ' + info.email + ')';
-  var next = nd.status === DEAL_STATUS.WON ? 'The deal is now WON.' : 'Next: open the deal, prepare the MSA (add any §7 exceptions) and send it to the client.';
-  var to = [owner.email].concat((getMaster_().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; }));
+  // ONE confirmation email: client (To), added client addresses + rep + sender + Superadmin (CC), signed PDF attached.
   try {
-    MailApp.sendEmail({ to: to.filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(','), subject: '[Accepted] ' + what + ' – ' + (c.shortName || c.legalName),
-      body: what + ' for ' + c.legalName + ' (deal ' + dealId + '):\n\n' + how + ' on ' + dubaiTime_(new Date()) + '.\n\n' + next + '\n\nThe signed PDF is attached.\n\n— OptCulture Sales Docs',
-      name: CONFIG.APP_NAME, attachments: [DriveApp.getFileById(info.signedFileId).getBlob()] });
-  } catch (e) { console.warn('acceptance email failed: ' + e); }
-  audit_('CLIENT_ACCEPTED', { docType: docType, docNo: doc.doc_no, method: info.method, by: info.name || actor, status: nd.status }, dealId, doc.doc_no);
+    var c = nd.client || {};
+    var to = info.email || ((nd.acceptance || {})[docType] || {}).to || c.signatoryEmail || (c.businessContact || {}).email;
+    var sentBy = ((deal.acceptance || {})[docType] || {}).sentBy || '';
+    var vars = emailVars_(nd, docType, doc.doc_no, owner);
+    vars.AcceptedHow = (info.method === 'upload' ? 'signed and uploaded by ' : 'accepted online by ') + [info.name, info.title].filter(String).join(', ');
+    vars.AcceptedAt = dubaiTime_(new Date(info.at || Date.now()));
+    vars.NextStep = orderFormNextStep(nd.stage === 'MSA' && nd.status !== DEAL_STATUS.WON, vars.MsaNo);
+    var mail = renderEmailTemplate(emailTemplate_(docType === 'MSA' ? 'MSA_CONFIRMED' : 'OF_CONFIRMED'), vars);
+    var cc = uniqEmails_(nd.clientCc.concat([owner.email, sentBy]).concat(superadminEmails_()), [to]);
+    MailApp.sendEmail({ to: to, cc: cc.join(','), replyTo: owner.email, name: 'OptCulture – ' + owner.name, subject: mail.subject, body: mail.body,
+      attachments: [DriveApp.getFileById(info.signedFileId).getBlob()] });
+  } catch (e) { console.warn('confirmation email failed: ' + e); notifyFailure_('Acceptance confirmation email for ' + dealId, e); }
+  audit_('CLIENT_ACCEPTED', { docType: docType, docNo: doc.doc_no, method: info.method, by: info.name || actor, status: nd.status, cc: nd.clientCc }, dealId, doc.doc_no);
   return { status: nd.status, stage: nd.stage, summary: dealSummary(rec), deal: nd };
 }
 
@@ -3200,7 +3322,7 @@ function doPost(e) {
   var out;
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    var routes = { apiAcceptInfo: apiAcceptInfo, apiAcceptSendCode: apiAcceptSendCode, apiAcceptOnline: apiAcceptOnline, apiAcceptUpload: apiAcceptUpload };
+    var routes = { apiAcceptInfo: apiAcceptInfo, apiAcceptSendCode: apiAcceptSendCode, apiAcceptVerify: apiAcceptVerify, apiAcceptOnline: apiAcceptOnline, apiAcceptUpload: apiAcceptUpload };
     var fn = routes[req.fn];
     if (!fn) throw new Error('Unknown request.');
     out = { ok: true, result: fn.apply(null, Array.isArray(req.args) ? req.args : []) };
@@ -3250,9 +3372,11 @@ function apiAcceptSendCode(token) {
     a.otp_expires = new Date(Date.now() + ACCEPT.codeMinutes * 60000).toISOString();
     a.otp_sends = Number(a.otp_sends || 0) + 1;
     writeRecord_(ACCEPT_TAB, a, a._row);
-    MailApp.sendEmail({ to: a.client_email, name: 'OptCulture', subject: 'Your OptCulture verification code: ' + code,
-      body: 'Your verification code for ' + DOC_LABEL[a.doc_type] + ' ' + a.doc_no + ' is:\n\n' + code + '\n\nIt is valid for ' + ACCEPT.codeMinutes +
-        ' minutes. If you did not request it, you can ignore this email.\n\n— OptCulture' });
+    var rec = findDeal_(a.deal_id), deal = rec ? attachClientMsa_(JSON.parse(rec.input_json)) : {};
+    var vars = emailVars_(deal, a.doc_type, a.doc_no, ownerProfile_(rec ? rec.created_by : ''));
+    vars.Code = code; vars.Minutes = ACCEPT.codeMinutes;
+    var mail = renderEmailTemplate(emailTemplate_('CODE'), vars);
+    MailApp.sendEmail({ to: a.client_email, name: 'OptCulture', subject: mail.subject, body: mail.body });
     return { sentTo: maskEmail(a.client_email), minutes: ACCEPT.codeMinutes };
   } finally {
     lock.releaseLock();
@@ -3272,13 +3396,45 @@ function verifyCode_(a, code) {
   throw new Error(acceptMessage_(r.reason));
 }
 
-function apiAcceptOnline(token, code, name, title, agreed) {
+/** Step 2: check the code now; on success the client gets a 30-minute verified session (ticket) for step 3. */
+function apiAcceptVerify(token, code) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var a = findAcceptance_(token);
+    if (!a) throw new Error(acceptMessage_('REVOKED'));
+    verifyCode_(a, code);
+    var ticket = newToken_();
+    a.session_hash = sha256Hex_(ticket);
+    a.session_expires = new Date(Date.now() + ACCEPT_SESSION_MINUTES * 60000).toISOString();
+    a.otp_hash = '';  // the code is used up
+    writeRecord_(ACCEPT_TAB, a, a._row);
+    return { ticket: ticket, email: maskEmail(a.client_email), minutes: ACCEPT_SESSION_MINUTES };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function verifySession_(a, ticket) {
+  if (/^\d{6}$/.test(String(ticket || '').trim())) { verifyCode_(a, ticket); return; }  // older page: code entered at Accept
+  var r = checkSession(a, sha256Hex_(String(ticket || '')), new Date());
+  if (!r.ok) throw new Error(acceptMessage_(r.reason));
+}
+
+function ccFrom_(input) {
+  var p = parseCcEmails(input);
+  if (p.errors.length) throw new Error(p.errors.join(' '));
+  return p.emails;
+}
+
+function apiAcceptOnline(token, ticket, name, title, agreed, ccInput) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     var a = findAcceptance_(token);
     if (!a) throw new Error(acceptMessage_('REVOKED'));
-    verifyCode_(a, code);
+    verifySession_(a, ticket);
+    var cc = ccFrom_(ccInput);
     var errs = signerErrors(name, title);
     if (!agreed) errs.push('Please tick the box to confirm your acceptance.');
     if (errs.length) throw new Error(errs.join(' '));
@@ -3292,22 +3448,23 @@ function apiAcceptOnline(token, code, name, title, agreed) {
       clientName: (deal.client || {}).legalName, name: info.name, title: info.title, email: a.client_email,
       atText: dubaiTime_(now) + ' / ' + Utilities.formatDate(now, 'UTC', 'd MMM yyyy, HH:mm') + ' UTC', ref: info.ref });
     a.status = 'Accepted'; a.accepted_name = info.name; a.accepted_title = info.title; a.accepted_email = a.client_email; a.accepted_at = info.at;
-    a.method = 'online'; a.signed_file_id = info.signedFileId;
+    a.method = 'online'; a.signed_file_id = info.signedFileId; a.cc_emails = cc.join(','); a.session_hash = '';
     writeRecord_(ACCEPT_TAB, a, a._row);
-    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email);
+    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email, cc);
     return { ok: true, acceptedAt: dubaiTime_(now) };
   } finally {
     lock.releaseLock();
   }
 }
 
-function apiAcceptUpload(token, code, name, title, fileName, base64) {
+function apiAcceptUpload(token, ticket, name, title, fileName, base64, ccInput) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     var a = findAcceptance_(token);
     if (!a) throw new Error(acceptMessage_('REVOKED'));
-    verifyCode_(a, code);
+    verifySession_(a, ticket);
+    var cc = ccFrom_(ccInput);
     var errs = signerErrors(name, title);
     if (errs.length) throw new Error(errs.join(' '));
     var doc = finalDocFor_(a.deal_id, a.doc_type, a.version);
@@ -3315,9 +3472,9 @@ function apiAcceptUpload(token, code, name, title, fileName, base64) {
     var fileId = saveSignedPdf_(doc, fileName, base64);
     var info = { method: 'upload', name: String(name).trim(), title: String(title).trim(), email: a.client_email, at: new Date().toISOString(), signedFileId: fileId, ref: a.token_hash.slice(0, 16) };
     a.status = 'Uploaded'; a.accepted_name = info.name; a.accepted_title = info.title; a.accepted_email = a.client_email; a.accepted_at = info.at;
-    a.method = 'upload'; a.signed_file_id = fileId;
+    a.method = 'upload'; a.signed_file_id = fileId; a.cc_emails = cc.join(','); a.session_hash = '';
     writeRecord_(ACCEPT_TAB, a, a._row);
-    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email);
+    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email, cc);
     return { ok: true, acceptedAt: dubaiTime_(new Date()) };
   } finally {
     lock.releaseLock();
@@ -3332,7 +3489,9 @@ function acceptMessage_(reason) {
     REVOKED: 'This link is no longer valid (the document may have been updated). Please ask your OptCulture contact for the latest link.',
     TOO_MANY_CODES: 'Too many codes were requested. Please ask your OptCulture contact for a new link.',
     NO_CODE: 'Please request a verification code first.',
-    CODE_EXPIRED: 'The code has expired. Please request a new one.'
+    CODE_EXPIRED: 'The code has expired. Please request a new one.',
+    NOT_VERIFIED: 'Please verify your email first (step 2).',
+    SESSION_EXPIRED: 'Your verification has expired (30 minutes). Please request a new code and verify again.'
   }[reason] || 'This link cannot be used.';
 }
 
@@ -3369,9 +3528,11 @@ var ACCEPT_PAGE_HTML = [
   '<p class="muted"><a id="dl" href="#" download>Download the PDF</a> to read or print it.</p></div>',
   '<div id="verify" class="card hidden"><h2>2. Verify your email</h2><p class="muted">We will send a 6-digit code to <b id="em"></b>.</p>',
   '<button id="send">Send me a code</button> <span id="sent" class="muted"></span>',
-  '<label for="code">Verification code</label><input id="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="max-width:180px"></div>',
+  '<label for="code">Verification code</label><div class="row" style="align-items:center"><div style="flex:0 0 190px;min-width:0"><input id="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></div><div style="flex:0 0 auto;min-width:0"><button id="verify">Verify</button></div></div>',
+  '<p id="verified" class="ok hidden" style="font-weight:bold"></p><div id="vmsg" class="err"></div></div>',
   '<div id="act" class="card hidden"><h2>3. Accept online or upload a signed copy</h2>',
   '<div class="row"><div><label for="nm">Your full name</label><input id="nm" type="text"></div><div><label for="ti">Your designation</label><input id="ti" type="text"></div></div>',
+  '<label for="cc">Also send the signed copy to (optional – up to 5 email addresses, separated by commas)</label><input id="cc" type="text" placeholder="e.g. finance@yourcompany.com, legal@yourcompany.com">',
   '<div class="tabs"><button class="on" id="tOnline">Accept online</button><button class="secondary" id="tUpload">Upload signed PDF</button></div>',
   '<div id="pOnline"><div class="check"><input type="checkbox" id="agree"><label for="agree" style="margin:0;color:var(--ink);font-size:14px" id="agreeText"></label></div>',
   '<p><button id="accept">Accept</button></p></div>',
@@ -3380,11 +3541,11 @@ var ACCEPT_PAGE_HTML = [
   '<div id="msg" class="err"></div></div>',
   '<p class="muted" style="text-align:center">This page opens only the document sent to you. Questions? Reply to the email you received.</p>',
   '</main><script>',
-  'var T=__TOKEN_EXPR__,INFO=null,MODE="online";function $(i){return document.getElementById(i)}',
+  'var T=__TOKEN_EXPR__,INFO=null,MODE="online",TICKET="";function $(i){return document.getElementById(i)}',
   'function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]})}',
   '__CALL_FN__',
   'function msg(t,ok){$("msg").className=ok?"ok":"err";$("msg").textContent=t||""}',
-  'function done(when){["doc","verify","act"].forEach(function(i){$(i).classList.add("hidden")});$("state").innerHTML="<h1 class=ok>Thank you</h1><p>"+esc(INFO.docLabel)+" "+esc(INFO.docNo)+" was received on "+esc(when)+". "+esc(INFO.repName)+" has been notified and will be in touch.</p>"}',
+  'function done(when){["doc","verify","act"].forEach(function(i){$(i).classList.add("hidden")});$("state").innerHTML="<h1 class=ok>Thank you</h1><p>"+esc(INFO.docLabel)+" "+esc(INFO.docNo)+" was received on "+esc(when)+". A confirmation with the signed copy has been emailed to you"+($("cc").value.trim()?" and the addresses you added":"")+", and "+esc(INFO.repName)+" will be in touch.</p>"}',
   'function show(i){INFO=i;var head=i.docNo?"<h1>"+esc(i.docLabel||"Document")+" "+esc(i.docNo)+"</h1>"+(i.clientName?"<p class=muted>From "+esc(i.entityName||"OptCulture")+" for "+esc(i.clientName)+"</p>":""):"";',
   ' if(i.state==="DONE"){$("state").innerHTML=head+"<p class=ok>This document has already been accepted"+(i.acceptedAt?" on "+esc(i.acceptedAt):"")+". Thank you.</p>";return}',
   ' if(i.state!=="OK"){$("state").innerHTML=head+"<p class=err>"+({EXPIRED:"This link has expired.",LOCKED:"This link is locked after too many wrong codes.",REVOKED:"This link is no longer valid."}[i.state]||"This link cannot be used.")+" Please contact "+esc(i.repName||"your OptCulture contact")+(i.repEmail?" ("+esc(i.repEmail)+")":"")+" for a new link.</p>";return}',
@@ -3392,14 +3553,16 @@ var ACCEPT_PAGE_HTML = [
   ' var bin=atob(i.pdf),u8=new Uint8Array(bin.length);for(var k=0;k<bin.length;k++)u8[k]=bin.charCodeAt(k);var url=URL.createObjectURL(new Blob([u8],{type:"application/pdf"}));',
   ' $("pdf").src=url;$("dl").href=url;$("dl").setAttribute("download",i.fileName||"document.pdf");$("em").textContent=i.email;',
   ' $("agreeText").textContent="I have reviewed the "+i.docLabel+" "+i.docNo+" and accept it on behalf of "+i.clientName+", and I confirm I am authorised to do so.";',
-  ' ["doc","verify","act"].forEach(function(x){$(x).classList.remove("hidden")})}',
+  ' ["doc","verify"].forEach(function(x){$(x).classList.remove("hidden")})}',
   '$("send").onclick=function(){var b=$("send");b.disabled=true;msg("");call("apiAcceptSendCode",T).then(function(r){$("sent").textContent="Code sent to "+r.sentTo+" – valid "+r.minutes+" minutes.";setTimeout(function(){b.disabled=false;b.textContent="Send a new code"},30000)}).catch(function(e){b.disabled=false;msg(e.message)})};',
   '$("tOnline").onclick=function(){MODE="online";$("tOnline").className="on";$("tUpload").className="secondary";$("pOnline").classList.remove("hidden");$("pUpload").classList.add("hidden")};',
   '$("tUpload").onclick=function(){MODE="upload";$("tUpload").className="on";$("tOnline").className="secondary";$("pUpload").classList.remove("hidden");$("pOnline").classList.add("hidden")};',
-  'function need(){var c=$("code").value.trim();if(!/^\\d{6}$/.test(c)){msg("Enter the 6-digit code from your email (step 2).");return null}return c}',
-  '$("accept").onclick=function(){var c=need();if(!c)return;var b=$("accept");b.disabled=true;msg("Recording your acceptance…",true);call("apiAcceptOnline",T,c,$("nm").value,$("ti").value,$("agree").checked).then(function(r){done(r.acceptedAt)}).catch(function(e){b.disabled=false;msg(e.message)})};',
+  '$("verify").onclick=function(){var c=$("code").value.trim();$("vmsg").textContent="";if(!/^\\d{6}$/.test(c)){$("vmsg").textContent="Enter the 6-digit code from your email.";return}var b=$("verify");b.disabled=true;',
+  ' call("apiAcceptVerify",T,c).then(function(r){TICKET=r.ticket;$("code").disabled=true;b.classList.add("hidden");$("send").disabled=true;$("verified").textContent="\u2713 Verified as "+r.email+". Please complete step 3 within "+r.minutes+" minutes.";$("verified").classList.remove("hidden");$("act").classList.remove("hidden");$("act").scrollIntoView({behavior:"smooth"})}).catch(function(e){b.disabled=false;$("vmsg").textContent=e.message})};',
+  'function need(){if(!TICKET){msg("Please verify your email first (step 2).");return null}return TICKET}',
+  '$("accept").onclick=function(){var c=need();if(!c)return;var b=$("accept");b.disabled=true;msg("Recording your acceptance…",true);call("apiAcceptOnline",T,c,$("nm").value,$("ti").value,$("agree").checked,$("cc").value).then(function(r){done(r.acceptedAt)}).catch(function(e){b.disabled=false;msg(e.message)})};',
   '$("upload").onclick=function(){var c=need();if(!c)return;var f=$("file").files[0];if(!f){msg("Choose the signed PDF to upload.");return}if(f.size>10485760){msg("The file is larger than 10 MB.");return}',
-  ' var b=$("upload");b.disabled=true;msg("Uploading…",true);var rd=new FileReader();rd.onload=function(){var b64=String(rd.result).split(",")[1];call("apiAcceptUpload",T,c,$("nm").value,$("ti").value,f.name,b64).then(function(r){done(r.acceptedAt)}).catch(function(e){b.disabled=false;msg(e.message)})};rd.readAsDataURL(f)};',
+  ' var b=$("upload");b.disabled=true;msg("Uploading…",true);var rd=new FileReader();rd.onload=function(){var b64=String(rd.result).split(",")[1];call("apiAcceptUpload",T,c,$("nm").value,$("ti").value,f.name,b64,$("cc").value).then(function(r){done(r.acceptedAt)}).catch(function(e){b.disabled=false;msg(e.message)})};rd.readAsDataURL(f)};',
   'if(!T){$("state").innerHTML="<p class=err>This link is not valid.</p>"}else{call("apiAcceptInfo",T).then(show).catch(function(e){$("state").innerHTML="<p class=err>"+esc(e.message)+"</p>"+(e.fallback&&typeof EXEC!=="undefined"?"<p><a href=\\""+EXEC+"?a="+T+"\\">Open the document on the alternative page</a> (if it does not open, please use a private/incognito browser window).</p>":"")})}',
   '</script></body></html>'
 ].join('\n');

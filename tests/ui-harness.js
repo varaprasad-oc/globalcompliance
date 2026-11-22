@@ -3,7 +3,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = vm.createContext({ console });
-['Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js', 'DealLogic.js', 'AiLogic.js', 'GenLogic.js', 'AdminLogic.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/server', f), 'utf8'), ctx));
+['Util.js', 'SeedData.js', 'Pricing.js', 'DocData.js', 'DealLogic.js', 'AiLogic.js', 'GenLogic.js', 'AdminLogic.js', 'AcceptLogic.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src/server', f), 'utf8'), ctx));
 const M = ctx.masterFromSeed(ctx.SEED);
 M.Templates = ['PROPOSAL', 'ORDER_FORM', 'MSA'].map((t) => ({ doc_type: t, language: 'EN', file_id: 'f-' + t, active: true })).concat([{ doc_type: 'MSA', language: 'AR', file_id: 'f-ar', active: true }]);
 let USER = { ok: true, email: 'varaprasad@optculture.com', name: 'Varaprasad SN', role: 'Manager' };
@@ -276,6 +276,13 @@ const api = {
   check('Admin validation rejects a non-number price', (await p.textContent('#toast')).includes('must be a number'));
   await p.fill('[data-adm-f="price_per_site_month"]', '130'); await p.click('#admSave'); await p.waitForTimeout(400);
   check('New deals use the new price', ctx.buildQuote(M, { market: 'Developed', currency: 'USD', stores: 1, ecomSites: 0, packages: ['Loyalty'] }).packages[0].standardPricePerSite === 130);
+  await p.selectOption('#admTab', 'EmailTemplates'); await p.waitForTimeout(400);
+  await p.click('[data-adm="3"]'); await p.waitForTimeout(200);
+  check('Admin: email templates editable (multi-line body, placeholder help)', (await p.$eval('[data-adm-f="body"]', (e) => e.tagName)) === 'TEXTAREA' && (await p.textContent('#admEdit')).includes('Placeholders'));
+  await p.fill('[data-adm-f="body"]', 'Dear {ClientContact}, see {Linkk}'); await p.click('#admSave'); await p.waitForTimeout(300);
+  const tt = await p.textContent('#toast');
+  check('Admin: unknown placeholder in a template is refused', tt.includes('Unknown placeholder') && tt.includes('{Linkk}'), tt);
+  await p.click('#admCancel');
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
   await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(600);
   check('Saved deal keeps frozen price (USD 75 standard)', (await p.textContent('#review')).includes('USD 75'));

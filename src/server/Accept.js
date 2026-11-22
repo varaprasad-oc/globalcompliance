@@ -49,7 +49,36 @@ function dubaiTime_(d) { return Utilities.formatDate(d, 'Asia/Dubai', 'd MMM yyy
 
 function ownerProfile_(createdBy) {
   var u = (getMaster_().Users || []).filter(function (x) { return String(x.email).toLowerCase() === String(createdBy).toLowerCase(); })[0] || {};
-  return { email: createdBy, name: u.name || createdBy, phone: u.phone || '', manager: u.manager_email || '' };
+  return { email: createdBy, name: u.name || createdBy, phone: u.phone || '', manager: u.manager_email || '', title: u.title || '' };
+}
+
+/** Email template (EmailTemplates tab, editable by the Superadmin) – falls back to the seeded wording. */
+function emailTemplate_(key) {
+  var rows = (getMaster_().EmailTemplates || []).filter(function (r) { return r.template_key === key && String(r.subject || '').trim() && String(r.body || '').trim(); });
+  if (rows.length) return rows[0];
+  var seed = (SEED.EmailTemplates.rows || []).filter(function (r) { return r[0] === key; })[0];
+  return { template_key: key, subject: seed[1], body: seed[2] };
+}
+
+/** Placeholders shared by every client email of a deal. */
+function emailVars_(deal, docType, docNo, rep) {
+  var m = getMaster_(), c = deal.client || {};
+  var entity = (m.Entities || []).filter(function (e) { return e.entity_id === deal.entityId; })[0] || {};
+  var title = docType === 'MSA' ? 'Master Services Agreement' : (deal.dealType === 'TOPUP' ? 'Top-up Quotation & Order Form' : 'Quotation & Order Form');
+  var msaNo = (deal.docNos || {}).MSA || ((existingMsa(deal) || {}).no) || '';
+  return { DocTitle: title, DocNo: docNo, Client: c.legalName || '', ClientContact: c.signatoryName || (c.businessContact || {}).name || c.legalName || '',
+    Entity: entity.legal_name || 'OptCulture', RepName: rep.name, RepTitle: rep.title || '', RepEmail: rep.email, RepPhone: rep.phone || '',
+    RepSignature: repSignature(rep, entity.legal_name || 'OptCulture'), OrderFormNo: (deal.docNos || {}).ORDER_FORM || '', MsaNo: msaNo };
+}
+
+function uniqEmails_(list, exclude) {
+  var ex = (exclude || []).map(function (e) { return String(e).toLowerCase(); }), out = [];
+  list.forEach(function (e) { e = String(e || '').trim().toLowerCase(); if (e && ex.indexOf(e) === -1 && out.indexOf(e) === -1) out.push(e); });
+  return out;
+}
+
+function superadminEmails_() {
+  return (getMaster_().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; });
 }
 
 // ---------------- internal (rep) API ----------------
@@ -79,11 +108,13 @@ function apiSendForAcceptance(dealId, docType, toEmail) {
     appendRecord_(ACCEPT_TAB, { token_hash: sha256Hex_(token), deal_id: dealId, doc_type: docType, doc_no: doc.doc_no, version: deal.version,
       client_email: toEmail, created_at: new Date(), expires_at: expires.toISOString(), status: 'Sent', otp_hash: '', otp_expires: '',
       otp_attempts: 0, otp_sends: 0, sent_by: user.email, accepted_name: '', accepted_title: '', accepted_email: '', accepted_at: '', method: '', signed_file_id: '' });
-    var entity = (m.Entities || []).filter(function (e) { return e.entity_id === deal.entityId; })[0] || {};
     var rep = ownerProfile_(user.email);
-    var mail = acceptanceEmail({ docLabel: DOC_LABEL[docType], docNo: doc.doc_no, clientName: c.legalName, contactName: c.signatoryName || (c.businessContact || {}).name,
-      entityName: entity.legal_name || 'OptCulture', link: acceptBaseUrl_() + token, validUntil: formatLongDate(expires), repName: rep.name, repEmail: user.email, repPhone: rep.phone });
-    MailApp.sendEmail({ to: toEmail, cc: user.email, replyTo: user.email, name: 'OptCulture – ' + rep.name, subject: mail.subject, body: mail.body,
+    var vars = emailVars_(deal, docType, doc.doc_no, rep);
+    vars.Link = acceptBaseUrl_() + token; vars.ValidUntil = formatLongDate(expires);
+    vars.SpecialTermsSentence = msaExceptions(deal) ? 'Section 7 records the special terms we agreed.' : 'It contains our standard terms, with no special terms.';
+    var mail = renderEmailTemplate(emailTemplate_(docType === 'MSA' ? 'MSA_SENT' : 'OF_SENT'), vars);
+    var cc = uniqEmails_([user.email, rec.created_by].concat(deal.clientCc || []), [toEmail]);
+    MailApp.sendEmail({ to: toEmail, cc: cc.join(','), replyTo: user.email, name: 'OptCulture – ' + rep.name, subject: mail.subject, body: mail.body,
       attachments: [DriveApp.getFileById(doc.pdf_file_id).getBlob()] });
     deal.acceptance = deal.acceptance || {};
     deal.acceptance[docType] = { sentAt: new Date().toISOString(), to: toEmail, docNo: doc.doc_no, version: deal.version, sentBy: user.email, validUntil: expires.toISOString() };
@@ -114,7 +145,7 @@ function apiRecordSignedCopy(dealId, docType, fileName, base64, signerName, sign
     revokeOpenAcceptances_(dealId, docType);
     var info = { method: 'upload', name: String(signerName || '').trim(), title: String(signerTitle || '').trim(), email: '', at: new Date().toISOString(),
       signedFileId: fileId, recordedBy: user.email, ref: 'recorded by ' + user.email };
-    var res = finalizeAcceptance_(dealId, docType, doc, info, user.email);
+    var res = finalizeAcceptance_(dealId, docType, doc, info, user.email, []);
     return res;
   } finally {
     lock.releaseLock();
@@ -157,10 +188,11 @@ function makeCertificatePdf_(doc, info) {
 }
 
 /** Common end of an acceptance (client online/upload or rep upload): deal status, Documents row, sharing, emails, audit. */
-function finalizeAcceptance_(dealId, docType, doc, info, actor) {
+function finalizeAcceptance_(dealId, docType, doc, info, actor, ccEmails) {
   var rec = findDeal_(dealId);
   var deal = attachClientMsa_(JSON.parse(rec.input_json));
   var nd = applyAcceptance(deal, docType, info);
+  nd.clientCc = uniqEmails_((deal.clientCc || []).concat(ccEmails || []), []);  // saved for the MSA emails
   rec.input_json = JSON.stringify(nd); rec.status = nd.status; rec.updated_at = new Date().toISOString();
   writeRecord_('Deals', rec, rec._row);
   appendRecord_('Documents', { doc_no: doc.doc_no, deal_id: dealId, doc_type: docType, language: doc.language || '', version: doc.version,
@@ -169,17 +201,21 @@ function finalizeAcceptance_(dealId, docType, doc, info, actor) {
   var owner = ownerProfile_(rec.created_by);
   shareFiles_([info.signedFileId], [owner.email, owner.manager].filter(Boolean));
   if (nd.status === DEAL_STATUS.WON) { try { recordClientMsa_(nd); } catch (e) { notifyFailure_('Recording client MSA for ' + dealId, e); } }
-  var c = nd.client || {};
-  var what = DOC_LABEL[docType] + ' ' + doc.doc_no;
-  var how = info.method === 'upload' ? 'A signed copy was uploaded' + (info.recordedBy ? ' by ' + info.recordedBy : ' by the client') : 'Accepted online by ' + info.name + ' (' + info.title + ', ' + info.email + ')';
-  var next = nd.status === DEAL_STATUS.WON ? 'The deal is now WON.' : 'Next: open the deal, prepare the MSA (add any §7 exceptions) and send it to the client.';
-  var to = [owner.email].concat((getMaster_().Users || []).filter(function (u) { return u.role === CONFIG.ROLES.SUPERADMIN && isTrue(u.active); }).map(function (u) { return u.email; }));
+  // ONE confirmation email: client (To), added client addresses + rep + sender + Superadmin (CC), signed PDF attached.
   try {
-    MailApp.sendEmail({ to: to.filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(','), subject: '[Accepted] ' + what + ' – ' + (c.shortName || c.legalName),
-      body: what + ' for ' + c.legalName + ' (deal ' + dealId + '):\n\n' + how + ' on ' + dubaiTime_(new Date()) + '.\n\n' + next + '\n\nThe signed PDF is attached.\n\n— OptCulture Sales Docs',
-      name: CONFIG.APP_NAME, attachments: [DriveApp.getFileById(info.signedFileId).getBlob()] });
-  } catch (e) { console.warn('acceptance email failed: ' + e); }
-  audit_('CLIENT_ACCEPTED', { docType: docType, docNo: doc.doc_no, method: info.method, by: info.name || actor, status: nd.status }, dealId, doc.doc_no);
+    var c = nd.client || {};
+    var to = info.email || ((nd.acceptance || {})[docType] || {}).to || c.signatoryEmail || (c.businessContact || {}).email;
+    var sentBy = ((deal.acceptance || {})[docType] || {}).sentBy || '';
+    var vars = emailVars_(nd, docType, doc.doc_no, owner);
+    vars.AcceptedHow = (info.method === 'upload' ? 'signed and uploaded by ' : 'accepted online by ') + [info.name, info.title].filter(String).join(', ');
+    vars.AcceptedAt = dubaiTime_(new Date(info.at || Date.now()));
+    vars.NextStep = orderFormNextStep(nd.stage === 'MSA' && nd.status !== DEAL_STATUS.WON, vars.MsaNo);
+    var mail = renderEmailTemplate(emailTemplate_(docType === 'MSA' ? 'MSA_CONFIRMED' : 'OF_CONFIRMED'), vars);
+    var cc = uniqEmails_(nd.clientCc.concat([owner.email, sentBy]).concat(superadminEmails_()), [to]);
+    MailApp.sendEmail({ to: to, cc: cc.join(','), replyTo: owner.email, name: 'OptCulture – ' + owner.name, subject: mail.subject, body: mail.body,
+      attachments: [DriveApp.getFileById(info.signedFileId).getBlob()] });
+  } catch (e) { console.warn('confirmation email failed: ' + e); notifyFailure_('Acceptance confirmation email for ' + dealId, e); }
+  audit_('CLIENT_ACCEPTED', { docType: docType, docNo: doc.doc_no, method: info.method, by: info.name || actor, status: nd.status, cc: nd.clientCc }, dealId, doc.doc_no);
   return { status: nd.status, stage: nd.stage, summary: dealSummary(rec), deal: nd };
 }
 
@@ -193,7 +229,7 @@ function doPost(e) {
   var out;
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    var routes = { apiAcceptInfo: apiAcceptInfo, apiAcceptSendCode: apiAcceptSendCode, apiAcceptOnline: apiAcceptOnline, apiAcceptUpload: apiAcceptUpload };
+    var routes = { apiAcceptInfo: apiAcceptInfo, apiAcceptSendCode: apiAcceptSendCode, apiAcceptVerify: apiAcceptVerify, apiAcceptOnline: apiAcceptOnline, apiAcceptUpload: apiAcceptUpload };
     var fn = routes[req.fn];
     if (!fn) throw new Error('Unknown request.');
     out = { ok: true, result: fn.apply(null, Array.isArray(req.args) ? req.args : []) };
@@ -243,9 +279,11 @@ function apiAcceptSendCode(token) {
     a.otp_expires = new Date(Date.now() + ACCEPT.codeMinutes * 60000).toISOString();
     a.otp_sends = Number(a.otp_sends || 0) + 1;
     writeRecord_(ACCEPT_TAB, a, a._row);
-    MailApp.sendEmail({ to: a.client_email, name: 'OptCulture', subject: 'Your OptCulture verification code: ' + code,
-      body: 'Your verification code for ' + DOC_LABEL[a.doc_type] + ' ' + a.doc_no + ' is:\n\n' + code + '\n\nIt is valid for ' + ACCEPT.codeMinutes +
-        ' minutes. If you did not request it, you can ignore this email.\n\n— OptCulture' });
+    var rec = findDeal_(a.deal_id), deal = rec ? attachClientMsa_(JSON.parse(rec.input_json)) : {};
+    var vars = emailVars_(deal, a.doc_type, a.doc_no, ownerProfile_(rec ? rec.created_by : ''));
+    vars.Code = code; vars.Minutes = ACCEPT.codeMinutes;
+    var mail = renderEmailTemplate(emailTemplate_('CODE'), vars);
+    MailApp.sendEmail({ to: a.client_email, name: 'OptCulture', subject: mail.subject, body: mail.body });
     return { sentTo: maskEmail(a.client_email), minutes: ACCEPT.codeMinutes };
   } finally {
     lock.releaseLock();
@@ -265,13 +303,45 @@ function verifyCode_(a, code) {
   throw new Error(acceptMessage_(r.reason));
 }
 
-function apiAcceptOnline(token, code, name, title, agreed) {
+/** Step 2: check the code now; on success the client gets a 30-minute verified session (ticket) for step 3. */
+function apiAcceptVerify(token, code) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var a = findAcceptance_(token);
+    if (!a) throw new Error(acceptMessage_('REVOKED'));
+    verifyCode_(a, code);
+    var ticket = newToken_();
+    a.session_hash = sha256Hex_(ticket);
+    a.session_expires = new Date(Date.now() + ACCEPT_SESSION_MINUTES * 60000).toISOString();
+    a.otp_hash = '';  // the code is used up
+    writeRecord_(ACCEPT_TAB, a, a._row);
+    return { ticket: ticket, email: maskEmail(a.client_email), minutes: ACCEPT_SESSION_MINUTES };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function verifySession_(a, ticket) {
+  if (/^\d{6}$/.test(String(ticket || '').trim())) { verifyCode_(a, ticket); return; }  // older page: code entered at Accept
+  var r = checkSession(a, sha256Hex_(String(ticket || '')), new Date());
+  if (!r.ok) throw new Error(acceptMessage_(r.reason));
+}
+
+function ccFrom_(input) {
+  var p = parseCcEmails(input);
+  if (p.errors.length) throw new Error(p.errors.join(' '));
+  return p.emails;
+}
+
+function apiAcceptOnline(token, ticket, name, title, agreed, ccInput) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     var a = findAcceptance_(token);
     if (!a) throw new Error(acceptMessage_('REVOKED'));
-    verifyCode_(a, code);
+    verifySession_(a, ticket);
+    var cc = ccFrom_(ccInput);
     var errs = signerErrors(name, title);
     if (!agreed) errs.push('Please tick the box to confirm your acceptance.');
     if (errs.length) throw new Error(errs.join(' '));
@@ -285,22 +355,23 @@ function apiAcceptOnline(token, code, name, title, agreed) {
       clientName: (deal.client || {}).legalName, name: info.name, title: info.title, email: a.client_email,
       atText: dubaiTime_(now) + ' / ' + Utilities.formatDate(now, 'UTC', 'd MMM yyyy, HH:mm') + ' UTC', ref: info.ref });
     a.status = 'Accepted'; a.accepted_name = info.name; a.accepted_title = info.title; a.accepted_email = a.client_email; a.accepted_at = info.at;
-    a.method = 'online'; a.signed_file_id = info.signedFileId;
+    a.method = 'online'; a.signed_file_id = info.signedFileId; a.cc_emails = cc.join(','); a.session_hash = '';
     writeRecord_(ACCEPT_TAB, a, a._row);
-    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email);
+    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email, cc);
     return { ok: true, acceptedAt: dubaiTime_(now) };
   } finally {
     lock.releaseLock();
   }
 }
 
-function apiAcceptUpload(token, code, name, title, fileName, base64) {
+function apiAcceptUpload(token, ticket, name, title, fileName, base64, ccInput) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     var a = findAcceptance_(token);
     if (!a) throw new Error(acceptMessage_('REVOKED'));
-    verifyCode_(a, code);
+    verifySession_(a, ticket);
+    var cc = ccFrom_(ccInput);
     var errs = signerErrors(name, title);
     if (errs.length) throw new Error(errs.join(' '));
     var doc = finalDocFor_(a.deal_id, a.doc_type, a.version);
@@ -308,9 +379,9 @@ function apiAcceptUpload(token, code, name, title, fileName, base64) {
     var fileId = saveSignedPdf_(doc, fileName, base64);
     var info = { method: 'upload', name: String(name).trim(), title: String(title).trim(), email: a.client_email, at: new Date().toISOString(), signedFileId: fileId, ref: a.token_hash.slice(0, 16) };
     a.status = 'Uploaded'; a.accepted_name = info.name; a.accepted_title = info.title; a.accepted_email = a.client_email; a.accepted_at = info.at;
-    a.method = 'upload'; a.signed_file_id = fileId;
+    a.method = 'upload'; a.signed_file_id = fileId; a.cc_emails = cc.join(','); a.session_hash = '';
     writeRecord_(ACCEPT_TAB, a, a._row);
-    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email);
+    finalizeAcceptance_(a.deal_id, a.doc_type, doc, info, a.client_email, cc);
     return { ok: true, acceptedAt: dubaiTime_(new Date()) };
   } finally {
     lock.releaseLock();
@@ -325,6 +396,8 @@ function acceptMessage_(reason) {
     REVOKED: 'This link is no longer valid (the document may have been updated). Please ask your OptCulture contact for the latest link.',
     TOO_MANY_CODES: 'Too many codes were requested. Please ask your OptCulture contact for a new link.',
     NO_CODE: 'Please request a verification code first.',
-    CODE_EXPIRED: 'The code has expired. Please request a new one.'
+    CODE_EXPIRED: 'The code has expired. Please request a new one.',
+    NOT_VERIFIED: 'Please verify your email first (step 2).',
+    SESSION_EXPIRED: 'Your verification has expired (30 minutes). Please request a new code and verify again.'
   }[reason] || 'This link cannot be used.';
 }

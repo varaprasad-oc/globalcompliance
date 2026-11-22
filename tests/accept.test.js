@@ -31,3 +31,31 @@ test('Certificate and client email carry the evidence and the link', () => {
   const m = C().acceptanceEmail({ docLabel: 'Quotation & Order Form', docNo: 'OC-Q-2026-0009', clientName: 'FRG', entityName: 'RIS Services DMCC', link: 'https://salestools.optculturecx.com/accept/T', validUntil: '21 December 2026', repName: 'Varaprasad SN', repEmail: 'v@optculture.com' });
   eq([/accept\/T/.test(m.body), /one-time code/.test(m.body), m.subject], [true, true, 'Quotation & Order Form OC-Q-2026-0009 for your review and acceptance – FRG']);
 });
+
+test('Verified session: required for accept/upload, expires after 30 minutes', () => {
+  const r = rec({ session_hash: 's1', session_expires: '2026-11-21T10:30:00Z' });
+  eq([C().checkSession(r, 's1', now).ok, C().checkSession(r, 'zz', now).reason, C().checkSession(rec(), 's1', now).reason,
+    C().checkSession(r, 's1', new Date('2026-11-21T10:31:00Z')).reason], [true, 'NOT_VERIFIED', 'NOT_VERIFIED', 'SESSION_EXPIRED']);
+});
+
+test('"Also send the signed copy to": up to 5 valid, de-duplicated addresses', () => {
+  eq(C().parseCcEmails('Finance@frg.example, legal@frg.example; finance@frg.example'), { emails: ['finance@frg.example', 'legal@frg.example'], errors: [] });
+  eq(C().parseCcEmails('nope, a@b.co').errors, ['Not a valid email address: nope']);
+  eq(C().parseCcEmails('a@x.co,b@x.co,c@x.co,d@x.co,e@x.co,f@x.co').errors, ['Please add at most 5 email addresses.']);
+  eq(C().parseCcEmails('').emails, []);
+});
+
+test('Email templates: seeded A–E use only allowed placeholders, render with the system note; unknown placeholders are rejected on save', () => {
+  const rows = C().SEED.EmailTemplates.rows;
+  eq(rows.map((r) => r[0]), ['OF_SENT', 'CODE', 'OF_CONFIRMED', 'MSA_SENT', 'MSA_CONFIRMED']);
+  rows.forEach((r) => eq(C().unknownEmailPlaceholders(r[0], r[1], r[2]), [], r[0]));
+  const rep = { name: 'Varaprasad SN', title: '', email: 'varaprasad@optculture.com', phone: '+971 52 904 5457' };
+  const m = C().renderEmailTemplate({ subject: rows[2][1], body: rows[2][2] }, { DocTitle: 'Quotation & Order Form', DocNo: 'OC-Q-2026-0009', Client: 'FRG', ClientContact: 'Ahmed Hassan',
+    AcceptedHow: 'accepted online by Ahmed Hassan, CEO', AcceptedAt: '22 Nov 2026, 10:00 (Dubai time)', NextStep: C().orderFormNextStep(true), RepName: rep.name, RepEmail: rep.email, RepSignature: C().repSignature(rep, 'RIS Services DMCC') });
+  eq(m.subject, 'Confirmed: Quotation & Order Form OC-Q-2026-0009 – FRG');
+  eq([/Dear Ahmed Hassan,/.test(m.body), /accepted online by Ahmed Hassan, CEO on 22 Nov 2026/.test(m.body), /Master Services Agreement for your review/.test(m.body),
+    /Varaprasad SN\nvaraprasad@optculture.com · \+971 52 904 5457\nRIS Services DMCC/.test(m.body), /system generated\. For any changes, please contact Varaprasad SN \(varaprasad@optculture.com\)/.test(m.body)], [true, true, true, true, true]);
+  const H = ['template_key', 'subject', 'body', 'notes'];
+  eq(C().coerceAdminRow('EmailTemplates', H, { template_key: 'CODE', subject: 'Code {Code}', body: 'Hi {Nmae}', notes: '' }).ok, false);
+  eq(C().coerceAdminRow('EmailTemplates', H, { template_key: 'CODE', subject: 'Code {Code}', body: 'Your code {Code} – {RepName}', notes: '' }).ok, true);
+});

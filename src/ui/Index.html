@@ -1323,10 +1323,10 @@
     var box = $('admEdit'); box.classList.remove('hidden');
     box.innerHTML = '<h3 style="margin-top:0">' + (row ? 'Edit ' + esc(row[ADM.key]) : 'Add row') + ' – ' + esc(ADM.tab) + '</h3><div class="grid">' + ADM.headers.map(function (h) {
       var v = row ? row[h] : '';
-      var long = String(v || '').length > 60 || /description|prompt|label|address/.test(h);
+      var long = String(v || '').length > 60 || /description|prompt|label|address|subject|body/.test(h);
       return '<div class="' + (long ? 'wide' : '') + '"><label>' + esc(h) + (h === ADM.key ? ' <span class="req">*</span>' : '') + '</label>' +
-        (long ? '<textarea data-adm-f="' + esc(h) + '">' + esc(v) + '</textarea>' : '<input data-adm-f="' + esc(h) + '" value="' + esc(v) + '">') + '</div>';
-    }).join('') + '<div class="wide"><label>Reason for the change (kept in ChangeLog)</label><input id="admReason"></div></div>' +
+        (long ? '<textarea data-adm-f="' + esc(h) + '"' + (h === 'body' ? ' style="min-height:320px;font-family:monospace;font-size:12px"' : '') + '>' + esc(v) + '</textarea>' : '<input data-adm-f="' + esc(h) + '" value="' + esc(v) + '">') + '</div>';
+    }).join('') + (ADM.tab === 'EmailTemplates' ? '<p class="muted wide" style="font-size:12px">Client email wording. Keep the {Placeholders} in curly brackets – the app fills them in and refuses to save unknown ones (the message lists the allowed set). A line that is only a placeholder is left out when it is empty. Keep the "system generated" note.</p>' : '') + '<div class="wide"><label>Reason for the change (kept in ChangeLog)</label><input id="admReason"></div></div>' +
       '<p><button id="admSave">Save</button> <button class="secondary" id="admCancel">Cancel</button></p>';
     $('admCancel').onclick = function () { box.classList.add('hidden'); };
     $('admSave').onclick = function () {

@@ -7,10 +7,10 @@
 var SEED = {
   Users: {
     kind: 'master',
-    headers: ['email', 'name', 'role', 'manager_email', 'region', 'phone', 'active'],
+    headers: ['email', 'name', 'role', 'manager_email', 'region', 'phone', 'active', 'title'],
     rows: [
-      ['amith@optculture.com', 'Amith Lulla', 'Superadmin', '', 'Global', '', true],
-      ['varaprasad@optculture.com', 'Varaprasad SN', 'Manager', 'amith@optculture.com', 'MEA', '+971 52 904 5457', true]
+      ['amith@optculture.com', 'Amith Lulla', 'Superadmin', '', 'Global', '', true, 'Chief Executive Officer'],
+      ['varaprasad@optculture.com', 'Varaprasad SN', 'Manager', 'amith@optculture.com', 'MEA', '+971 52 904 5457', true, '']
     ]
   },
 
@@ -249,6 +249,19 @@ var SEED = {
     rows: []
   },
 
+  // Client emails (acceptance flow). Superadmin can edit subject/body in Admin; placeholders {Name} are validated.
+  EmailTemplates: {
+    kind: 'master',
+    headers: ['template_key', 'subject', 'body', 'notes'],
+    rows: [
+      ["OF_SENT", "{DocTitle} {DocNo} – {Client} – for your review and acceptance", "Dear {ClientContact},\n\nThank you for choosing OptCulture. Please find attached our {DocTitle} {DocNo} for {Client}, setting out the subscription, fees and payment terms we discussed.\n\nReview and accept online:\n{Link}\n\nOn that page you can accept the document online or upload a signed copy. For security, a one-time verification code will be sent to this email address. The link opens only this document and is valid until {ValidUntil}.\n\nUntil a Master Services Agreement is signed, this Order Form is governed by the OptCulture Terms of Service, Data Processing Agreement and Service Level Agreement available at optculture.com.\n\nKind regards,\n{RepSignature}\n\nThis email and the attached document are system generated. For any changes, please contact {RepName} ({RepEmail}).", "Sent with the Order Form (and top-up Order Form) acceptance link."],
+      ["CODE", "Your OptCulture verification code: {Code}", "Your verification code for {DocTitle} {DocNo} is: {Code}\n\nIt is valid for {Minutes} minutes.\n\nIf you did not request this code, please ignore this email or let {RepName} ({RepEmail}) know.\n\nThis email is system generated. Please do not reply to it; contact {RepName} for any questions.", "One-time code on the acceptance page. Sent to the client only."],
+      ["OF_CONFIRMED", "Confirmed: {DocTitle} {DocNo} – {Client}", "Dear {ClientContact},\n\nThank you. We confirm that {DocTitle} {DocNo} for {Client} was {AcceptedHow} on {AcceptedAt}.\n\nA copy of the accepted document is attached for your records.\n\nNext step: {NextStep}\n\nKind regards,\n{RepSignature}\n\nThis email and the attached document are system generated. For any changes, please contact {RepName} ({RepEmail}).", "To the client; CC added addresses, rep, sender and Amith. Signed PDF attached."],
+      ["MSA_SENT", "Master Services Agreement {MsaNo} – {Client} – for your review and acceptance", "Dear {ClientContact},\n\nFollowing your acceptance of Order Form {OrderFormNo}, please find attached the Master Services Agreement {MsaNo} between {Entity} and {Client}. {SpecialTermsSentence}\n\nReview and accept online:\n{Link}\n\nAs before, you can accept online or upload a signed copy after verifying your email. The link is valid until {ValidUntil}.\n\nKind regards,\n{RepSignature}\n\nThis email and the attached document are system generated. For any changes, please contact {RepName} ({RepEmail}).", "Sent with the MSA acceptance link (CC saved client addresses and the rep)."],
+      ["MSA_CONFIRMED", "Confirmed: Master Services Agreement {MsaNo} – {Client} – welcome to OptCulture", "Dear {ClientContact},\n\nThank you. We confirm that Master Services Agreement {MsaNo} was {AcceptedHow} on {AcceptedAt}. Together with Order Form {OrderFormNo}, your agreement with OptCulture is now complete.\n\nA copy is attached for your records. Our onboarding team will contact you shortly to plan the next steps.\n\nKind regards,\n{RepSignature}\n\nThis email and the attached document are system generated. For any changes, please contact {RepName} ({RepEmail}).", "To the client; CC added addresses, rep, sender and Amith. Signed PDF attached."]
+    ]
+  },
+
   AIPrompts: {
     kind: 'master',
     headers: ['key', 'model', 'temperature', 'prompt'],
@@ -286,7 +299,7 @@ var SEED = {
     kind: 'record',
     headers: ['token_hash', 'deal_id', 'doc_type', 'doc_no', 'version', 'client_email', 'created_at', 'expires_at', 'status',
       'otp_hash', 'otp_expires', 'otp_attempts', 'otp_sends', 'sent_by', 'accepted_name', 'accepted_title', 'accepted_email',
-      'accepted_at', 'method', 'signed_file_id']
+      'accepted_at', 'method', 'signed_file_id', 'session_hash', 'session_expires', 'cc_emails']
   },
   AuditLog: {
     kind: 'record',

@@ -399,7 +399,7 @@ function cloneDeal(deal, newId) {
   c.status = DEAL_STATUS.DRAFT;
   c.client = c.client || {};
   delete c.docNos; delete c.pricingSnapshot; delete c.approvalNote; delete c.aiDraft;  // a clone gets new numbers and today's prices
-  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true }; delete c.proposalBaseline; delete c.dealType; delete c.topupOf; delete c.topup;
+  c.stage = 'PROPOSAL'; c.docs = { PROPOSAL: true }; delete c.proposalBaseline; delete c.dealType; delete c.topupOf; delete c.topup; delete c.clientCc; delete c.acceptance;
   return c;
 }
 
@@ -412,7 +412,7 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   var refresh = !!d.refreshPrices;
   delete d.refreshPrices;
   if (!stored) {
-    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT; delete d.dealType; delete d.topupOf;
+    d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT; delete d.dealType; delete d.topupOf; delete d.clientCc; delete d.acceptance;
     delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId; delete d.proposalBaseline;
     d.stage = 'PROPOSAL'; d.docs = { PROPOSAL: true };
     return d;
@@ -423,6 +423,7 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   d.clientId = stored.clientId;
   if (stored.dealType) d.dealType = stored.dealType; else delete d.dealType;
   d.acceptance = stored.acceptance;  // client acceptance records: server-owned
+  d.clientCc = stored.clientCc;      // addresses the client added on the acceptance page
   if (stored.stage === 'MSA') {
     // Order Form accepted: commercials and party details are locked; only MSA fields can change
     var keepClient = JSON.parse(JSON.stringify(stored.client || {})), inc = d.client || {};
@@ -506,7 +507,7 @@ function makeTopUp(parent, parentQuote) {
   return {
     dealType: 'TOPUP', stage: 'CONTRACT', status: DEAL_STATUS.CONTRACT_DRAFT, version: 1,
     client: JSON.parse(JSON.stringify(parent.client || {})), clientId: parent.clientId, entityId: parent.entityId,
-    language: parent.language, referralPartnerId: parent.referralPartnerId || '',
+    language: parent.language, referralPartnerId: parent.referralPartnerId || '', clientCc: (parent.clientCc || []).slice(),
     pricingSnapshot: parent.pricingSnapshot,
     topupOf: { dealId: parent.dealId, orderFormNo: (parent.docNos || {}).ORDER_FORM || '', msaNo: msaNo, package: pkg,
       contractedPricePerSite: op.finalPricePerSite || null, baseSites: Number(com.stores || 0) + Number(com.ecomSites || 0),
