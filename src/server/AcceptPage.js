@@ -4,7 +4,7 @@
  */
 function acceptPage_(token) {
   var safe = /^[a-f0-9]{64}$/.test(String(token || '')) ? token : '';
-  var html = ACCEPT_PAGE_HTML.replace('__TOKEN__', safe);
+  var html = acceptPageHtml('gas', { token: safe });
   return HtmlService.createHtmlOutput(html).setTitle('OptCulture – Review & accept')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
@@ -41,9 +41,9 @@ var ACCEPT_PAGE_HTML = [
   '<div id="msg" class="err"></div></div>',
   '<p class="muted" style="text-align:center">This page opens only the document sent to you. Questions? Reply to the email you received.</p>',
   '</main><script>',
-  'var T="__TOKEN__",INFO=null,MODE="online";function $(i){return document.getElementById(i)}',
+  'var T=__TOKEN_EXPR__,INFO=null,MODE="online";function $(i){return document.getElementById(i)}',
   'function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]})}',
-  'function call(fn){var a=[].slice.call(arguments,1);return new Promise(function(ok,ko){var r=google.script.run.withSuccessHandler(ok).withFailureHandler(function(e){ko(e)});r[fn].apply(r,a)})}',
+  '__CALL_FN__',
   'function msg(t,ok){$("msg").className=ok?"ok":"err";$("msg").textContent=t||""}',
   'function done(when){["doc","verify","act"].forEach(function(i){$(i).classList.add("hidden")});$("state").innerHTML="<h1 class=ok>Thank you</h1><p>"+esc(INFO.docLabel)+" "+esc(INFO.docNo)+" was received on "+esc(when)+". "+esc(INFO.repName)+" has been notified and will be in touch.</p>"}',
   'function show(i){INFO=i;var head=i.docNo?"<h1>"+esc(i.docLabel||"Document")+" "+esc(i.docNo)+"</h1>"+(i.clientName?"<p class=muted>From "+esc(i.entityName||"OptCulture")+" for "+esc(i.clientName)+"</p>":""):"";',
@@ -61,6 +61,31 @@ var ACCEPT_PAGE_HTML = [
   '$("accept").onclick=function(){var c=need();if(!c)return;var b=$("accept");b.disabled=true;msg("Recording your acceptance…",true);call("apiAcceptOnline",T,c,$("nm").value,$("ti").value,$("agree").checked).then(function(r){done(r.acceptedAt)}).catch(function(e){b.disabled=false;msg(e.message)})};',
   '$("upload").onclick=function(){var c=need();if(!c)return;var f=$("file").files[0];if(!f){msg("Choose the signed PDF to upload.");return}if(f.size>10485760){msg("The file is larger than 10 MB.");return}',
   ' var b=$("upload");b.disabled=true;msg("Uploading…",true);var rd=new FileReader();rd.onload=function(){var b64=String(rd.result).split(",")[1];call("apiAcceptUpload",T,c,$("nm").value,$("ti").value,f.name,b64).then(function(r){done(r.acceptedAt)}).catch(function(e){b.disabled=false;msg(e.message)})};rd.readAsDataURL(f)};',
-  'if(!T){$("state").innerHTML="<p class=err>This link is not valid.</p>"}else{call("apiAcceptInfo",T).then(show).catch(function(e){$("state").innerHTML="<p class=err>"+esc(e.message)+"</p>"})}',
+  'if(!T){$("state").innerHTML="<p class=err>This link is not valid.</p>"}else{call("apiAcceptInfo",T).then(show).catch(function(e){$("state").innerHTML="<p class=err>"+esc(e.message)+"</p>"+(e.fallback&&typeof EXEC!=="undefined"?"<p><a href=\\""+EXEC+"?a="+T+"\\">Open the document on the alternative page</a> (if it does not open, please use a private/incognito browser window).</p>":"")})}',
   '</script></body></html>'
 ].join('\n');
+
+/**
+ * Builds the client page for one of two hosts (pure – also used by tools/bundle.js and tests):
+ *  - 'gas':     served by Apps Script at ?a=<token>; calls the server with google.script.run.
+ *  - 'netlify': static page at salestools.optculturecx.com/accept/<token>; calls the public deployment's doPost with
+ *               fetch(credentials: 'omit'), so the client's own Google login (or their company's Google restrictions)
+ *               never comes into play.
+ */
+function acceptPageHtml(mode, opts) {
+  opts = opts || {};
+  var tokenExpr, callFn;
+  if (mode === 'netlify') {
+    tokenExpr = '(function(){var t=(location.pathname.split("/").filter(Boolean).pop()||"").toLowerCase();return /^[a-f0-9]{64}$/.test(t)?t:""})()';
+    callFn = 'var EXEC=' + JSON.stringify(String(opts.execUrl || '')) + ';function call(fn){var a=[].slice.call(arguments,1);' +
+      'return fetch(EXEC,{method:"POST",credentials:"omit",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({fn:fn,args:a})})' +
+      '.then(function(r){return r.text()}).then(function(t){try{return JSON.parse(t)}catch(x){var e=new Error("The service is not reachable right now.");e.fallback=true;throw e}})' +
+      '.then(function(j){if(!j.ok)throw new Error(j.error||"Something went wrong.");return j.result})}';
+  } else {
+    tokenExpr = JSON.stringify(String(opts.token || ''));
+    callFn = 'function call(fn){var a=[].slice.call(arguments,1);return new Promise(function(ok,ko){var r=google.script.run.withSuccessHandler(ok).withFailureHandler(function(e){ko(e)});r[fn].apply(r,a)})}';
+  }
+  var html = ACCEPT_PAGE_HTML.replace('__TOKEN_EXPR__', function () { return tokenExpr; }).replace('__CALL_FN__', function () { return callFn; });
+  if (mode === 'netlify') html = html.replace('<head>', '<head><title>OptCulture – Review &amp; accept</title><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">');
+  return html;
+}

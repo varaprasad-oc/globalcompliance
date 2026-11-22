@@ -11,3 +11,12 @@ fs.writeFileSync(path.join(root, 'dist/Code.gs'), out);
 fs.writeFileSync(path.join(root, 'dist/Index.html'), fs.readFileSync(path.join(root, 'src/ui/Index.html'), 'utf8'));
 fs.writeFileSync(path.join(root, 'dist/appsscript.json'), fs.readFileSync(path.join(root, 'src/appsscript.json'), 'utf8'));
 console.log('dist/ built: Code.gs (' + out.length + ' chars), Index.html, appsscript.json');
+
+// Client acceptance page for Netlify (salestools.optculturecx.com/accept/<token>) – same page, fetch-based, no Google login involved.
+const vm = require('vm');
+const pageCtx = vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(root, 'src/server/AcceptPage.js'), 'utf8'), pageCtx);
+const execUrl = JSON.parse(fs.readFileSync(path.join(root, 'tools/public.json'), 'utf8')).publicExecUrl;
+fs.mkdirSync(path.join(root, 'netlify/accept'), { recursive: true });
+fs.writeFileSync(path.join(root, 'netlify/accept/index.html'), pageCtx.acceptPageHtml('netlify', { execUrl: execUrl }));
+console.log('netlify/accept/index.html built (calls ' + execUrl.slice(0, 50) + '…)');

@@ -185,6 +185,24 @@ function finalizeAcceptance_(dealId, docType, doc, info, actor) {
 
 // ---------------- public (client) API – token only ----------------
 
+/**
+ * JSON endpoint for the client page hosted on salestools.optculturecx.com (fetch without cookies). Routes ONLY to the four
+ * token-based functions below; anything else is refused.
+ */
+function doPost(e) {
+  var out;
+  try {
+    var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    var routes = { apiAcceptInfo: apiAcceptInfo, apiAcceptSendCode: apiAcceptSendCode, apiAcceptOnline: apiAcceptOnline, apiAcceptUpload: apiAcceptUpload };
+    var fn = routes[req.fn];
+    if (!fn) throw new Error('Unknown request.');
+    out = { ok: true, result: fn.apply(null, Array.isArray(req.args) ? req.args : []) };
+  } catch (err) {
+    out = { ok: false, error: String((err && err.message) || err) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
 function findAcceptance_(token) {
   if (!/^[a-f0-9]{64}$/.test(String(token || ''))) return null;
   var h = sha256Hex_(token);
