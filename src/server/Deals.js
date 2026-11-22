@@ -156,8 +156,9 @@ function apiGetDeal(dealId) {
   var user = requireUser_();
   var rec = findDeal_(dealId);
   if (!rec || !canAccessDeal(user, rec.created_by, getMaster_().Users)) throw new Error('Deal not found or no access.');
-  var deal = attachClientMsa_(JSON.parse(rec.input_json));
-  deal.status = rec.status;
+  var stored = JSON.parse(rec.input_json);
+  var deal = attachClientMsa_(migrateProposalDeal(stored));
+  deal.status = stored.stage && stored.stage !== 'PROPOSAL' ? rec.status : deal.status;  // old proposal deals open as Order Form drafts
   audit_('DEAL_VIEWED', {}, dealId);
   return { deal: deal, evaluation: evaluateDeal(withSnapshot(getMaster_(), deal.pricingSnapshot), deal), summary: dealSummary(rec) };
 }

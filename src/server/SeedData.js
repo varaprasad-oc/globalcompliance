@@ -234,7 +234,7 @@ var SEED = {
     headers: ['doc_type', 'prefix', 'year', 'last_no'],
     rows: [
       ['PROPOSAL', 'OC-P', 2026, 0],
-      ['ORDER_FORM', 'OC-Q', 2026, 0],
+      ['ORDER_FORM', 'OC-Q', '2026-11', 0],  // monthly: OC-Q-yyyy-mm-0001
       ['TOS', 'OC-TOS', 2026, 0],
       ['DPA', 'OC-DPA', 2026, 0],
       ['MSA', 'OC-MSA', 2026, 0],

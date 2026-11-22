@@ -184,6 +184,15 @@ function buildDocData(docType, master, deal, quote, ctx) {
     var start = com.startDate ? new Date(com.startDate) : null;
     var term = Number(com.termMonths || 12);
     fields.OrderPackage = op.package;
+    // Cover page (formerly the Proposal's page 1) and the plan inclusions of the chosen package
+    var pc = deal.proposal || {};
+    fields.CoverTitle = _v(pc.title || 'Unified Omnichannel Loyalty & Customer Engagement Platform');
+    fields.CoverTagline = _v(pc.tagline);
+    flags.HasTagline = !!String(pc.tagline || '').trim();
+    tables.PlanMatrix = {
+      headers: ['What is included', 'OptCulture ' + op.package],
+      rows: featureMatrix(master, [op.package]).filter(function (f) { return f.values[op.package] === 'Included'; }).map(function (f) { return [f.feature, '✓']; })
+    };
     fields.SubscriptionStartDate = start ? fmtDate(start) : (isAr ? 'عند التشغيل' : 'On go-live');
     fields.SubscriptionTerm = term + ' months';
     fields.SubscriptionEndDate = start ? fmtDate(_addMonths(start, term)) : term + ' months from go-live';

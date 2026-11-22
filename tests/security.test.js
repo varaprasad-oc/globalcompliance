@@ -19,8 +19,12 @@ test('Browser cannot set prices snapshot, numbers, status or version', () => {
 test('Protected fields: new deal, revision after generation, rejection, explicit refresh', () => {
   const nd = C().protectDealFields({ dealId: 'forged', status: 'Won', docNos: { DPA: 'x' } }, null, null, { takenAt: 'fresh' });
   eq([nd.dealId, nd.status, nd.version, nd.docNos, nd.pricingSnapshot.takenAt], [null, 'Draft', 1, undefined, 'fresh']);
-  const stored = { dealId: 'D-1', version: 1, pricingSnapshot: { takenAt: 'old' } };
-  eq([C().protectDealFields({}, stored, 'Generated', {}).version, C().protectDealFields({}, stored, 'Generated', {}).status], [2, 'Draft']);
+  const stored = { dealId: 'D-1', version: 1, stage: 'CONTRACT', pricingSnapshot: { takenAt: 'old' } };
+  eq([C().protectDealFields({}, stored, 'Order Form generated', {}).version, C().protectDealFields({}, stored, 'Order Form generated', {}).status], [2, 'Draft']);
+  const legacy = { dealId: 'D-0', version: 1, stage: 'PROPOSAL', commercial: { packages: ['Loyalty'] }, pricingSnapshot: { takenAt: 'old' } };
+  const mig = C().protectDealFields({}, legacy, 'Proposal generated', {});
+  eq([mig.stage, mig.version, mig.status, mig.docs], ['CONTRACT', 1, 'Draft', { ORDER_FORM: true }], 'old proposal deals become Order Form drafts');
+  eq(C().migrateProposalDeal(legacy).commercial.orderPackage, 'Loyalty', 'Order Form package defaults to the first quoted package');
   eq(C().protectDealFields({}, stored, 'Rejected', {}).status, 'Draft');
   eq(C().protectDealFields({ refreshPrices: true }, stored, 'Draft', { takenAt: 'fresh' }).pricingSnapshot.takenAt, 'fresh');
 });

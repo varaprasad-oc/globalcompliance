@@ -86,3 +86,9 @@ test('Superadmin delete plan: deal rows, documents, files, approvals; client onl
   eq(p.rows, { Deals: [4, 2], Documents: [4, 3, 2], Approvals: [2], Clients: [3] }, 'C1 kept: D2 still uses it; rows bottom-up');
   eq(c.planDealDeletion(['D1', 'D2'], rec).clientIds, ['C1']);
 });
+
+test('Order Form numbers are monthly with a dash: OC-Q-2026-11-0001', (c) => {
+  eq(c.formatDocNo('OC-Q', c.numberingPeriod('2026-11', new Date(2026, 10, 22)), 1), 'OC-Q-2026-11-0001');
+  eq(c.numberingPeriod('2026-11', new Date(2026, 11, 1)), '2026-12', 'new month');
+  eq(c.SEED.Numbering.rows.filter((r) => r[0] === 'ORDER_FORM')[0].slice(1, 3), ['OC-Q', '2026-11']);
+});

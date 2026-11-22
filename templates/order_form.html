@@ -5,8 +5,25 @@ table{border-collapse:collapse;width:100%} td,th{border:1px solid #c9d2dc;paddin
 th{background:#7B3FE4;color:#ffffff} td.k{background:#f3effc;font-weight:bold;width:35%}
 .small{font-size:9pt;color:#6b7785}
 </style></head><body>
-<p>{{IMAGE:OptCultureLogo}}</p>
-<h1>OPTCULTURE – COMMERCIAL QUOTATION &amp; ORDER FORM</h1>
+<p style="text-align:center;margin-top:36pt">{{IMAGE:OptCultureLogo}}</p>
+<p style="text-align:center;margin-top:90pt;font-size:13pt;font-weight:bold;color:#6b7785">ORDER FORM FOR</p>
+<p style="text-align:center;margin-top:10pt;font-size:30pt;font-weight:bold;color:#1F3B6B">{{ClientShortName}}</p>
+<p style="text-align:center;margin-top:4pt;font-size:16pt;font-style:italic;color:#C9A13B">{{ClientCountry}}</p>
+<p style="text-align:center;margin-top:24pt;padding-top:8pt;padding-bottom:8pt;border-top:1.5pt solid #C9A13B;border-bottom:1.5pt solid #C9A13B;font-size:15pt;font-weight:bold;color:#1a1a1a">{{CoverTitle}}</p>
+<p>{{#IF HasTagline}}</p>
+<p style="text-align:center;margin-top:12pt;font-size:13pt;font-style:italic;color:#B6262B">{{CoverTagline}}</p>
+<p>{{/IF HasTagline}}</p>
+<p>{{#IF IsPartner}}</p>
+<p style="text-align:center;margin-top:18pt;font-size:10pt;color:#6b7785">In partnership with {{EntityName}}, OptCulture's local partner in {{EntityCountry}}</p>
+<p style="text-align:center">{{IMAGE:EntityLogo}}</p>
+<p>{{/IF IsPartner}}</p>
+<p style="text-align:center;margin-top:70pt;font-size:12pt;font-weight:bold;color:#B6262B">CONFIDENTIAL</p>
+<p style="text-align:center;margin-top:6pt;font-size:12pt;color:#1a1a1a">{{DocDate}}</p>
+<p style="text-align:center;margin-top:6pt;font-size:10.5pt;color:#6b7785">Tel: {{RepPhone}}</p>
+<p style="text-align:center;margin-top:4pt;font-size:10.5pt;color:#6b7785">Email: {{RepEmail}}</p>
+<p style="text-align:center;margin-top:4pt;font-size:9pt;color:#9aa3ad">Ref. {{DocNo}}</p>
+<p>{{PAGEBREAK}}</p>
+<h1>OPTCULTURE – ORDER FORM</h1>
 <p>Software Subscription &amp; Services</p>
 <p>{{#IF IsTopUp}}</p>
 <p><b>TOP-UP ORDER FORM</b> – supplements Order Form {{ParentOrderFormNo}} under the same Master Services Agreement. Existing subscriptions continue unchanged; this Order Form covers only the additional items below, for its own term.</p>
@@ -48,14 +65,20 @@ th{background:#7B3FE4;color:#ffffff} td.k{background:#f3effc;font-weight:bold;wi
 </table>
 <p class="small">Only subscribed products and modules apply. Features included in the {{OrderPackage}} plan are as described in the OptCulture proposal and product documentation.</p>
 
-<h2>4. Usage-Based Charges</h2>
+<p>{{#IF !IsTopUp}}</p>
+<h2>4. Plan Inclusions</h2>
+<p>{{TABLE:PlanMatrix}}</p>
+<p class="small">Add-ons, usage-based services and one-time services are listed in the other sections of this Order Form.</p>
+<p>{{/IF IsTopUp}}</p>
+
+<h2>5. Usage-Based Charges</h2>
 <table>
 <tr><th>Service / Usage Metric</th><th>Included Allowance</th><th>Additional Usage Rate</th></tr>
 <tr><td>{{EACH:UsageLines}}{{metric}}</td><td>{{included}}</td><td>{{rate}}</td></tr>
 </table>
 <p class="small">Usage above included allowances is billed monthly in arrears, measured using OptCulture’s platform records.</p>
 
-<h2>5. One-Time Fees &amp; Services</h2>
+<h2>6. One-Time Fees &amp; Services</h2>
 <table>
 <tr><th>Description</th><th>Scope / Deliverable</th><th>Amount</th></tr>
 <tr><td>{{EACH:OneTimeLines}}{{description}}</td><td>{{scope}}</td><td>{{amount}}</td></tr>
@@ -64,7 +87,7 @@ th{background:#7B3FE4;color:#ffffff} td.k{background:#f3effc;font-weight:bold;wi
 <p><b>Total first-year value (one-time + 12 months recurring): {{FirstYearTotal}}</b> (exclusive of taxes and usage charges)</p>
 <p class="small">Where detailed implementation deliverables, responsibilities or timelines are required, these shall be defined in an agreed Statement of Work (SOW).</p>
 
-<h2>6. Commercial &amp; Payment Terms</h2>
+<h2>7. Commercial &amp; Payment Terms</h2>
 <table>
 <tr><th>Particulars</th><th>Agreed Terms</th></tr>
 <tr><td class="k">Currency</td><td>{{Currency}}</td></tr>
@@ -78,11 +101,11 @@ th{background:#7B3FE4;color:#ffffff} td.k{background:#f3effc;font-weight:bold;wi
 <tr><td class="k">Price Revision</td><td>Fixed for {{PriceLockMonths}} months; thereafter {{AnnualUpliftPct}} per annum</td></tr>
 </table>
 
-<h2>7. Special Commercial Terms</h2>
+<h2>8. Special Commercial Terms</h2>
 <p>{{SpecialTerms}}</p>
 <p class="small">Any modification to the MSA or other standard contractual terms must be expressly identified and agreed in writing by authorised representatives of both Parties.</p>
 
-<h2>8. Agreement &amp; Acceptance</h2>
+<h2>9. Agreement &amp; Acceptance</h2>
 <p>{{#IF HasMsa}}This Order Form is issued under and forms part of the Master Services Agreement No. {{MsaRef}} between the Parties, which incorporates the OptCulture Terms of Service ({{TosUrl}}), Data Processing Agreement ({{DpaUrl}}) and Service Level Agreement ({{SlaUrl}}).{{/IF HasMsa}}{{#IF !HasMsa}}Until a Master Services Agreement is signed between the Parties, this Order Form is governed by the OptCulture Terms of Service ({{TosUrl}}), Data Processing Agreement ({{DpaUrl}}) and Service Level Agreement ({{SlaUrl}}). Once signed, the Master Services Agreement, including any agreed special terms, governs this Order Form and all future Order Forms.{{/IF HasMsa}}</p>
 <p>By signing below or accepting electronically, the Parties agree to the subscriptions, fees, duration and commercial arrangements specified in this Order Form.</p>
 <table>

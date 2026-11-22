@@ -7,7 +7,7 @@
  */
 
 var DOC_FOLDER_KEY = { PROPOSAL: 'PROPOSALS', ORDER_FORM: 'ORDER_FORMS', MSA: 'LEGAL', TOS: 'LEGAL', DPA: 'LEGAL' };
-var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Quotation & Order Form', MSA: 'Master Services Agreement', TOS: 'Terms of Service', DPA: 'DPA', AGREEMENT: 'Agreement' };
+var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Order Form', MSA: 'Master Services Agreement', TOS: 'Terms of Service', DPA: 'DPA', AGREEMENT: 'Agreement' };
 var TABLE_STYLE = { headerBg: '#7B3FE4', headerFg: '#ffffff', border: '#c9d2dc', font: 'Arial', size: 10, firstColBg: '#F3F4F8' };
 
 /**

@@ -74,7 +74,7 @@ test('Approver email lists only what needs approval, item by item (prices at Ord
   const { sampleDeal } = require('./fixtures');
   const d = JSON.parse(JSON.stringify(sampleDeal)); d.stage = 'CONTRACT'; d.commercial.msaRef = '';
   const body = C().approvalEmailBody(d, C().evaluateDeal(global.M, d), { name: 'Rep', email: 'r@optculture.com' }, 'https://salestools.optculturecx.com');
-  eq(/NEEDS YOUR APPROVAL \(1\)/.test(body) && /Quotation & Order Form/.test(body), true);
+  eq(/NEEDS YOUR APPROVAL \(1\)/.test(body) && /– Order Form/.test(body), true);
   eq(/Subscription – Loyalty plan – licence: USD 70 per site \/ month vs standard USD 75 \(-6\.7%\)/.test(body), true, body);
   d.stage = 'MSA'; d.msaExceptions = 'Clause 3: cure period 45 days.';
   const ev = C().evaluateDeal(global.M, d);

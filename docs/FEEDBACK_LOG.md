@@ -112,3 +112,8 @@
 ## 39. Acceptance v2: Verify step, extra recipients, one confirmation to all, editable email templates
 - AcceptLogic: EMAIL_VARS/renderEmailTemplate/unknownEmailPlaceholders, parseCcEmails, checkSession, orderFormNextStep, repSignature. Accept.js: apiAcceptVerify (30-min ticket), template emails, single confirmation (To client, CC extras+rep+sender+Superadmin), clientCc on deal; backward compatible with the previous page. Admin: EmailTemplates editable (textarea, placeholder help, validation). Live sheet: EmailTemplates tab, Users.title, Acceptances session/cc columns. Tests: 99 unit, 105 browser, 16 client-page checks.
 - Rollout: server first (compatible with old page), then the new Netlify page.
+
+## 40. Single stage: Proposal removed, Order Form with cover page + plan inclusions, OC-Q-yyyy-mm numbering
+- Logic: new deals start at CONTRACT; migrateProposalDeal; approval only for the Order Form package; funnel Draft → Order Form sent → MSA → Won/Lost, acceptance-rate tile; numberingPeriod supports yyyy-mm.
+- DocData: CoverTitle/CoverTagline/HasTagline, PlanMatrix for the chosen package. Template order_form.html v1.3 (cover + Plan Inclusions, sections renumbered); live Doc created and cover styled.
+- UI: stages 1 of 2 / 2 of 2, cover fields in step 3, Order Form wording, no Convert. Tests: 101 unit, 102 browser, 16 client-page.

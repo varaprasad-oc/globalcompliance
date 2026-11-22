@@ -160,7 +160,7 @@
               <div id="topupBox" class="topup-only"></div>
               <div class="not-topup">
               <p data-stage="MSA" style="margin-top:0"><span class="badge warn">Commercials are locked – the client accepted the Order Form. Start a new deal or a top-up for any change.</span></p>
-              <p data-stage="CONTRACT" class="muted" style="margin-top:0">Carried over from the proposal. Changing prices here needs approval again if they go below standard.</p>
+              <p data-stage="CONTRACT" class="muted" style="margin-top:0">Tick one or more packages to compare prices; choose the package for the Order Form in step 3. Only that package is printed, and only its special prices need approval.</p>
               <h3 style="margin-top:0">Pricing basis</h3>
               <div class="grid">
                 <div><label>Market</label><select data-f="commercial.market" id="market"></select></div>
@@ -193,8 +193,6 @@
               <div data-stage="PROPOSAL">
                 <h3>Proposal</h3>
                 <div class="grid">
-                  <div class="wide"><label>Title</label><input data-f="proposal.title" placeholder="Unified Omnichannel Loyalty & Customer Engagement Platform"></div>
-                  <div class="wide"><label>Tagline</label><input data-f="proposal.tagline" placeholder="Earn anywhere. Redeem everywhere."></div>
                 </div>
                 <div class="checks">
                   <label><input type="checkbox" data-f="proposal.multiBrand"> Multi-brand group (adds the unified program section)</label>
@@ -210,6 +208,11 @@
                 </div>
               </div>
               <div data-stage="CONTRACT">
+                <h3 class="not-topup">Cover page</h3>
+                <div class="grid not-topup">
+                  <div class="wide"><label>Title on the cover</label><input data-f="proposal.title" placeholder="Unified Omnichannel Loyalty & Customer Engagement Platform"></div>
+                  <div class="wide"><label>Tagline (optional)</label><input data-f="proposal.tagline" placeholder="Earn anywhere. Redeem everywhere."></div>
+                </div>
                 <h3>Order Form terms</h3>
                 <div class="grid">
                   <div><label>Package on the Order Form</label><select data-f="commercial.orderPackage" id="orderPackage"></select></div>
@@ -340,7 +343,7 @@
 
 <script>
   var APPROVAL = null, BOOT = null, LISTS = null, DEAL = null, STEP = 1, EVAL_TIMER = null, LAST = null;
-  var DOC_LABEL = { PROPOSAL: 'Proposal', ORDER_FORM: 'Quotation & Order Form', MSA: 'Master Services Agreement', TOS: 'Terms of Service (retired)', DPA: 'DPA (retired)', AGREEMENT: 'Agreement (retired)' };
+  var DOC_LABEL = { PROPOSAL: 'Proposal (old)', ORDER_FORM: 'Order Form', MSA: 'Master Services Agreement', TOS: 'Terms of Service (retired)', DPA: 'DPA (retired)', AGREEMENT: 'Agreement (retired)' };
   function $(id) { return document.getElementById(id); }
   function qa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -383,7 +386,7 @@
   function genSteps(deal) {
     var st = stageOf(deal);
     return ['Saving the deal'].concat(st === 'PROPOSAL' ? ['Creating the Proposal from the template', 'Filling prices, packages and features'] :
-      st === 'MSA' ? ['Creating the MSA from the standard text', 'Adding the §7 special terms'] : ['Creating the Quotation & Order Form', 'Filling prices and payment terms'])
+      st === 'MSA' ? ['Creating the MSA from the standard text', 'Adding the §7 special terms'] : ['Creating the Order Form (cover page, prices, plan inclusions)', 'Filling prices and payment terms'])
       .concat(['Converting to PDF', 'Saving to Drive, sharing and emailing the links']);
   }
   function resultsTable(g) {
@@ -690,7 +693,7 @@
   function newDeal() {
     APPROVAL = null; OTS_KEY = '';
     fill({ client: { businessContact: {}, billingContact: {} }, commercial: { stores: '', ecomSites: 0, packages: [], termMonths: 12, billingCycle: 'Annual', paymentMethod: 'Bank Transfer', autoRenew: true },
-      stage: 'PROPOSAL', docs: { PROPOSAL: true }, language: 'EN', proposal: { showConsulting: true }, narrative: {}, dpa: {} });
+      stage: 'CONTRACT', docs: { ORDER_FORM: true }, language: 'EN', proposal: {}, narrative: {}, dpa: {} });
     $('clientPick').value = ''; $('genResult').innerHTML = ''; $('docList').innerHTML = ''; go(1); $('side').innerHTML = '<span class="muted">Fill in the client and commercials…</span>';
   }
 
@@ -831,14 +834,14 @@
     $('newMsaBox').classList.toggle('hidden', !msa || isTopup(DEAL));
     if (isTopup(DEAL)) {
       $('btnGenerate').textContent = 'Generate Top-up Order Form';
-      $('contractPack').innerHTML = '<b>Top-up Quotation &amp; Order Form</b> – supplements Order Form <b>' + esc((DEAL.topupOf || {}).orderFormNo || '—') + '</b> under MSA <b>' + esc((msa || {}).no || '—') + '</b>. When the client accepts it, the top-up is Won.';
+      $('contractPack').innerHTML = '<b>Top-up Order Form</b> – supplements Order Form <b>' + esc((DEAL.topupOf || {}).orderFormNo || '—') + '</b> under MSA <b>' + esc((msa || {}).no || '—') + '</b>. When the client accepts it, the top-up is Won.';
       return;
     }
     $('btnGenerate').textContent = 'Generate Order Form';
     $('contractPack').innerHTML = c.mode === 'NEW_MSA'
-      ? '<b>Quotation &amp; Order Form</b> – commercial terms only. Until an MSA is signed it is governed by the online Terms of Service, DPA and SLA.' +
-        '<p class="muted" style="margin:6px 0 0">Send it to the client from the Review step. When they accept, you prepare the MSA (stage 3); the deal is Won when the MSA is accepted.</p>'
-      : '<b>Quotation &amp; Order Form</b> – under the client’s existing MSA <b>' + esc(msa.no) + '</b>' +
+      ? '<b>Order Form</b> – cover page, the chosen package with its plan inclusions, fees and payment terms. Until an MSA is signed it is governed by the online Terms of Service, DPA and SLA.' +
+        '<p class="muted" style="margin:6px 0 0">Send it to the client from the Review step. When they accept, you prepare the MSA (stage 2); the deal is Won when the MSA is accepted.</p>'
+      : '<b>Order Form</b> – under the client’s existing MSA <b>' + esc(msa.no) + '</b>' +
         (msa.dealId ? ' (signed with deal ' + esc(msa.dealId) + (msa.date ? ', ' + esc(msa.date) : '') + ')' : ' (entered in “Existing MSA reference”)') + '. When the client accepts it, the deal is Won.';
   }
 
@@ -880,7 +883,7 @@
     rd.onload = function () {
       run('apiRecordSignedCopy', DEAL.dealId, type, f.name, String(rd.result).split(',')[1], name, title).then(function (r) {
         fill(r.deal); go(4); loadDocs(r.deal.dealId);
-        busyDone(r.status === 'Won' ? 'Signed copy recorded – deal Won' : 'Signed copy recorded', '<p>' + (r.status === 'Won' ? 'The deal is now Won.' : 'Next: prepare the MSA (stage 3) and send it to the client.') + '</p>', 'list');
+        busyDone(r.status === 'Won' ? 'Signed copy recorded – deal Won' : 'Signed copy recorded', '<p>' + (r.status === 'Won' ? 'The deal is now Won.' : 'Next: prepare the MSA (stage 2) and send it to the client.') + '</p>', 'list');
       }).catch(function (e) { busyFail(e.message); });
     };
     rd.readAsDataURL(f);
@@ -1131,7 +1134,7 @@
         tile('Open pipeline', usd(s.pipelineUsd), 'first-year value, open deals') +
         tile('Won', usd(s.wonUsd), (s.byStatus.Won ? s.byStatus.Won.count : 0) + ' deal(s)') +
         tile('Win rate', rate(s.winRate), 'won ÷ (won + lost)') +
-        tile('Proposal → Order Form', rate(s.conversionRate), 'proposals that moved to Order Form') +
+        tile('Order Form acceptance', rate(s.conversionRate), 'accepted ÷ sent to clients') +
         tile('Waiting for approval', s.pendingApprovals, 'special pricing') +
         tile('Avg. discount vs list', pct(s.avgDiscountPct), 'incl. market & volume') +
         (s.topups && s.topups.count ? tile('Top-ups (upsell)', usd(s.topups.wonUsd), s.topups.count + ' top-up(s) · open ' + usd(s.topups.openUsd)) : '') + '</div>';
@@ -1244,12 +1247,12 @@
   var STAGE_UI = {
     PROPOSAL: { banner: '<b>Stage 1 of 3 – Proposal.</b> Enter the client, pricing and proposal text, then generate the proposal. When the client accepts, click <b>Convert to Order Form</b>.',
       steps: ['1 · Client', '2 · Commercials', '3 · Proposal', '4 · Review'], gen: 'Generate proposal' },
-    CONTRACT: { banner: '<b>Stage 2 of 3 – Quotation &amp; Order Form.</b> Add contract details and Order Form terms, generate the Order Form, then <b>send it to the client</b> to accept online or sign.',
-      steps: ['1 · Contract details', '2 · Commercials', '3 · Order Form terms', '4 · Review & send'], gen: 'Generate Order Form' },
-    MSA: { banner: '<b>Stage 3 of 3 – MSA.</b> The client accepted the Order Form. The MSA text is standard: add any agreed deviations in <b>§7</b>, generate, then send it to the client. The deal is Won when the client accepts the MSA.',
+    CONTRACT: { banner: '<b>Stage 1 of 2 – Order Form.</b> Enter the client and contract details, compare packages, choose the Order Form package and terms, generate the Order Form, then <b>send it to the client</b> to accept online or sign.',
+      steps: ['1 · Client & contract', '2 · Commercials', '3 · Order Form terms', '4 · Review & send'], gen: 'Generate Order Form' },
+    MSA: { banner: '<b>Stage 2 of 2 – MSA.</b> The client accepted the Order Form. The MSA text is standard: add any agreed deviations in <b>§7</b>, generate, then send it to the client. The deal is Won when the client accepts the MSA.',
       steps: ['1 · Contract details', '2 · Commercials (locked)', '3 · MSA §7', '4 · Review & send'], gen: 'Generate MSA' }
   };
-  function stageOf(d) { return (d && d.stage) || 'PROPOSAL'; }
+  function stageOf(d) { var s = (d && d.stage) || 'CONTRACT'; return s === 'PROPOSAL' ? 'CONTRACT' : s; }  // single stage: old proposal deals open as Order Forms
   function applyStage(stage) {
     var ui = STAGE_UI[stage];
     $('stageBanner').innerHTML = ui.banner;
@@ -1265,7 +1268,7 @@
     });
     $('btnGenerate').textContent = ui.gen;
     if (isTopup(DEAL)) {
-      $('stageBanner').innerHTML = '<b>Top-up</b> of deal ' + esc(DEAL.topupOf.dealId) + ' – add licences, add-ons, communication packs, WhatsApp credits or services. Generates a Top-up Quotation &amp; Order Form under the client’s MSA.';
+      $('stageBanner').innerHTML = '<b>Top-up</b> of deal ' + esc(DEAL.topupOf.dealId) + ' – add licences, add-ons, communication packs, WhatsApp credits or services. Generates a Top-up Order Form under the client’s MSA.';
       qa('#steps div').forEach(function (el, i) { el.textContent = ['1 · Client details', '2 · Top-up items', '3 · Order Form terms', '4 · Review'][i]; });
       $('btnGenerate').textContent = 'Generate Top-up Order Form';
     }

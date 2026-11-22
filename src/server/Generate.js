@@ -15,7 +15,7 @@ function apiGenerateDocs(dealId) {
 function generateForDeal_(dealId, user) {
   var m = getMaster_(true);
   var rec = findDeal_(dealId);
-  var deal = JSON.parse(rec.input_json);
+  var deal = migrateProposalDeal(JSON.parse(rec.input_json));
   var pm = withSnapshot(m, deal.pricingSnapshot);
   applyCountryDefaults(pm, deal);
   var ev = evaluateDeal(pm, deal);

@@ -77,9 +77,9 @@ const api = {
   await p.waitForTimeout(400);
   check('Dashboard is the home page for a rep/manager', (await p.textContent('#dash')).includes('Open pipeline') && (await p.textContent('#dash')).includes('Deal funnel'));
   await p.click('#navNew'); await p.waitForTimeout(300);
-  // ---------- Stage 1: proposal ----------
-  check('New deal opens in Stage 1 (Proposal)', (await p.textContent('#stageBanner')).includes('Stage 1 of 3'));
-  check('Contract fields hidden in Stage 1', !(await p.isVisible('[data-f="client.address"]')) && !(await p.isVisible('[data-f="client.billingContact.email"]')));
+  // ---------- Single stage: Order Form ----------
+  check('New deal opens as an Order Form (Stage 1 of 2)', (await p.textContent('#stageBanner')).includes('Stage 1 of 2 – Order Form'));
+  check('Contract fields visible from the start', (await p.isVisible('[data-f="client.address"]')) && (await p.isVisible('[data-f="client.billingContact.email"]')));
   await p.fill('[data-f="client.legalName"]', 'Fashion Retail Group S.A.E.');
   await p.fill('[data-f="client.shortName"]', 'FRG');
   await p.selectOption('#country', 'Egypt');
@@ -123,24 +123,30 @@ const api = {
   await (await p.$('#otSpecials')).screenshot({ path: path.join(out, 'onetime-specials.png') });
   await p.fill('[data-ots-pkg="Loyalty"][data-ots-id="SETUP"]', ''); await p.waitForTimeout(900);
   check('Clearing the special removes the badge', (await p.textContent('[data-ots-badge="Loyalty|SETUP"]')) === '');
-  check('Order Form terms not shown in Stage 1', !(await p.isVisible('#orderPackage')));
-  check('Stage 1 summary: unit prices only, no totals', (await p.textContent('#side')).includes('Totals are calculated at the Order Form stage') && !(await p.textContent('#side')).includes('First year'));
-  check('Stage 1: no hours box for optional services', !(await p.isVisible('[data-otqty="CUSTOM_INT_HOUR"]')));
+  check('Order Form terms are in step 3, not step 2', !(await p.isVisible('#orderPackage')));
+  check('Summary shows totals while comparing packages', (await p.textContent('#side')).includes('First year'));
+  check('Hours box shown for hourly optional services', await p.isVisible('[data-otqty="CUSTOM_INT_HOUR"]'));
   await p.click('#btnNext');
-  check('Step 3 is the Proposal step', (await p.textContent('#steps div[data-step="3"]')).includes('Proposal') && (await p.isVisible('[data-f="proposal.title"]')));
-  await p.fill('[data-f="narrative.notes"]', 'Franchisee for SKECHERS, ANTA, ECCO; 46 stores; one program.');
-  await p.click('#btnAi'); await p.waitForTimeout(500);
-  const es = await p.inputValue('[data-f="narrative.executiveSummary"]');
-  check('AI fills the summary and strips the money sentence', es.includes('leading franchisee') && !es.includes('USD 70'));
+  check('Step 3 = Order Form terms with cover page fields (no proposal narrative)', (await p.textContent('#steps div[data-step="3"]')).includes('Order Form terms') && (await p.isVisible('[data-f="proposal.title"]')) && (await p.isVisible('#orderPackage')) && !(await p.isVisible('[data-f="narrative.executiveSummary"]')));
+  await p.fill('[data-f="proposal.title"]', 'Unified Omnichannel Loyalty Platform'); await p.selectOption('#orderPackage', 'Loyalty');
   await p.click('#btnNext'); await p.waitForTimeout(700);
   const review = await p.textContent('#review');
   check('Review shows special price USD 70 and approval reason', review.includes('USD 70') && review.includes('Approval required'));
-  check('Proposal needs no contract details (ready to generate)', review.includes('All selected documents have the information'));
-  check('Generate button says "Generate proposal"', (await p.textContent('#btnGenerate')).includes('Generate proposal') && !(await p.isDisabled('#btnGenerate')));
+  const gb = await p.textContent('#genBlockers');
+  await (await p.$('#view-deal .step[data-step="4"]')).screenshot({ path: path.join(out, 'blockers.png') });
+  check('Disabled Generate explains what is missing for the Order Form', (await p.isDisabled('#btnGenerate')) && gb.includes('Registered address') && gb.includes('Billing contact email') && !gb.includes('signatory'));
+  await p.click('#genBlockers a[data-fix]'); await p.waitForTimeout(400);
+  check('Fix → jumps to step 1 and outlines missing fields', (await p.isVisible('[data-f="client.address"]')) && (await p.getAttribute('[data-f="client.address"]', 'class')).includes('missing'));
+  await p.fill('[data-f="client.address"]', 'Cairo, Egypt');
+  await p.fill('[data-f="client.businessContact.email"]', 'buyer@frg.example');
+  await p.fill('[data-f="client.billingContact.email"]', 'finance@frg.example');
+  await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(800);
+  check('Ready to generate once contract details are in', (await p.textContent('#review')).includes('All selected documents have the information'));
+  check('Generate button says "Generate Order Form"', (await p.textContent('#btnGenerate')).trim() === 'Generate Order Form' && !(await p.isDisabled('#btnGenerate')));
   await p.click('#btnSave'); await p.waitForTimeout(400);
   check('Saved: title shows deal id', (await p.textContent('#dealTitle')).includes('D-TEST-1'));
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(300);
-  check('My Deals lists the deal in Proposal stage', (await p.textContent('#dealList')).includes('Proposal stage'));
+  check('My Deals lists the deal in Order Form stage', (await p.textContent('#dealList')).includes('Order Form stage'));
   await menu('D-TEST-1', '[data-clone="D-TEST-1"]'); await p.waitForTimeout(400);
   check('Clone opens a new draft', (await p.textContent('#dealTitle')).includes('D-TEST-2'));
   store.deals['D-TEST-2'].updated_at = new Date(Date.now() - 75 * 86400000).toISOString(); store.deals['D-TEST-2'].created_at = store.deals['D-TEST-2'].updated_at;
@@ -158,7 +164,7 @@ const api = {
   check('Processing overlay ends with a success dialog and Back to My Deals', (await p.isVisible('#busy')) && (await p.textContent('#busyBox')).includes('Back to My Deals'));
   await p.click('#busyStay'); await p.waitForTimeout(200);
   const gr = await p.textContent('#genResult');
-  check('Proposal draft only (no Order Form yet)', gr.includes('OC-P-2026-0001') && !gr.includes('OC-Q-2026-0001'));
+  check('Order Form draft (no Proposal any more)', gr.includes('OC-Q-2026-0001') && !gr.includes('OC-P-2026'));
   check('Status Pending approval', (await p.textContent('#dealStatus')).includes('Pending approval'));
   await p.screenshot({ path: path.join(out, 'stage1-review.png'), fullPage: true });
 
@@ -175,30 +181,17 @@ const api = {
   await p.click('[data-decide="Approved"]'); await p.waitForTimeout(700);
   check('Approve shows the processing/success dialog', (await p.textContent('#busyBox')).includes('final documents created'));
   await p.click('#busyStay'); await p.waitForTimeout(200);
-  check('Proposal now final: status Proposal generated', store.deals['D-TEST-1'].status === 'Proposal generated');
+  check('Order Form now final: status Order Form generated', store.deals['D-TEST-1'].status === 'Order Form generated');
 
-  // ---------- Stage 2: convert to Order Form ----------
+  // ---------- back to the deal: Order Form terms, regenerate final ----------
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
   await p.click('[data-menu="D-TEST-1"]'); await p.waitForTimeout(150);
-  check('Menu shows Convert for generated proposal', await p.isVisible('.menu:not(.hidden) [data-convert="D-TEST-1"]'));
+  check('Menu has no Convert (single stage)', !(await p.$('.menu:not(.hidden) [data-convert="D-TEST-1"]')));
   await p.screenshot({ path: path.join(out, 'menu.png') });
-  await p.click('.menu:not(.hidden) [data-convert="D-TEST-1"]'); await p.waitForTimeout(600);
-  check('Stage 2 banner and contract fields visible', (await p.textContent('#stageBanner')).includes('Stage 2 of 3') && (await p.isVisible('[data-f="client.address"]')));
-  await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(800);
-  const gb = await p.textContent('#genBlockers');
-  await (await p.$('#view-deal .step[data-step="4"]')).screenshot({ path: path.join(out, 'blockers.png') });
-  check('Disabled Generate explains what is missing for the Order Form', (await p.isDisabled('#btnGenerate')) && gb.includes('Registered address') && gb.includes('Billing contact email') && !gb.includes('signatory'));
-  await p.click('#genBlockers a[data-fix]'); await p.waitForTimeout(400);
-  check('Fix → jumps to step 1 and outlines missing fields', (await p.isVisible('[data-f="client.address"]')) && (await p.getAttribute('[data-f="client.address"]', 'class')).includes('missing'));
-  await p.fill('[data-f="client.address"]', 'Cairo, Egypt');
-  await p.fill('[data-f="client.businessContact.email"]', 'buyer@frg.example');
-  await p.fill('[data-f="client.billingContact.email"]', 'finance@frg.example');
-  await p.click('#steps div[data-step="2"]'); await p.fill('[data-f="commercial.stores"]', '50');
-  await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(800);
-  check('Review lists changes since proposal', (await p.textContent('#review')).includes('Stores: 46 → 50'));
-  await p.click('#steps div[data-step="2"]'); await p.fill('[data-f="commercial.stores"]', '46'); await p.waitForTimeout(300);
+  await p.click('body');
+  await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(700);
   await p.click('#steps div[data-step="3"]'); await p.waitForTimeout(800);
-  check('Stage 2 step 3: Order Form terms, commercial-only pack, no MSA box yet', (await p.isVisible('#orderPackage')) && (await p.textContent('#contractPack')).includes('commercial terms only') && (await p.textContent('#contractPack')).includes('online Terms of Service') && !(await p.isVisible('#msaExceptions')) && !(await p.isVisible('[data-f="proposal.title"]')));
+  check('Step 3: Order Form terms, cover fields, pack text, no MSA box yet', (await p.isVisible('#orderPackage')) && (await p.textContent('#contractPack')).includes('plan inclusions') && (await p.textContent('#contractPack')).includes('online Terms of Service') && !(await p.isVisible('#msaExceptions')) && (await p.isVisible('[data-f="proposal.title"]')));
   await p.fill('[data-f="commercial.msaRef"]', 'MSA-OLD-9'); await p.waitForTimeout(1000);
   check('Existing MSA reference → Order Form under that MSA; acceptance = Won', (await p.textContent('#contractPack')).includes('MSA-OLD-9') && (await p.textContent('#contractPack')).includes('deal is Won'));
   await p.fill('[data-f="commercial.msaRef"]', ''); await p.waitForTimeout(1000);
@@ -209,9 +202,9 @@ const api = {
   check('Stage 2 summary lists one-time lines separately', (await p.textContent('#side')).includes('Set-up and Training') && (await p.textContent('#side')).includes('Installation per store (× 46)') && (await p.textContent('#side')).includes('Installation per e-commerce site'));
   check('Generate button says Generate Order Form', (await p.textContent('#btnGenerate')).trim() === 'Generate Order Form' && !(await p.isDisabled('#btnGenerate')));
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
-  await p.evaluate(() => { busyStart('Generating your documents…', ['Saving the deal', 'Creating the Quotation & Order Form', 'Filling prices and payment terms', 'Converting to PDF', 'Saving to Drive, sharing and emailing the links']); });
+  await p.evaluate(() => { busyStart('Generating your documents…', ['Saving the deal', 'Creating the Order Form (cover page, prices, plan inclusions)', 'Filling prices and payment terms', 'Converting to PDF', 'Saving to Drive, sharing and emailing the links']); });
   await p.waitForTimeout(6500); await p.screenshot({ path: path.join(out, 'processing.png') });
-  check('Processing overlay shows spinner and step list', (await p.isVisible('.spinner')) && (await p.textContent('#busyBox')).includes('Creating the Quotation'));
+  check('Processing overlay shows spinner and step list', (await p.isVisible('.spinner')) && (await p.textContent('#busyBox')).includes('Creating the Order Form'));
   await p.evaluate(() => busyClose());
   await p.click('#btnGenerate'); await p.waitForTimeout(800);
   check('Contract success dialog lists the documents', (await p.textContent('#busyBox')).includes('Documents created'));
@@ -233,7 +226,7 @@ const api = {
   await p.click('nav a[data-view="list"]'); await p.waitForTimeout(400);
   check('My Deals: MSA stage after the client accepted the Order Form', (await p.textContent('#dealList')).includes('MSA stage') && (await p.textContent('#dealList')).includes('Order Form accepted'));
   await p.click('[data-open="D-TEST-1"]'); await p.waitForTimeout(700);
-  check('Stage 3 banner; commercials locked; signatory still editable', (await p.textContent('#stageBanner')).includes('Stage 3 of 3') && await p.isDisabled('[data-f="commercial.stores"]') && await p.isDisabled('[data-f="client.legalName"]') && !(await p.isDisabled('[data-f="client.signatoryName"]')));
+  check('Stage 3 banner; commercials locked; signatory still editable', (await p.textContent('#stageBanner')).includes('Stage 2 of 2') && await p.isDisabled('[data-f="commercial.stores"]') && await p.isDisabled('[data-f="client.legalName"]') && !(await p.isDisabled('[data-f="client.signatoryName"]')));
   await p.click('#steps div[data-step="1"]');
   await p.fill('[data-f="client.signatoryName"]', 'Ahmed Hassan'); await p.fill('[data-f="client.signatoryTitle"]', 'CEO'); await p.fill('[data-f="client.signatoryEmail"]', 'ceo@frg.example');
   await p.click('#steps div[data-step="3"]'); await p.waitForTimeout(700);
@@ -320,7 +313,7 @@ const api = {
   await p.screenshot({ path: path.join(out, 'topup.png'), fullPage: true });
   check('WhatsApp row shows the amount', (await p.textContent('#waTable tr.wa-row [data-wa="amount"]')).includes('USD 500'));
   await p.click('#steps div[data-step="3"]'); await p.waitForTimeout(300);
-  check('Top-up step 3: Order Form only, no MSA box', (await p.textContent('#contractPack')).includes('Top-up Quotation') && !(await p.isVisible('#msaBox')) && (await p.textContent('#btnGenerate')).includes('Top-up Order Form'));
+  check('Top-up step 3: Order Form only, no MSA box', (await p.textContent('#contractPack')).includes('Top-up Order Form') && !(await p.isVisible('#msaBox')) && (await p.textContent('#btnGenerate')).includes('Top-up Order Form'));
   await p.click('#steps div[data-step="4"]'); await p.waitForTimeout(800);
   await p.click('#btnGenerate'); await p.waitForTimeout(900);
   check('Top-up generates a draft Order Form (WhatsApp credits need approval)', (await p.textContent('#busyBox')).includes('Drafts') && store.deals['D-TEST-9'].status === 'Pending approval');

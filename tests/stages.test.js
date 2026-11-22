@@ -2,9 +2,16 @@ const { sampleDeal } = require('./fixtures');
 const C = () => global.__ctx;
 const base = () => { const d = JSON.parse(JSON.stringify(sampleDeal)); d.dealId = 'D-1'; return d; };
 
-test('New deal starts in the PROPOSAL stage with only the proposal selected', () => {
+test('Single stage: a new deal is an Order Form deal from the start', () => {
   const d = C().protectDealFields({ client: { legalName: 'X' }, docs: { PROPOSAL: true, ORDER_FORM: true, DPA: true } }, null, null, {});
-  eq([d.stage, d.docs], ['PROPOSAL', { PROPOSAL: true }]);
+  eq([d.stage, d.docs, d.status], ['CONTRACT', { ORDER_FORM: true }, 'Draft']);
+});
+
+test('Compare several packages, only the Order Form package can need approval', () => {
+  const d = base(); d.stage = 'CONTRACT'; d.commercial.packages = ['Loyalty', 'Advanced']; d.commercial.specialPrices = { Advanced: 80 }; d.commercial.orderPackage = 'Loyalty';
+  eq(C().evaluateDeal(global.M, d).needsApproval, false, 'special price on a compared (not chosen) package');
+  d.commercial.orderPackage = 'Advanced';
+  eq(C().evaluateDeal(global.M, d).approvalItems.map((x) => x.item), ['Advanced plan – licence']);
 });
 
 test('Proposal stage: only the proposal is generated; contract details are not required', () => {
@@ -38,7 +45,7 @@ test('Saving a contract draft keeps stage and version; Order Form cannot be unti
   const d = C().protectDealFields(incoming, stored, 'Contract draft', {});
   eq([d.stage, d.version, d.status, d.docs], ['CONTRACT', 1, 'Contract draft', { ORDER_FORM: true }]);
   const d2 = C().protectDealFields(incoming, stored, 'Contract generated', {});
-  eq([d2.version, d2.status], [2, 'Contract draft'], 'editing after contract generation = new version');
+  eq([d2.version, d2.status], [2, 'Draft'], 'editing after Order Form generation = new version');
 });
 
 test('Approved proposal pricing carries to the contract (final documents, no new approval)', () => {

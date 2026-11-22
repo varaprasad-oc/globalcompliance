@@ -191,3 +191,13 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - Client may add up to 5 extra addresses ("Also send the signed copy to"); saved on the deal (clientCc) and CC'd on later emails (MSA link and confirmations, top-ups).
 - After acceptance/upload: ONE confirmation email with the signed PDF – To: client; CC: added addresses, rep (deal owner + sender) and Amith; reply-to rep. The separate internal "[Accepted]" email is dropped (next steps show in Action needed).
 - Client email wording lives in the **EmailTemplates** tab (OF_SENT, CODE, OF_CONFIRMED, MSA_SENT, MSA_CONFIRMED) and is **editable by the Superadmin in Admin**; placeholders {Name} are validated on save. Every email carries the "system generated – contact your rep for changes" note. Users tab has a `title` column for the rep signature.
+
+## Single stage – Proposal removed (2026-11-22, Varaprasad) – SUPERSEDES the two-step Proposal → Order Form flow
+- New Deal → all Order Form information → **Generate Order Form** → send to client (accept online / upload signed) → MSA → Won. No Proposal document and no Convert step.
+- The Proposal's page 1 becomes **page 1 of the Order Form** (cover: logo, "ORDER FORM FOR" client, country, title between gold rules, tagline, CONFIDENTIAL, date, Tel, Email, Ref). Title/tagline editable in step 3 ("Cover page").
+- The document is named **ORDER FORM** everywhere (was "Quotation & Order Form").
+- Order Form adds **Plan Inclusions** (what the chosen package includes). Executive summary, modules text, journeys and consulting rates are dropped.
+- Packages: compare several in the app, pick one for the Order Form; only that package is printed and only its special prices need approval.
+- Existing proposal-stage deals become Order Form drafts when opened (data kept; Order Form package defaults to the first quoted package).
+- Order Form numbers: **OC-Q-yyyy-mm-0001**, counter restarts each month (Numbering row ORDER_FORM, year column "2026-11").
+- Live template: "TEMPLATE – Order Form (EN) v1.3" (1ysPBpePlyq1wJ40tTeRnxFRhk329Oy3FNxQFUwJhLyc), registered after the code deploy; Proposal template deactivated then.

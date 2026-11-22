@@ -64,7 +64,7 @@ function emailTemplate_(key) {
 function emailVars_(deal, docType, docNo, rep) {
   var m = getMaster_(), c = deal.client || {};
   var entity = (m.Entities || []).filter(function (e) { return e.entity_id === deal.entityId; })[0] || {};
-  var title = docType === 'MSA' ? 'Master Services Agreement' : (deal.dealType === 'TOPUP' ? 'Top-up Quotation & Order Form' : 'Quotation & Order Form');
+  var title = docType === 'MSA' ? 'Master Services Agreement' : (deal.dealType === 'TOPUP' ? 'Top-up Order Form' : 'Order Form');
   var msaNo = (deal.docNos || {}).MSA || ((existingMsa(deal) || {}).no) || '';
   return { DocTitle: title, DocNo: docNo, Client: c.legalName || '', ClientContact: c.signatoryName || (c.businessContact || {}).name || c.legalName || '',
     Entity: entity.legal_name || 'OptCulture', RepName: rep.name, RepTitle: rep.title || '', RepEmail: rep.email, RepPhone: rep.phone || '',

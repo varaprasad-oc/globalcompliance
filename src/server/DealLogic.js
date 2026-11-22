@@ -19,7 +19,7 @@ var DEAL_STATUS = { DRAFT: 'Draft', PENDING: 'Pending approval', APPROVED: 'Appr
   MSA_GENERATED: 'MSA generated', MSA_SENT: 'MSA sent' };
 
 /**
- * Flow (decision 2026-11-21): PROPOSAL → CONTRACT (Quotation & Order Form only; client accepts online or uploads a signed copy)
+ * Flow (decision 2026-11-21): [single stage since 2026-11-22] CONTRACT (Order Form; client accepts online or uploads a signed copy)
  * → MSA (standard MSA, deviations only in §7; client accepts or uploads) → Won. A client who already has an MSA, and every
  * top-up, is Won as soon as the Order Form is accepted. ToS, DPA and SLA are online documents incorporated by the MSA.
  */
@@ -103,7 +103,7 @@ function applyCountryDefaults(master, deal) {
 
 /**
  * Contract stage (management MSA format, 2026-11-15):
- *  - NEW_MSA: first contract for a client → Quotation & Order Form + MSA (two documents). The MSA incorporates the online
+ *  - NEW_MSA: first contract for a client → Order Form, then the MSA (two documents). The MSA incorporates the online
  *    ToS, DPA and SLA by link; the Order Form cites the Proposal and the MSA; the MSA cites the initial Order Form.
  *  - ORDER_ONLY: the client already has an MSA (saved on the client when a deal with an MSA was Won, or typed in
  *    "Existing MSA reference") → Order Form only, citing that MSA. deal.newMsa forces a new MSA.
@@ -164,6 +164,12 @@ function evaluateDeal(master, deal) {
   [c1.email, c2.email].forEach(function (e) { if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) errors.push('Invalid email: ' + e); });
 
   var quote = deal.dealType === 'TOPUP' ? buildTopupQuote(master, topupInput(deal)) : buildQuote(master, com);
+  // Several packages may be compared, but only the one on the Order Form is printed – so only its prices can need approval.
+  var aq = quote;
+  if (quote.ok && deal.dealType !== 'TOPUP' && deal.stage === 'CONTRACT' && com.orderPackage && (com.packages || []).length > 1 && (com.packages || []).indexOf(com.orderPackage) !== -1) {
+    var only = buildQuote(master, Object.assign({}, com, { packages: [com.orderPackage] }));
+    if (only.ok) aq = only;
+  }
   if (!quote.ok) errors = errors.concat(quote.errors);
 
   var missing = {};
@@ -176,10 +182,10 @@ function evaluateDeal(master, deal) {
     missing: missing,
     readyToGenerate: errors.length === 0 && Object.keys(missing).length === 0,
     // MSA stage: prices were agreed in the accepted Order Form – only §7 exceptions can need approval
-    needsApproval: quote.ok ? (deal.stage === 'MSA' ? false : quote.needsApproval) || !!msaExceptions(deal) : false,
-    approvalReasons: quote.ok ? (deal.stage === 'MSA' ? [] : quote.approvalReasons).concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
+    needsApproval: quote.ok ? (deal.stage === 'MSA' ? false : aq.needsApproval) || !!msaExceptions(deal) : false,
+    approvalReasons: quote.ok ? (deal.stage === 'MSA' ? [] : aq.approvalReasons).concat(msaExceptions(deal) ? ['MSA special terms / exceptions: ' + msaExceptions(deal)] : []) : [],
     msaExceptions: msaExceptions(deal),
-    approvalItems: quote.ok ? (deal.stage === 'MSA' ? [] : (quote.approvalItems || [])).concat(msaExceptions(deal) ? [{ area: 'MSA special terms', item: '§7 Special Terms and Exceptions', referenceLabel: 'Standard MSA',
+    approvalItems: quote.ok ? (deal.stage === 'MSA' ? [] : (aq.approvalItems || [])).concat(msaExceptions(deal) ? [{ area: 'MSA special terms', item: '§7 Special Terms and Exceptions', referenceLabel: 'Standard MSA',
       reference: null, proposed: null, unit: '', diffPct: null, note: '', text: msaExceptions(deal) }] : []) : [],
     changesSinceProposal: quote.ok ? changesSinceProposal(master, deal.proposalBaseline, deal, quote) : [],
     contract: deal.stage === 'CONTRACT' || deal.stage === 'MSA' ? { mode: contractMode(deal), msa: existingMsa(deal), stage: deal.stage } : null
@@ -322,7 +328,7 @@ function dashboardStats(summaries, users, now, opts) {
     map[key] = map[key] || { count: 0, valueUsd: 0 };
     map[key].count++; map[key].valueUsd += sm.valueUsd || 0;
   }
-  var f = { draft: 0, proposal: 0, contract: 0, won: 0, lost: 0 };
+  var f = { draft: 0, sent: 0, msa: 0, won: 0, lost: 0 };
   var mini = function (sm) { return { dealId: sm.dealId, clientName: sm.clientName, valueUsd: sm.valueUsd, status: sm.status, owner: nameOf[String(sm.createdBy).toLowerCase()] || sm.createdBy }; };
   summaries.forEach(function (sm) {
     var open = sm.status !== 'Won' && sm.status !== 'Lost';
@@ -335,13 +341,12 @@ function dashboardStats(summaries, users, now, opts) {
     add(s.byRep, nameOf[String(sm.createdBy).toLowerCase()] || sm.createdBy, sm);
     add(s.byCountry, sm.country, sm);
     add(s.byPackage, sm.orderPackage, sm);
-    var stage = sm.stage || 'PROPOSAL';
+    var stage = sm.stage || 'CONTRACT';
     if (sm.status === 'Won') f.won++;
     else if (sm.status === 'Lost') f.lost++;
-    else if (stage === 'CONTRACT' || stage === 'MSA') f.contract++;
-    else if (['Proposal generated', 'Sent', 'Generated'].indexOf(sm.status) !== -1) f.proposal++;
+    else if (stage === 'MSA') f.msa++;
+    else if (sm.status === 'Order Form sent') f.sent++;
     else f.draft++;
-    if (stage === 'PROPOSAL' && ['Proposal generated', 'Sent'].indexOf(sm.status) !== -1) s.actions.toConvert.push(mini(sm));
     if (sm.approvalStatus === 'Pending') s.actions.pending.push(mini(sm));
     if (['Contract generated', 'Order Form generated', 'MSA generated'].indexOf(sm.status) !== -1) s.actions.notSent.push(mini(sm));
     if (sm.awaiting) s.actions.awaitingClient.push(Object.assign(mini(sm), { docType: sm.awaiting.docType, days: daysSince(sm.awaiting.sentAt) }));
@@ -366,9 +371,9 @@ function dashboardStats(summaries, users, now, opts) {
   }
   s.avgDiscountPct = discN ? Math.round(discSum / discN * 1000) / 1000 : 0;
   s.winRate = (f.won + f.lost) ? Math.round(f.won / (f.won + f.lost) * 1000) / 1000 : null;
-  var reachedProposal = f.proposal + f.contract + f.won + f.lost;
-  s.conversionRate = reachedProposal ? Math.round((f.contract + f.won) / reachedProposal * 1000) / 1000 : null;
-  s.funnel = [['Proposal draft', f.draft], ['Proposal sent', f.proposal], ['Order Form stage', f.contract], ['Won', f.won], ['Lost', f.lost]]
+  var reachedClient = f.sent + f.msa + f.won;  // Order Form acceptance rate = accepted ÷ sent
+  s.conversionRate = reachedClient ? Math.round((f.msa + f.won) / reachedClient * 1000) / 1000 : null;
+  s.funnel = [['Draft / approval', f.draft], ['Order Form sent', f.sent], ['MSA stage', f.msa], ['Won', f.won], ['Lost', f.lost]]
     .map(function (x) { return { label: x[0], count: x[1] }; });
   // monthly trend: 6 months, or 12 for long periods
   var months = !periodDays || periodDays > 180 ? 12 : 6;
@@ -414,8 +419,12 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   if (!stored) {
     d.dealId = null; d.version = 1; d.status = DEAL_STATUS.DRAFT; delete d.dealType; delete d.topupOf; delete d.clientCc; delete d.acceptance;
     delete d.docNos; d.pricingSnapshot = freshSnapshot; delete d.clientId; delete d.proposalBaseline;
-    d.stage = 'PROPOSAL'; d.docs = { PROPOSAL: true };
+    d.stage = 'CONTRACT'; d.docs = { ORDER_FORM: true };  // single stage (2026-11-22): every deal starts as an Order Form
     return d;
+  }
+  if (!stored.stage || stored.stage === 'PROPOSAL') {
+    stored = migrateProposalDeal(stored);
+    if (['Proposal generated', 'Sent', 'Generated'].indexOf(existingStatus) !== -1) existingStatus = DEAL_STATUS.DRAFT;  // its Order Form is still to be made
   }
   d.dealId = stored.dealId;
   d.docNos = stored.docNos;
@@ -441,7 +450,7 @@ function protectDealFields(incoming, stored, existingStatus, freshSnapshot) {
   }
   var revised = GENERATED_STATUSES.indexOf(existingStatus) !== -1;
   d.version = Number(stored.version || 1) + (revised ? 1 : 0);
-  var draftStatus = d.stage === 'CONTRACT' ? DEAL_STATUS.CONTRACT_DRAFT : d.stage === 'MSA' ? DEAL_STATUS.ORDER_FORM_ACCEPTED : DEAL_STATUS.DRAFT;
+  var draftStatus = d.stage === 'MSA' ? DEAL_STATUS.ORDER_FORM_ACCEPTED : DEAL_STATUS.DRAFT;
   d.status = revised || existingStatus === DEAL_STATUS.REJECTED ? draftStatus : (existingStatus || draftStatus);
   return d;
 }
@@ -519,4 +528,21 @@ function makeTopUp(parent, parentQuote) {
       oneTimeItems: [] },
     docs: { ORDER_FORM: true }
   };
+}
+
+/**
+ * Single stage (2026-11-22): the Proposal stage is gone. A deal still at the old PROPOSAL stage becomes an Order Form deal
+ * with its data kept (packages, prices, cover title/tagline); the Order Form package defaults to the first quoted package.
+ */
+function migrateProposalDeal(deal) {
+  var d = JSON.parse(JSON.stringify(deal || {}));
+  if (d.stage && d.stage !== 'PROPOSAL') return d;
+  d.stage = 'CONTRACT';
+  d.docs = { ORDER_FORM: true };
+  d.commercial = d.commercial || {};
+  if (!d.commercial.orderPackage || (d.commercial.packages || []).indexOf(d.commercial.orderPackage) === -1) d.commercial.orderPackage = (d.commercial.packages || [])[0];
+  if (!d.commercial.termMonths) d.commercial.termMonths = 12;
+  if (['Proposal generated', 'Sent', 'Generated', 'Draft', undefined, ''].indexOf(d.status) !== -1) d.status = DEAL_STATUS.DRAFT;
+  d.migratedFromProposal = true;
+  return d;
 }

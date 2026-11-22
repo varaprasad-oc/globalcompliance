@@ -2,7 +2,8 @@
  * Sprint 4: document numbers OC-P-2026-0001 etc. Uses a script lock so two reps never get the same number.
  * The counter resets each calendar year. Also used for short deal ids (doc_type DEAL → D-202611-0001, monthly).
  * A row whose year is "-" never resets and has no year in the number (doc_type CLIENT → C-0001).
- * A row whose year holds a month (yyyymm, e.g. 202611) counts per month (doc_type DEAL → D-202611-0001).
+ * A row whose year holds a month (yyyymm, e.g. 202611) counts per month (doc_type DEAL → D-202611-0001);
+ * 'yyyy-mm' (e.g. 2026-11) also counts per month with a dash (doc_type ORDER_FORM → OC-Q-2026-11-0001).
  */
 function nextDocNo_(docType, callerHoldsLock) {
   var lock = LockService.getScriptLock();
@@ -37,7 +38,8 @@ function formatDocNo(prefix, year, n) {
 
 /** Counting period of a Numbering row: the current yyyymm when the row is monthly (6-digit value), else the current year. */
 function numberingPeriod(stored, now) {
-  var d = new Date(now);
-  var monthly = /^\d{6}$/.test(String(stored).trim());
+  var d = new Date(now), st = String(stored).trim();
+  if (/^\d{4}-\d{2}$/.test(st)) return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);  // OC-Q-2026-11-0001
+  var monthly = /^\d{6}$/.test(st);
   return monthly ? d.getFullYear() * 100 + (d.getMonth() + 1) : d.getFullYear();
 }

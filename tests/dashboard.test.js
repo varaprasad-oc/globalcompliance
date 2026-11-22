@@ -39,17 +39,18 @@ test('Pipeline status changes only after generation', () => {
 
 test('Dashboard funnel, win/conversion rates, monthly trend, top deals and actions', () => {
   const mk = (id, status, stage, valueUsd, created, approval) => ({ dealId: id, clientName: id, status, stage, valueUsd, createdAt: created, approvalStatus: approval || 'Not required', createdBy: 'rep@optculture.com', orderPackage: 'Loyalty', discountPct: 0.1 });
-  const rows = [mk('A', 'Draft', 'PROPOSAL', 0, '2026-11-02'), mk('B', 'Proposal generated', 'PROPOSAL', 1000, '2026-11-03'),
-    mk('C', 'Contract generated', 'CONTRACT', 5000, '2026-10-10'), mk('D', 'Won', 'CONTRACT', 3000, '2026-09-01'), mk('E', 'Lost', 'PROPOSAL', 2000, '2026-08-15'),
-    mk('F', 'Pending approval', 'PROPOSAL', 800, '2026-11-10', 'Pending')];
+  const rows = [mk('A', 'Draft', 'CONTRACT', 0, '2026-11-02'), mk('B', 'Order Form sent', 'CONTRACT', 1000, '2026-11-03'),
+    mk('C', 'Order Form accepted', 'MSA', 5000, '2026-10-10'), mk('D', 'Won', 'MSA', 3000, '2026-09-01'), mk('E', 'Lost', 'CONTRACT', 2000, '2026-08-15'),
+    mk('F', 'Pending approval', 'CONTRACT', 800, '2026-11-10', 'Pending')];
   const s = C().dashboardStats(rows, [{ email: 'rep@optculture.com', name: 'Rep' }], new Date('2026-11-15'));
-  eq(s.funnel.map((f) => f.count), [2, 1, 1, 1, 1], 'draft incl. pending, sent, contract, won, lost');
+  eq(s.funnel.map((f) => f.label), ['Draft / approval', 'Order Form sent', 'MSA stage', 'Won', 'Lost']);
+  eq(s.funnel.map((f) => f.count), [2, 1, 1, 1, 1], 'draft incl. pending, sent, MSA stage, won, lost');
   eq(s.winRate, 0.5);
-  eq(s.conversionRate, 0.5, '(contract + won) / reached proposal = 2/4');
+  eq(s.conversionRate, 0.667, 'Order Form acceptance: (MSA stage + won) / (sent + MSA stage + won) = 2/3');
   eq(s.byMonth.slice(-6).map((m) => m.label), ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov']);
   eq(s.byMonth[s.byMonth.length - 1].count, 3);
   eq(s.topOpen.map((t) => t.dealId), ['C', 'B', 'F']);
-  eq([s.actions.toConvert.map((x) => x.dealId), s.actions.pending.map((x) => x.dealId), s.actions.notSent.map((x) => x.dealId)], [['B'], ['F'], ['C']]);
+  eq([s.actions.toConvert.length, s.actions.pending.map((x) => x.dealId), s.actions.withLegal.map((x) => x.dealId)], [0, ['F'], ['C']]);
 });
 
 test('Dashboard period filter, 12-month trend and stale follow-up list', () => {

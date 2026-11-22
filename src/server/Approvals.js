@@ -16,7 +16,7 @@ function apiListApprovals() {
       approvalId: a.approval_id, dealId: a.deal_id, version: Number(a.version), requestedAt: a.requested_at instanceof Date ? a.requested_at.toISOString() : String(a.requested_at),
       requestedBy: owner.name || rec.created_by, reasons: String(a.reasons || '').split(' | '), note: d.approvalNote || '',
       items: approvalItemsFor_(d), what: d.dealType === 'TOPUP' ? 'Top-up Order Form (of ' + ((d.topupOf || {}).dealId || '') + ')' :
-        (d.stage === 'MSA' ? 'Master Services Agreement (§7 exceptions)' : d.stage === 'CONTRACT' ? 'Quotation & Order Form' : 'Proposal'),
+        (d.stage === 'MSA' ? 'Master Services Agreement (§7 exceptions)' : d.stage === 'CONTRACT' ? 'Order Form' : 'Order Form'),
       client: d.client.legalName, country: d.client.country, currency: rec.currency, summary: dealSummary(rec),
       packages: q ? q.packages.map(function (p) { return { name: p.package, standard: p.standardPricePerSite, final: p.finalPricePerSite, list: p.listPricePerSite,
         specialDiscountPct: p.specialDiscountPct, effectiveDiscountPct: p.effectiveDiscountPct, firstYear: p.firstYearTotal }; }) : [],
