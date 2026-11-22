@@ -40,3 +40,4 @@ Legend: ✅ done · 🟡 in progress · ⏳ blocked (waiting on input) · ☐ no
 - 2026-11-18: Live = Apps Script version 24 ("v21 – proposal cover page, page breaks, fee table style", commit 0a1afc7). Proposal template v1.3 active.
 - 2026-11-21: Live = team deployment version 25 + public acceptance deployment version 26 (commit 43c39be, flow v2).
 - 2026-11-21: Live = team deployment version 28 + public acceptance deployment version 27 ("v24 – branded client links", commit c9cba83). ACCEPT_BASE_URL = https://salestools.optculturecx.com/accept/.
+- 2026-11-22: Live = public acceptance deployment version 29 + team deployment version 30 ("v25 – client page on Netlify (no Google login)", commit 47a56fa). Client page served by Netlify; signed-in test passed.
