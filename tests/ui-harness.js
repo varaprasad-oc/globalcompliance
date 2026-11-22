@@ -163,7 +163,7 @@ const api = {
   await p.screenshot({ path: path.join(out, 'stage1-review.png'), fullPage: true });
 
   // ---------- Amith approves the proposal pricing ----------
-  USER = { ok: true, email: 'amith.lulla@optculture.com', name: 'Amith Lulla', role: 'Superadmin' };
+  USER = { ok: true, email: 'amith@optculture.com', name: 'Amith Lulla', role: 'Superadmin' };
   await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForSelector('#view-dash:not(.hidden)'); await p.waitForTimeout(600);
   check('Superadmin dashboard shows the pending approval as an action', (await p.textContent('#dash')).includes('Waiting for Amith'));
   check('Approvals menu shows 1 pending', (await p.textContent('#apprCount')).trim() === '1');

@@ -89,7 +89,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{SupportPhone}}` | +91 9666004933 |
 | `{{SupportHours}}` | Monday to Friday, 10 AM to 6 PM |
 | `{{ExecutiveName}}` | Amith Lulla |
-| `{{ExecutiveEmail}}` | amith.lulla@optculture.com |
+| `{{ExecutiveEmail}}` | amith@optculture.com |
 | `{{LegalEmail}}` | legal@optculture.com |
 | `{{ProposalTitle}}` | Unified Omnichannel Loyalty & Customer Engagement Platform |
 | `{{ProposalTagline}}` | Earn anywhere. Redeem everywhere. |
@@ -127,7 +127,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 ### Tables
 - `{{TABLE:PlanMatrix}}`: columns Capability · Loyalty · Advanced
 - `{{TABLE:PriceSummary}}`: columns Recurring charges · Loyalty · Advanced
-- `{{TABLE:OneTimeFees}}`: columns One-time fees · Loyalty · Advanced
+- `{{TABLE:OneTimeFees}}`: columns Scope of Work · Loyalty (USD) · Advanced (USD) · Payment Terms
 - `{{TABLE:AddOns}}`: columns Add-on (per month) · Loyalty · Advanced
 
 ### Texts
@@ -204,7 +204,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{SupportPhone}}` | +91 9666004933 |
 | `{{SupportHours}}` | Monday to Friday, 10 AM to 6 PM |
 | `{{ExecutiveName}}` | Amith Lulla |
-| `{{ExecutiveEmail}}` | amith.lulla@optculture.com |
+| `{{ExecutiveEmail}}` | amith@optculture.com |
 | `{{LegalEmail}}` | legal@optculture.com |
 | `{{OrderPackage}}` | Loyalty |
 | `{{SubscriptionStartDate}}` | 1st December 2026 |
@@ -222,6 +222,8 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{TotalOneTime}}` | USD 6,365 |
 | `{{FirstYearTotal}}` | USD 46,193 |
 | `{{FinalPricePerSite}}` | USD 70 |
+| `{{ParentOrderFormNo}}` |  |
+| `{{ParentDealId}}` |  |
 | `{{TosUrl}}` | https://optculture.com/terms-of-service/ |
 | `{{DpaUrl}}` | https://optculture.com/DPA/ |
 | `{{SlaUrl}}` | https://optculture.com/SLA/ |
@@ -234,6 +236,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 - `HasProposalNo` (sample: false)
 - `HasOrderFormNo` (sample: false)
 - `HasMsaNo` (sample: false)
+- `IsTopUp` (sample: false)
 
 ### Lists
 - `SubscriptionLines`: keys `{{product}}`, `{{scope}}`, `{{billing}}`, `{{amount}}`
@@ -310,7 +313,7 @@ Amounts are already formatted (e.g. `USD 1,800`); dates as `1st November 2026`.
 | `{{SupportPhone}}` | +91 9666004933 |
 | `{{SupportHours}}` | Monday to Friday, 10 AM to 6 PM |
 | `{{ExecutiveName}}` | Amith Lulla |
-| `{{ExecutiveEmail}}` | amith.lulla@optculture.com |
+| `{{ExecutiveEmail}}` | amith@optculture.com |
 | `{{LegalEmail}}` | legal@optculture.com |
 | `{{TosUrl}}` | https://optculture.com/terms-of-service/ |
 | `{{DpaUrl}}` | https://optculture.com/DPA/ |

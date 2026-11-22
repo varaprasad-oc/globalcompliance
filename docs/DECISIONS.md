@@ -182,3 +182,6 @@ Proposal · Quotation & Order Form · Terms of Service · PDPL (DPA)
 - Online acceptance adds an "Electronic Acceptance Certificate" page (name, designation, verified email, date/time Dubai + UTC, reference) to the accepted PDF. Reps can also record a signed copy received by email.
 - Public page = a second deployment of the same project with access "Anyone" (Script property PUBLIC_EXEC_URL; optional ACCEPT_BASE_URL via Netlify /accept/:token). Every internal API still requires an @optculture.com user; owner tools require owner/Superadmin (requireOperator_); internal workers are private (getMaster_, nextDocNo_, generateDocument_).
 - Open: Amith/legal to confirm electronic acceptance with email code for UAE, Egypt, KSA, India.
+
+## Superadmin account (2026-11-22, Varaprasad)
+- Amith's Superadmin account is **amith@optculture.com** (replaces amith.lulla@optculture.com permanently). All approvals are done from this account. Live Users tab, manager of Varaprasad and CommercialTerms.executive_contact_email updated.

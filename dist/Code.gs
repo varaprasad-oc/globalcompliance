@@ -101,8 +101,8 @@ var SEED = {
     kind: 'master',
     headers: ['email', 'name', 'role', 'manager_email', 'region', 'phone', 'active'],
     rows: [
-      ['amith.lulla@optculture.com', 'Amith Lulla', 'Superadmin', '', 'Global', '', true],
-      ['varaprasad@optculture.com', 'Varaprasad SN', 'Manager', 'amith.lulla@optculture.com', 'MEA', '+971 52 904 5457', true]
+      ['amith@optculture.com', 'Amith Lulla', 'Superadmin', '', 'Global', '', true],
+      ['varaprasad@optculture.com', 'Varaprasad SN', 'Manager', 'amith@optculture.com', 'MEA', '+971 52 904 5457', true]
     ]
   },
 
@@ -279,7 +279,7 @@ var SEED = {
       ['support_phone', '+91 9666004933', 'SLA call/WhatsApp number'],
       ['support_hours', 'Monday to Friday, 10 AM to 6 PM', 'SLA working hours'],
       ['executive_contact_name', 'Amith Lulla', 'SLA escalation – Executive Director'],
-      ['executive_contact_email', 'amith.lulla@optculture.com', 'SLA escalation – Executive Director'],
+      ['executive_contact_email', 'amith@optculture.com', 'SLA escalation – Executive Director'],
       ['legal_email', 'legal@optculture.com', 'ToS contact'],
       ['tos_url', 'https://optculture.com/terms-of-service/', 'Online Terms of Service incorporated by the MSA'],
       ['dpa_url', 'https://optculture.com/DPA/', 'Online Data Processing Agreement incorporated by the MSA'],

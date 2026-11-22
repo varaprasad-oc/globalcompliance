@@ -39,7 +39,7 @@ test('Access rules: rep own only, manager own + team, superadmin all', () => {
   const users = [{ email: 'rep@optculture.com', manager_email: 'mgr@optculture.com' }, { email: 'other@optculture.com', manager_email: 'x@optculture.com' }];
   const rep = { ok: true, email: 'rep@optculture.com', role: 'Rep' };
   const mgr = { ok: true, email: 'mgr@optculture.com', role: 'Manager' };
-  const sa = { ok: true, email: 'amith.lulla@optculture.com', role: 'Superadmin' };
+  const sa = { ok: true, email: 'amith@optculture.com', role: 'Superadmin' };
   eq([C().canAccessDeal(rep, 'rep@optculture.com', users), C().canAccessDeal(rep, 'other@optculture.com', users)], [true, false]);
   eq([C().canAccessDeal(mgr, 'rep@optculture.com', users), C().canAccessDeal(mgr, 'other@optculture.com', users)], [true, false]);
   eq(C().canAccessDeal(sa, 'other@optculture.com', users), true);
